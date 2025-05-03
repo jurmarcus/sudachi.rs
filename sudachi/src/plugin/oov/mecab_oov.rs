@@ -39,9 +39,9 @@ use crate::prelude::*;
 mod test;
 
 const DEFAULT_CHAR_DEF_FILE: &str = "char.def";
-const DEFAULT_CHAR_DEF_BYTES: &[u8] = include_bytes!("../../../../../resources/char.def");
+const DEFAULT_CHAR_DEF_BYTES: &[u8] = include_bytes!("../../../../resources/char.def");
 const DEFAULT_UNK_DEF_FILE: &str = "unk.def";
-const DEFAULT_UNK_DEF_BYTES: &[u8] = include_bytes!("../../../../../resources/unk.def");
+const DEFAULT_UNK_DEF_BYTES: &[u8] = include_bytes!("../../../../resources/unk.def");
 
 /// provides MeCab oov nodes
 #[derive(Default)]

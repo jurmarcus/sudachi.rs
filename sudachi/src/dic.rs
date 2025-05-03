@@ -42,7 +42,7 @@ pub mod storage;
 pub mod subset;
 pub mod word_id;
 
-const DEFAULT_CHAR_DEF_BYTES: &[u8] = include_bytes!("../../../resources/char.def");
+const DEFAULT_CHAR_DEF_BYTES: &[u8] = include_bytes!("../../resources/char.def");
 const POS_DEPTH: usize = 6;
 
 /// A dictionary consists of one system_dict and zero or more user_dicts

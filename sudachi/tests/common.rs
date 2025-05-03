@@ -148,7 +148,7 @@ impl<'a> TestTokenizerBuilder<'a> {
         let mut sys = DictBuilder::new_system();
         sys.read_conn(
             self.conn
-                .unwrap_or(include_bytes!("../resources/matrix_10x10.def")),
+                .unwrap_or(include_bytes!("resources/matrix_10x10.def")),
         )
         .unwrap();
         sys.read_lexicon(self.system).unwrap();
@@ -196,13 +196,13 @@ pub struct TestStatefulTokenizer {
 }
 
 #[allow(unused)]
-pub const LEX_CSV: &[u8] = include_bytes!("../resources/lex.csv");
+pub const LEX_CSV: &[u8] = include_bytes!("resources/lex.csv");
 
 #[allow(unused)]
-pub const USER1_CSV: &[u8] = include_bytes!("../resources/user1.csv");
+pub const USER1_CSV: &[u8] = include_bytes!("resources/user1.csv");
 
 #[allow(unused)]
-pub const USER2_CSV: &[u8] = include_bytes!("../resources/user2.csv");
+pub const USER2_CSV: &[u8] = include_bytes!("resources/user2.csv");
 
 #[allow(unused)]
 impl TestStatefulTokenizer {

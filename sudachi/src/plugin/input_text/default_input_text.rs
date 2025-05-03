@@ -37,7 +37,7 @@ use crate::prelude::*;
 mod tests;
 
 const DEFAULT_REWRITE_DEF_FILE: &str = "rewrite.def";
-const DEFAULT_REWRITE_DEF_BYTES: &[u8] = include_bytes!("../../../../../resources/rewrite.def");
+const DEFAULT_REWRITE_DEF_BYTES: &[u8] = include_bytes!("../../../../resources/rewrite.def");
 
 /// Provides basic normalization of the input text
 #[derive(Default)]

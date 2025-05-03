@@ -28,7 +28,7 @@ use crate::dic::DictionaryLoader;
 use crate::error::SudachiError;
 use std::io::sink;
 
-static MATRIX_10_10: &[u8] = include_bytes!("matrix_10x10.def");
+static MATRIX_10_10: &[u8] = include_bytes!("test/matrix_10x10.def");
 
 #[test]
 fn build_grammar() {
@@ -36,7 +36,7 @@ fn build_grammar() {
     bldr.read_conn(MATRIX_10_10).unwrap();
     assert_eq!(
         1,
-        bldr.read_lexicon(include_bytes!("data_1word.csv")).unwrap()
+        bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap()
     );
     let mut built = Vec::new();
     let written = bldr.write_grammar(&mut built).unwrap();
@@ -57,7 +57,7 @@ fn build_lexicon_1word() {
     let mut bldr = DictBuilder::new_system();
     assert_eq!(
         1,
-        bldr.read_lexicon(include_bytes!("data_1word.csv")).unwrap()
+        bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap()
     );
     let mut built = Vec::new();
     bldr.write_lexicon(&mut built, 0).unwrap();
@@ -86,7 +86,7 @@ fn build_system_1word() {
     bldr.read_conn(MATRIX_10_10).unwrap();
     assert_eq!(
         1,
-        bldr.read_lexicon(include_bytes!("data_1word.csv")).unwrap()
+        bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap()
     );
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
@@ -111,7 +111,7 @@ fn build_system_3words() {
     bldr.read_conn(MATRIX_10_10).unwrap();
     assert_eq!(
         3,
-        bldr.read_lexicon(include_bytes!("data_3words.csv"))
+        bldr.read_lexicon(include_bytes!("test/data_3words.csv"))
             .unwrap()
     );
     bldr.resolve().unwrap();
@@ -132,10 +132,10 @@ fn build_system_3words() {
 #[test]
 fn build_user_dictionary_crossrefs() {
     let mut bldr = DictBuilder::new_system();
-    bldr.read_conn(include_bytes!("matrix_10x10.def")).unwrap();
+    bldr.read_conn(include_bytes!("test/matrix_10x10.def")).unwrap();
     assert_eq!(
         3,
-        bldr.read_lexicon(include_bytes!("data_3words.csv"))
+        bldr.read_lexicon(include_bytes!("test/data_3words.csv"))
             .unwrap()
     );
     bldr.resolve().unwrap();
@@ -148,7 +148,7 @@ fn build_user_dictionary_crossrefs() {
     assert_eq!(
         2,
         bldr2
-            .read_lexicon(include_bytes!("data_2words_3w_refs.csv"))
+            .read_lexicon(include_bytes!("test/data_2words_3w_refs.csv"))
             .unwrap()
     );
     bldr2.resolve().unwrap();
@@ -358,7 +358,7 @@ fn word_id_too_big_dicform_userdic_inuser() {
 fn resolve_user_entry_without_system_in_trie() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
-    bldr.read_lexicon(include_bytes!("sys_no_entry.csv"))
+    bldr.read_lexicon(include_bytes!("test/sys_no_entry.csv"))
         .unwrap();
     bldr.resolve().unwrap();
     let mut data = Vec::new();
@@ -371,7 +371,7 @@ fn resolve_user_entry_without_system_in_trie() {
     assert_eq!(iter.next(), None);
     drop(iter);
     let mut bldr = DictBuilder::new_user(&dic);
-    bldr.read_lexicon(include_bytes!("data_2words_3w_refs.csv"))
+    bldr.read_lexicon(include_bytes!("test/data_2words_3w_refs.csv"))
         .unwrap();
     bldr.resolve().unwrap();
     let mut data2 = Vec::new();
