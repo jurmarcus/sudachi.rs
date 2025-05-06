@@ -18,6 +18,7 @@ pub mod build;
 pub mod category_type;
 pub mod character_category;
 pub mod connect;
+pub mod description;
 pub mod dictionary;
 pub mod grammar;
 pub mod header;

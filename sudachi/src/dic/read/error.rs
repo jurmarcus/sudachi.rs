@@ -21,6 +21,10 @@ pub type SudachiNomResult<I, O> = nom::IResult<I, O, SudachiNomError<I>>;
 pub enum SudachiNomError<I> {
     /// Failed to parse utf16 string
     Utf16String,
+    /// Failed to parse utf8 string
+    Utf8String,
+    /// Failed to parse variable-length integer
+    InvalidVarInt,
     Nom(I, nom::error::ErrorKind),
     OutOfBounds(String, usize, usize),
 }

@@ -23,6 +23,7 @@ use crate::dic::build::error::DicBuildError;
 use crate::dic::character_category::Error as CharacterCategoryError;
 use crate::dic::read::error::SudachiNomError;
 use crate::dic::header::HeaderError;
+use crate::dic::description::DescriptionError;
 use crate::dic::lexicon_set::LexiconSetError;
 use crate::plugin::PluginError;
 
@@ -70,6 +71,9 @@ pub enum SudachiError {
 
     #[error("Invalid header: {0}")]
     InvalidHeader(#[from] HeaderError),
+
+    #[error("Invalid description: {0}")]
+    InvalidDescription(#[from] DescriptionError),
 
     #[error("Lecicon error")]
     LexiconSetError(#[from] LexiconSetError),
