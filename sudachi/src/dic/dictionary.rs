@@ -24,7 +24,7 @@ use crate::config::Config;
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::storage::{Storage, SudachiDicData};
-use crate::dic::{DictionaryLoader, LoadedDictionary};
+use crate::dic::loader::{DictionaryLoader, LoadedDictionary};
 use crate::error::{SudachiError, SudachiResult};
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
