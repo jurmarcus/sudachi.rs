@@ -21,6 +21,7 @@ use thiserror::Error;
 use crate::config::ConfigError;
 use crate::dic::build::error::DicBuildError;
 use crate::dic::character_category::Error as CharacterCategoryError;
+use crate::dic::read::error::SudachiNomError;
 use crate::dic::header::HeaderError;
 use crate::dic::lexicon_set::LexiconSetError;
 use crate::plugin::PluginError;
@@ -128,26 +129,6 @@ impl SudachiError {
                 context: ctx.into(),
             },
         }
-    }
-}
-
-pub type SudachiNomResult<I, O> = nom::IResult<I, O, SudachiNomError<I>>;
-
-/// Custum nom error
-#[derive(Debug, PartialEq)]
-pub enum SudachiNomError<I> {
-    /// Failed to parse utf16 string
-    Utf16String,
-    Nom(I, nom::error::ErrorKind),
-    OutOfBounds(String, usize, usize),
-}
-
-impl<I> nom::error::ParseError<I> for SudachiNomError<I> {
-    fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
-        SudachiNomError::Nom(input, kind)
-    }
-    fn append(_: I, _: nom::error::ErrorKind, other: Self) -> Self {
-        other
     }
 }
 

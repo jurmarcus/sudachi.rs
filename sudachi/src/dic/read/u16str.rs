@@ -14,9 +14,10 @@
  *  limitations under the License.
  */
 
-use crate::error::{SudachiNomError, SudachiNomResult};
 use nom::number::complete::le_u8;
 use std::iter::FusedIterator;
+
+use super::error::{SudachiNomError, SudachiNomResult};
 
 pub fn utf16_string_parser(input: &[u8]) -> SudachiNomResult<&[u8], String> {
     utf16_string_data(input).and_then(|(rest, data)| {

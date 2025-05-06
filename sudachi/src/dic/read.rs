@@ -14,14 +14,16 @@
  *  limitations under the License.
  */
 
+pub mod error;
 pub(crate) mod u16str;
 pub(crate) mod word_info;
+
+pub use self::error::{SudachiNomError, SudachiNomResult};
 
 use nom::number::complete::{le_u32, le_u8};
 use nom::Parser;
 
 use crate::dic::word_id::WordId;
-use crate::error::SudachiNomResult;
 
 pub fn u32_array_parser(input: &[u8]) -> SudachiNomResult<&[u8], Vec<u32>> {
     let (rest, length) = le_u8(input)?;

@@ -23,7 +23,7 @@ use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
 use nom::{bytes::complete::take, number::complete::le_u32};
 
-use crate::error::SudachiNomResult;
+use super::read::error::SudachiNomResult;
 use crate::prelude::*;
 
 use self::trie::Trie;
