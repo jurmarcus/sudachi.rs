@@ -43,7 +43,55 @@ pub enum DescriptionError {
 
     #[error("Invalid header version {0}")]
     InvalidVersion(u64),
+
+    #[error("Dictionary part not found: {0}")]
+    DictionaryPartNotFound(String),
+
+    #[error("Dictionary part out of range: {0}..{1}")]
+    DictionaryPartOutOfRange(usize, usize),
 }
+
+/// Parts of the binary dictionary
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Block {
+    // description always takes the first 1 block
+    // grammar parts:
+    // word connection cost matrix
+    ConnectionMatrix,
+    // list of part of speechs
+    POSTable,
+    // lexicon parts:
+    // TRIE
+    TRIEIndex,
+    // mapping from a index-form to entries
+    WordPointers,
+    // word entries
+    Entries,
+    // storage of strings in the lexicon
+    Strings,
+}
+
+impl Block {
+    /// return the string representation of the block
+    /// This must be same as the name defined in the Java version.
+    fn to_str(&self) -> &str {
+        match self {
+            Block::ConnectionMatrix => "ConnMatrix",
+            Block::POSTable => "POS",
+            Block::TRIEIndex => "TrieIndex",
+            Block::WordPointers => "WordPointers",
+            Block::Entries => "Entries",
+            Block::Strings => "Strings",
+        }
+    }
+}
+
+impl ToString for Block {
+    fn to_string(&self) -> String {
+        self.to_str().to_string()
+    }
+}
+
 
 /// Information of each blocks in the binary dictionary
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,6 +246,26 @@ impl Description {
 
     pub fn blocks(&self) -> &[BlockInfo] {
         &self.blocks
+    }
+
+    pub fn slice_or_none<'a>(&self, buf: &'a [u8], block: Block) -> SudachiResult<Option<&'a [u8]>> {
+        let block_name = block.to_str();
+        match self.blocks.iter().find(|block| block.name() == block_name) {
+            Some(block) => {
+                let start = block.start() as usize;
+                let end = block.end() as usize;
+                if buf.len() < end {
+                    return Err(DescriptionError::DictionaryPartOutOfRange(start, end).into());
+                }
+                Ok(Some(&buf[start..end]))
+            }
+            None => return Ok(None),
+        }
+    }
+
+    pub fn slice<'a>(&self, buf: &'a [u8], block: Block) -> SudachiResult<&'a [u8]> {
+        self.slice_or_none(buf, block)?
+            .ok_or_else(|| DescriptionError::DictionaryPartNotFound(block.to_string()).into())
     }
 
     pub fn is_runtime_costs(&self) -> bool {
