@@ -14,13 +14,13 @@
  *  limitations under the License.
  */
 
-use nom::number::complete::le_u16;
+use nom::number::complete::le_i16;
 
 use super::error::{SudachiNomError, SudachiNomResult};
 use super::u16str::U16CodeUnits;
 
 pub fn short_utf16_string(input: &[u8]) -> SudachiNomResult<&[u8], String> {
-    let (rest, length) = le_u16(input)?;
+    let (rest, length) = le_i16(input)?;
     let num_bytes = (length * 2) as usize;
     rest.split_at_checked(num_bytes)
         .ok_or(nom::Err::Failure(SudachiNomError::Utf16String))
