@@ -39,6 +39,15 @@ impl ReadLE for u32 {
     }
 }
 
+impl ReadLE for u64 {
+    fn from_le_bytes(bytes: &[u8]) -> Result<Self, TryFromSliceError>
+    where
+        Self: Sized,
+    {
+        bytes.try_into().map(Self::from_le_bytes)
+    }
+}
+
 /// Copy-on-write array.
 ///
 /// Is used for storing performance critical dictionary parts.
