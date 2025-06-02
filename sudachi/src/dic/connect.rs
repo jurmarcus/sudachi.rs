@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
  *  limitations under the License.
  */
 
+use nom::number::complete::le_i16;
+ 
 use crate::error::{SudachiError, SudachiResult};
 use crate::util::cow_array::CowArray;
 
@@ -24,6 +26,11 @@ pub struct ConnectionMatrix<'a> {
 }
 
 impl<'a> ConnectionMatrix<'a> {
+    pub fn from_bytes(buf: &'a [u8]) -> SudachiResult<ConnectionMatrix<'a>> {
+        let (rest, (num_left, num_right)) = nom::sequence::tuple((le_i16, le_i16))(buf)?;
+        Self::from_offset_size(rest, 0, num_left as usize, num_right as usize)
+    }
+
     pub fn from_offset_size(
         data: &'a [u8],
         offset: usize,

@@ -36,7 +36,7 @@ impl Into<Vec<POS>> for PosList {
 }
 
 impl PosList {
-    pub fn load(buf: &[u8]) -> SudachiResult<Self> {
+    pub fn from_bytes(buf: &[u8]) -> SudachiResult<Self> {
         let (rest, num_pos) = le_i16(buf)?;
         let (_rest, pos_list) = nom::multi::count(
             nom::multi::count(short_utf16_string, POS_DEPTH),

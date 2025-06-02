@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,6 +87,12 @@ impl<'a> Iterator for TrieEntryIter<'a> {
 impl FusedIterator for TrieEntryIter<'_> {}
 
 impl<'a> Trie<'a> {
+    pub fn from_bytes(data: &'a [u8]) -> Trie<'a> {
+        Trie {
+            array: CowArray::from_bytes(data, 0, data.len()),
+        }
+    }
+
     pub fn new(data: &'a [u8], size: usize) -> Trie<'a> {
         Trie {
             array: CowArray::from_bytes(data, 0, size),

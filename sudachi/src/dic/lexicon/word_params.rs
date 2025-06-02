@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,25 +17,20 @@
 use crate::util::cow_array::CowArray;
 
 pub struct WordParams<'a> {
-    data: CowArray<'a, i16>,
-    size: u32,
+    // word infos are aligned per 8 bytes (see WordInfos::WORD_INFO_OFFSET_ALIGNMENT).
+    data: CowArray<'a, u64>,
 }
 
 impl<'a> WordParams<'a> {
     const PARAM_SIZE: usize = 3;
     const ELEMENT_SIZE: usize = 2 * Self::PARAM_SIZE;
 
-    pub fn new(bytes: &'a [u8], size: u32, offset: usize) -> WordParams {
-        let n_entries = size as usize * Self::PARAM_SIZE;
+    pub fn from_bytes(bytes: &'a [u8]) -> WordParams<'a> {
         Self {
-            data: CowArray::from_bytes(bytes, offset, n_entries),
-            size,
+            data: CowArray::from_bytes(bytes, 0, bytes.len()),
         }
     }
 
-    pub fn storage_size(&self) -> usize {
-        4 + WordParams::ELEMENT_SIZE * self.size as usize
-    }
 
     pub fn size(&self) -> u32 {
         self.size

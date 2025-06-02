@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,21 +19,15 @@ use std::ptr::NonNull;
 
 pub struct WordIdTable<'a> {
     bytes: &'a [u8],
-    size: u32,
-    offset: usize,
 }
 
 impl<'a> WordIdTable<'a> {
-    pub fn new(bytes: &'a [u8], size: u32, offset: usize) -> WordIdTable {
-        WordIdTable {
-            bytes,
-            size,
-            offset,
-        }
+    pub fn from_bytes(bytes: &'a [u8]) -> WordIdTable<'a> {
+        WordIdTable { bytes }
     }
 
-    pub fn storage_size(&self) -> usize {
-        4 + self.size as usize
+    pub fn new(bytes: &'a [u8], size: u32, offset: usize) -> WordIdTable<'a> {
+        Self::from_bytes(&bytes[offset..offset + size as usize])
     }
 
     #[inline]

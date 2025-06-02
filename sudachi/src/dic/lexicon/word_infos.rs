@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,24 +25,11 @@ use crate::prelude::*;
 
 pub struct WordInfos<'a> {
     bytes: &'a [u8],
-    offset: usize,
-    _word_size: u32,
-    has_synonym_group_ids: bool,
 }
 
 impl<'a> WordInfos<'a> {
-    pub fn new(
-        bytes: &'a [u8],
-        offset: usize,
-        _word_size: u32,
-        has_synonym_group_ids: bool,
-    ) -> WordInfos {
-        WordInfos {
-            bytes,
-            offset,
-            _word_size,
-            has_synonym_group_ids,
-        }
+    pub fn from_bytes(bytes: &'a [u8]) -> WordInfos<'a> {
+        WordInfos { bytes }
     }
 
     fn word_id_to_offset(&self, word_id: u32) -> SudachiResult<usize> {
