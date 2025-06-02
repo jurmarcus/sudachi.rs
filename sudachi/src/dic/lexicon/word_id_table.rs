@@ -15,7 +15,8 @@
  */
 
 use std::iter::FusedIterator;
-use std::ptr::NonNull;
+
+use crate::dic::read::varint::{ varint32 };
 
 pub struct WordIdTable<'a> {
     bytes: &'a [u8],
@@ -31,42 +32,45 @@ impl<'a> WordIdTable<'a> {
     }
 
     #[inline]
-    pub fn entries(&self, index: usize) -> WordIdIter {
+    pub fn entries(&self, index: usize) -> DeltaCompressedWordIdIter<'a> {
         debug_assert!(index < self.bytes.len());
-        let ptr = unsafe { self.bytes.as_ptr().add(index + self.offset) };
-        let cnt = unsafe { ptr.read() } as usize;
-        let data_ptr = unsafe { ptr.offset(1) } as *const u32;
-        debug_assert!(index + cnt * std::mem::size_of::<u32>() < self.bytes.len());
-        WordIdIter {
-            data: unsafe { NonNull::new_unchecked(data_ptr as _) },
-            remaining: cnt,
-        }
+        DeltaCompressedWordIdIter::new(&self.bytes[index..])
     }
 }
 
-pub struct WordIdIter {
-    /// This pointer is unaligned and must be read from using unaligned reads.
-    /// Using NonNull makes Option<Self> be the same as the struct itself.
-    data: NonNull<u32>,
-    /// number of remaining elements
-    remaining: usize,
+/// Iterator over word ids in a delta-compressed varint32 format.
+pub struct DeltaCompressedWordIdIter<'a> {
+    rest: &'a [u8],
+    remining: u32,
+    sum: u32,
 }
 
-impl Iterator for WordIdIter {
+impl<'a> DeltaCompressedWordIdIter<'a> {
+    pub fn new(bytes: &'a [u8]) -> Self {
+        let (rest, remining) = varint32(bytes)
+            .expect("Failed to parse length in WordIdTable");
+
+        DeltaCompressedWordIdIter { rest, remining, sum:0 }
+    }
+}
+
+impl Iterator for DeltaCompressedWordIdIter<'_> {
     type Item = u32;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining == 0 {
+        if self.remining == 0 {
             return None;
         }
-        let ptr = self.data.as_ptr();
 
-        let val = unsafe { ptr.read_unaligned() };
-        self.data = unsafe { NonNull::new_unchecked(ptr.offset(1)) };
-        self.remaining -= 1;
-        Some(val)
+        let (rest, delta) = varint32(self.rest)
+            .expect("Failed to parse next word id delta");
+
+        self.rest = rest;
+        self.remining -= 1;
+        self.sum += delta;
+        Some(self.sum)
     }
 }
 
-impl FusedIterator for WordIdIter {}
+impl FusedIterator for DeltaCompressedWordIdIter<'_> {}
