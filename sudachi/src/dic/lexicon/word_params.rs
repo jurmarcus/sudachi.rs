@@ -16,6 +16,39 @@
 
 use crate::util::cow_array::CowArray;
 
+use super::word_infos::{word_id_to_offset};
+
+
+/// A word paratemter, used in the analysis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct  WordParameter(u64);
+
+impl WordParameter {
+    /// The left connection cost id.
+    #[inline]
+    pub fn left_id(self) -> i16 {
+        (self.0 & 0xffff) as i16
+    }
+
+    /// The right connection cost id.
+    #[inline]
+    pub fn right_id(self) -> i16 {
+        ((self.0 >> 16) & 0xffff) as i16
+    }
+
+    /// The cost of the word.
+    #[inline]
+    pub fn cost(self) -> i16 {
+        ((self.0 >> 32) & 0xffff) as i16
+    }
+
+    /// Return a new parameters with the given cost.
+    #[inline]
+    pub fn with_cost(self, cost:i16) -> WordParameter {
+        WordParameter((cost as u64) << 32 | (self.0 & 0xffffffff))
+    }
+}
+
 pub struct WordParams<'a> {
     // word infos are aligned per 8 bytes (see WordInfos::WORD_INFO_OFFSET_ALIGNMENT).
     data: CowArray<'a, u64>,
@@ -30,27 +63,23 @@ impl<'a> WordParams<'a> {
             data: CowArray::from_bytes(bytes, 0, bytes.len()),
         }
     }
-
-
-    pub fn size(&self) -> u32 {
-        self.size
+    
+    #[inline]
+    pub fn get_params(&self, word_id: u32) -> WordParameter {
+        let offset = word_id_to_offset(word_id);
+        // the first 8 bytes of the word info in the parameters
+        WordParameter(self.data[offset])
     }
 
     #[inline]
-    pub fn get_params(&self, word_id: u32) -> (i16, i16, i16) {
-        let begin = word_id as usize * Self::PARAM_SIZE;
-        let end = begin + Self::PARAM_SIZE;
-        let slice = &self.data[begin..end];
-        (slice[0], slice[1], slice[2])
-    }
-
     pub fn get_cost(&self, word_id: u32) -> i16 {
-        let cost_offset = word_id as usize * Self::PARAM_SIZE + 2;
-        self.data[cost_offset]
+        let params = self.get_params(word_id);
+        params.cost()
     }
 
     pub fn set_cost(&mut self, word_id: u32, cost: i16) {
-        let cost_offset = word_id as usize * Self::PARAM_SIZE + 2;
-        self.data.set(cost_offset, cost)
+        let offset = word_id_to_offset(word_id);
+        let params = self.get_params(word_id);
+        self.data.set(offset, params.with_cost(cost).0);
     }
 }
