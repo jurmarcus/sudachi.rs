@@ -52,8 +52,8 @@ impl<'a> WordInfos<'a> {
         // consult dictionary form
         let dfwi = word_info.dictionary_form_word_id;
         if (dfwi >= 0) && (dfwi != word_id as i32) {
-            let inner = self.parse_word_info(dfwi as u32, InfoSubset::SURFACE)?;
-            word_info.dictionary_form = inner.surface;
+            let inner = self.parse_word_info(dfwi as u32, InfoSubset::HEADWORD)?;
+            word_info.dictionary_form = inner.headword;
         };
 
         Ok(word_info.into())
@@ -67,8 +67,8 @@ impl<'a> WordInfos<'a> {
 /// String fields CAN be empty, in this case the value of the surface field should be used instead
 #[derive(Clone, Debug, Default)]
 pub struct WordInfoData {
-    pub surface: String,
-    pub head_word_length: u16,
+    pub headword: String,
+    pub index_form_length: u16,
     pub pos_id: u16,
     pub normalized_form: String,
     pub dictionary_form_word_id: i32,
@@ -92,12 +92,12 @@ pub struct WordInfo {
 }
 
 impl WordInfo {
-    pub fn surface(&self) -> &str {
-        &self.data.surface
+    pub fn headword(&self) -> &str {
+        &self.data.headword
     }
 
-    pub fn head_word_length(&self) -> usize {
-        self.data.head_word_length as usize
+    pub fn index_form_length(&self) -> usize {
+        self.data.index_form_length as usize
     }
 
     pub fn pos_id(&self) -> u16 {
@@ -106,7 +106,7 @@ impl WordInfo {
 
     pub fn normalized_form(&self) -> &str {
         if self.data.normalized_form.is_empty() {
-            self.surface()
+            self.headword()
         } else {
             &self.data.normalized_form
         }
@@ -118,7 +118,7 @@ impl WordInfo {
 
     pub fn dictionary_form(&self) -> &str {
         if self.data.dictionary_form.is_empty() {
-            self.surface()
+            self.headword()
         } else {
             &self.data.dictionary_form
         }
@@ -126,7 +126,7 @@ impl WordInfo {
 
     pub fn reading_form(&self) -> &str {
         if self.data.reading_form.is_empty() {
-            self.surface()
+            self.headword()
         } else {
             &self.data.reading_form
         }

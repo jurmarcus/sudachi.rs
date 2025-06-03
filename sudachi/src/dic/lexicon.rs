@@ -152,7 +152,7 @@ impl<'a> Lexicon<'a> {
             if self.word_params.get_cost(wid) != i16::MIN {
                 continue;
             }
-            let wi = self.get_word_info(wid, InfoSubset::SURFACE)?;
+            let wi = self.get_word_info(wid, InfoSubset::HEADWORD)?;
             tok.reset().push_str(wi.surface());
             tok.do_tokenize()?;
             ms.collect_results(&mut tok)?;

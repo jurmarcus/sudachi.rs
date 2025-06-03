@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -212,7 +212,7 @@ impl fmt::Display for ResultNode {
             "{} {} {}{} {} {} {} {}",
             self.begin(),
             self.end(),
-            self.word_info.surface(),
+            self.word_info.headword(),
             self.word_id(),
             self.word_info().pos_id(),
             self.left_id(),
@@ -257,7 +257,7 @@ impl Iterator for NodeSplitIterator<'_> {
         let (char_end, byte_end) = if idx + 1 == self.splits.len() {
             (self.char_end, self.byte_end)
         } else {
-            let byte_end = byte_start as usize + word_info.head_word_length();
+            let byte_end = byte_start as usize + word_info.index_form_length();
             let char_end = self.text.ch_idx(byte_end);
             (char_end as u16, byte_end as u16)
         };
@@ -295,17 +295,17 @@ pub fn concat_nodes(
     let end_bytes = path[end - 1].end_bytes();
     let beg_bytes = path[begin].begin_bytes();
 
-    let mut surface = String::with_capacity(end_bytes - beg_bytes);
+    let mut headword = String::with_capacity(end_bytes - beg_bytes);
     let mut reading_form = String::with_capacity(end_bytes - beg_bytes);
     let mut dictionary_form = String::with_capacity(end_bytes - beg_bytes);
-    let mut head_word_length: u16 = 0;
+    let mut index_form_length: u16 = 0;
 
     for node in path[begin..end].iter() {
         let data = node.word_info().borrow_data();
-        surface.push_str(&data.surface);
+        headword.push_str(&data.headword);
         reading_form.push_str(&data.reading_form);
         dictionary_form.push_str(&data.dictionary_form);
-        head_word_length += data.head_word_length;
+        index_form_length += data.index_form_length;
     }
 
     let normalized_form = normalized_form.unwrap_or_else(|| {
@@ -319,8 +319,8 @@ pub fn concat_nodes(
     let pos_id = path[begin].word_info().pos_id();
 
     let new_wi = WordInfoData {
-        surface,
-        head_word_length,
+        headword,
+        index_form_length,
         pos_id,
         normalized_form,
         reading_form,
@@ -364,14 +364,14 @@ pub fn concat_oov_nodes(
 
     let capa = path[end - 1].end_bytes() - path[begin].begin_bytes();
 
-    let mut surface = String::with_capacity(capa);
-    let mut head_word_length: u16 = 0;
+    let mut headword = String::with_capacity(capa);
+    let mut index_form_length: u16 = 0;
     let mut wid = WordId::from_raw(0);
 
     for node in path[begin..end].iter() {
         let data = node.word_info().borrow_data();
-        surface.push_str(&data.surface);
-        head_word_length += data.head_word_length;
+        headword.push_str(&data.headword);
+        index_form_length += data.index_form_length;
         wid = wid.max(node.word_id());
     }
 
@@ -380,10 +380,10 @@ pub fn concat_oov_nodes(
     }
 
     let new_wi = WordInfoData {
-        normalized_form: surface.clone(),
-        dictionary_form: surface.clone(),
-        surface,
-        head_word_length,
+        normalized_form: headword.clone(),
+        dictionary_form: headword.clone(),
+        headword,
+        index_form_length,
         pos_id,
         dictionary_form_word_id: -1,
         ..Default::default()

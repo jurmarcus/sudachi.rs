@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -87,16 +87,16 @@ impl WordInfoParser {
         parse_field!(
             self,
             data,
-            surface,
-            InfoSubset::SURFACE,
+            headword,
+            InfoSubset::HEADWORD,
             utf16_string_parser,
             skip_u16_string
         );
         parse_field!(
             self,
             data,
-            head_word_length,
-            InfoSubset::HEAD_WORD_LENGTH,
+            index_form_length,
+            InfoSubset::INDEX_FORM_LENGTH,
             string_length_parser
         );
         parse_field!(self, data, pos_id, InfoSubset::POS_ID, le_u16);

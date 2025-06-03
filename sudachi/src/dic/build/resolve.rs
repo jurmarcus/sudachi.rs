@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -42,21 +42,21 @@ impl BinDictResolver {
             let winfo: WordInfoData = lex
                 .get_word_info_subset(
                     wid,
-                    InfoSubset::SURFACE | InfoSubset::READING_FORM | InfoSubset::POS_ID,
+                    InfoSubset::HEADWORD | InfoSubset::READING_FORM | InfoSubset::POS_ID,
                 )?
                 .into();
-            let surface = winfo.surface;
+            let headword = winfo.headword;
             let reading = winfo.reading_form;
             let pos_id = winfo.pos_id;
 
-            let rdfield = if reading.is_empty() || surface == reading {
+            let rdfield = if reading.is_empty() || headword == reading {
                 None
             } else {
                 Some(reading)
             };
 
             index
-                .entry(surface)
+                .entry(headword)
                 .or_default()
                 .push((pos_id, rdfield, wid));
         }
