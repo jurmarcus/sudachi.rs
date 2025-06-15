@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -27,6 +27,12 @@ use std::fmt::{Debug, Display, Formatter};
 #[repr(transparent)]
 pub struct WordId {
     raw: u32,
+}
+
+impl Default for WordId {
+    fn default() -> Self {
+        Self::INVALID
+    }
 }
 
 impl Debug for WordId {

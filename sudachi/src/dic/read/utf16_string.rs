@@ -42,3 +42,10 @@ pub fn short_utf16_string(input: &[u8]) -> SudachiNomResult<&[u8], String> {
             }
         })
 }
+
+pub fn skip_short_utf16_string(input: &[u8]) -> SudachiNomResult<&[u8], String> {
+    let (rest, length) = le_i16(input)?;
+    let num_bytes = (length * 2) as usize;
+    let (rest, _) = nom::bytes::complete::take(num_bytes)(rest)?;
+    Ok((rest, String::new()))
+}

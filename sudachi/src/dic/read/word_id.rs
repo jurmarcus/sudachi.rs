@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ *  Copyright (c) 2025 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,12 +14,11 @@
  *  limitations under the License.
  */
 
-pub mod error;
-pub(crate) mod u16str;
-pub(crate) mod utf16_string;
-pub(crate) mod utf8_string;
-pub(crate) mod varint;
-pub(crate) mod word_id;
-pub(crate) mod word_info;
+use nom::number::complete::le_u32;
 
-pub use self::error::{SudachiNomError, SudachiNomResult};
+use crate::dic::read::error::SudachiNomResult;
+use crate::dic::word_id::WordId;
+
+pub fn le_u32_word_id(input: &[u8]) -> SudachiNomResult<&[u8], WordId> {
+    le_u32(input).map(|(rest, id)| (rest, WordId::from_raw(id)))
+}
