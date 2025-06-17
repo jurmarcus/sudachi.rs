@@ -18,11 +18,91 @@ use crate::dic::lexicon_set::LexiconSetError;
 use crate::error::{SudachiError, SudachiResult};
 use std::fmt::{Debug, Display, Formatter};
 
-/// Dictionary word ID
+/// Bit mask for the entry id part of the WordId
+const WORD_MASK: u32 = 0x0fff_ffff;
+
+/// Dictionary ID
 ///
-/// Encode dictionary ID and word internal ID as 4 bits and 28 bits respectively
-/// DicId 0 - system dictionary
-/// DicId 15 - OOV and other special nodes
+/// Id of the binary dictionary in the sudachi dictionary.
+/// 0: system dictionary
+/// 1-14: user dictionaries
+/// 15: OOV and other special nodes
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[repr(transparent)]
+pub struct DictId {
+    raw: u8,
+}
+
+impl DictId {
+    /// Create DictId from the compressed representation
+    pub const fn from_raw(raw: u8) -> DictId {
+        DictId { raw }
+    }
+
+    /// Create a new DictId from parts
+    pub fn new(dict: u8) -> DictId {
+        debug_assert!(dict <= 15);
+        Self::from_raw(dict)
+    }
+
+    /// Create a new DictId with correctness checking
+    pub fn checked(dict: u8) -> SudachiResult<DictId> {
+        if dict > 15 {
+            return Err(SudachiError::LexiconSetError(
+                LexiconSetError::TooLargeDictionaryId(dict as usize),
+            ));
+        }
+        Ok(DictId::new(dict))
+    }
+
+    /// Get the raw value of the DictId
+    pub const fn as_raw(&self) -> u8 {
+        self.raw
+    }
+}
+
+/// Entry id
+///
+/// Id of the entry in the dictionary.
+///
+/// Top 4 bits are always 0
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[repr(transparent)]
+pub struct EntryId {
+    raw: u32,
+}
+
+impl EntryId {
+    /// Create WordId from the compressed representation
+    pub const fn from_raw(raw: u32) -> Self {
+        EntryId { raw }
+    }
+
+    /// Create a new EntryId from parts
+    pub fn new(entry: u32) -> Self {
+        debug_assert_eq!(entry & (!WORD_MASK), 0);
+        Self::from_raw(entry)
+    }
+
+    /// Create a new EntryId with correctness checking
+    pub fn checked(entry: u32) -> SudachiResult<Self> {
+        if entry & !WORD_MASK != 0 {
+            return Err(SudachiError::LexiconSetError(
+                LexiconSetError::TooLargeWordId(entry, WORD_MASK as usize),
+            ));
+        }
+        Ok(Self::new(entry))
+    }
+
+    /// Get the raw value of the EntryId
+    pub const fn as_raw(&self) -> u32 {
+        self.raw
+    }
+}
+
+/// Dictionary Word ID
+///
+/// Encode dictionary ID and entry ID as 4 bits and 28 bits respectively
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct WordId {
@@ -47,8 +127,6 @@ impl Display for WordId {
         write!(f, "({}, {})", fmtdic, self.word())
     }
 }
-
-const WORD_MASK: u32 = 0x0fff_ffff;
 
 impl WordId {
     /// Create WordId from the compressed representation
@@ -98,6 +176,11 @@ impl WordId {
         self.raw & WORD_MASK
     }
 
+    /// Convert to raw representation
+    pub fn as_raw(&self) -> u32 {
+        self.raw
+    }
+
     /// Check if the word comes from the system dictionary
     pub fn is_system(&self) -> bool {
         self.dic() == 0
@@ -106,10 +189,6 @@ impl WordId {
     /// Check if the word comes from the user dictionary
     pub fn is_user(&self) -> bool {
         !matches!(self.dic(), 0 | 0xf)
-    }
-
-    pub fn as_raw(&self) -> u32 {
-        self.raw
     }
 
     /// Check if the word is OOV
@@ -127,6 +206,82 @@ impl WordId {
     pub const BOS: WordId = WordId::from_raw(0xffff_fffe);
     pub const EOS: WordId = WordId::from_raw(0xffff_fffd);
     pub const MAX_WORD: u32 = 0x0fff_ffff;
+}
+
+/// Word reference
+///
+/// Entry id with a flag indicating if it is a system or user word.
+/// Encodes the flag and entry ID in the same way as WordId.
+/// Top 4 bit is 0 - points to the word in the system dictionary
+/// Top 4 bit is 1 - points to the word in the user dictionary which this wordref is used in
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[repr(transparent)]
+pub struct WordRef {
+    raw: u32,
+}
+
+impl Default for WordRef {
+    fn default() -> Self {
+        Self::INVALID
+    }
+}
+
+impl Debug for WordRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl Display for WordRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.dic(), self.word())
+    }
+}
+
+impl WordRef {
+    /// Create WordRef from the compressed representation
+    pub const fn from_raw(raw: u32) -> WordRef {
+        WordRef { raw }
+    }
+
+    /// Create a new WordRef
+    pub fn new(is_system: bool, entry: u32) -> WordRef {
+        debug_assert_eq!(entry & (!WORD_MASK), 0);
+        let dic_part = if is_system { 0 } else { 1 << 28 };
+        let word_part = entry & WORD_MASK;
+        WordRef {
+            raw: dic_part | word_part,
+        }
+    }
+
+    /// Create a new WordRef with correctness checking
+    pub fn checked(is_system: bool, entry: u32) -> SudachiResult<WordRef> {
+        if entry & !WORD_MASK != 0 {
+            return Err(SudachiError::LexiconSetError(
+                LexiconSetError::TooLargeWordId(entry, WORD_MASK as usize),
+            ));
+        }
+        Ok(Self::new(is_system, entry))
+    }
+
+    /// Extract Dictionary ID
+    pub fn dic(&self) -> u8 {
+        (self.raw >> 28) as u8
+    }
+
+    /// Extract Word ID
+    pub fn word(&self) -> u32 {
+        self.raw & WORD_MASK
+    }
+
+    /// Resolve the WordRef with its DictId in the dictionary
+    pub fn resolve(&self, dict: u8) -> WordId {
+        let dic_part = self.dic() * dict;
+        let word_part = self.word();
+        WordId::new(dic_part, word_part)
+    }    
+
+    pub const INVALID: WordRef = WordRef::from_raw(0xffff_ffff);
 }
 
 #[cfg(test)]
