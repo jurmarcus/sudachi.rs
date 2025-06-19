@@ -33,6 +33,9 @@ pub enum LexiconSetError {
 
     #[error("too many user dictionaries")]
     TooManyDictionaries,
+
+    #[error("invalid string pointer of length={0}, offset={1}, alignment={2}")]
+    InvalidStringPointer(usize, usize, usize),
 }
 
 /// Set of Lexicons
