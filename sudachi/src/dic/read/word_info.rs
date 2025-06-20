@@ -21,41 +21,15 @@ use crate::dic::read::error::SudachiNomResult;
 use crate::dic::read::utf16_string::{short_utf16_string, skip_short_utf16_string};
 use crate::dic::read::word_id::le_u32_word_ref;
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordRef;
+use crate::dic::word_info::WordInfoData;
 use crate::error::SudachiResult;
 
 pub fn le_u32_string_pointer(input: &[u8]) -> SudachiNomResult<&[u8], StringPointer> {
     le_u32(input).map(|(rest, pointer)| (rest, StringPointer::decode(pointer)))
 }
 
-/// Parsed binary representation of a word info entry.
-#[derive(Clone, Debug, Default)]
-pub struct RawWordInfoData {
-    pub pos_id: i16,
-
-    pub headword_strptr: StringPointer,
-    pub reading_form_strptr: StringPointer,
-    pub normalized_form_word_ref: WordRef,
-    pub dictionary_form_word_ref: WordRef,
-
-    pub index_form_length: i16,
-    pub c_unit_split_length: i8,
-    pub b_unit_split_length: i8,
-    pub a_unit_split_length: i8,
-    pub word_structure_length: i8,
-    pub synonym_group_ids_length: i8,
-    pub user_data_flag: i8,
-
-    pub c_unit_split: Vec<WordRef>,
-    pub b_unit_split: Vec<WordRef>,
-    pub a_unit_split: Vec<WordRef>,
-    pub word_structure: Vec<WordRef>,
-    pub synonym_group_ids: Vec<i32>,
-    pub user_data: String,
-}
-
 pub struct WordInfoParser {
-    info: RawWordInfoData,
+    info: WordInfoData,
     flds: InfoSubset,
 }
 
@@ -149,7 +123,7 @@ impl WordInfoParser {
     }
 
     #[inline]
-    pub fn parse(mut self, data: &[u8]) -> SudachiResult<RawWordInfoData> {
+    pub fn parse(mut self, data: &[u8]) -> SudachiResult<WordInfoData> {
         // skip the parameters part (i16 * 3)
         let (data, _) = nom::bytes::complete::take(6usize)(data)?;
         parse_field!(self, data, pos_id, InfoSubset::POS_ID, le_i16);
