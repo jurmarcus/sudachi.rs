@@ -17,30 +17,19 @@
 use nom::number::complete::le_i16;
 
 use super::error::{SudachiNomError, SudachiNomResult};
-use super::u16str::U16CodeUnits;
 
 pub fn utf16_string_of_length(input: &[u8], char_length: usize) -> SudachiNomResult<&[u8], String> {
+    if char_length == 0 {
+        return Ok((input, String::new()));
+    }
+
     let num_bytes = char_length * 2;
-    input
+    let (data, rest) = input
         .split_at_checked(num_bytes)
-        .ok_or(nom::Err::Failure(SudachiNomError::Utf16String))
-        .and_then(|(data, rest)| {
-            if data.is_empty() {
-                Ok((rest, String::new()))
-            } else {
-                // most Japanese chars are 3-bytes in utf-8 and 2 in utf-16
-                let estimated_capacity = (data.len() + 1) * 3 / 2;
-                let mut result = String::with_capacity(estimated_capacity);
-                let iter = U16CodeUnits::new(data);
-                for c in char::decode_utf16(iter) {
-                    match c {
-                        Err(_) => return Err(nom::Err::Failure(SudachiNomError::Utf16String)),
-                        Ok(c) => result.push(c),
-                    }
-                }
-                Ok((rest, result))
-            }
-        })
+        .ok_or(nom::Err::Failure(SudachiNomError::Utf16String))?;
+
+    let decoded = string_from_utf16le(data).map_err(|e| nom::Err::Failure(e))?;
+    Ok((rest, decoded))
 }
 
 pub fn utf16_string(input: &[u8]) -> SudachiNomResult<&[u8], String> {
@@ -53,4 +42,19 @@ pub fn skip_utf16_string(input: &[u8]) -> SudachiNomResult<&[u8], String> {
     let num_bytes = (length * 2) as usize;
     let (rest, _) = nom::bytes::complete::take(num_bytes)(rest)?;
     Ok((rest, String::new()))
+}
+
+// nightly feature exists: https://github.com/rust-lang/rust/issues/116258
+pub fn string_from_utf16le(bytes: &[u8]) -> Result<String, SudachiNomError<&[u8]>> {
+    if bytes.len() % 2 != 0 {
+        return Err(SudachiNomError::Utf16String);
+    }
+    match (cfg!(target_endian = "little"), unsafe {
+        bytes.align_to::<u16>()
+    }) {
+        (true, ([], v, [])) => String::from_utf16(v).map_err(|_| SudachiNomError::Utf16String),
+        _ => char::decode_utf16(bytes.chunks(2).map(|v| u16::from_le_bytes([v[0], v[1]])))
+            .collect::<Result<String, _>>()
+            .map_err(|_| SudachiNomError::Utf16String),
+    }
 }
