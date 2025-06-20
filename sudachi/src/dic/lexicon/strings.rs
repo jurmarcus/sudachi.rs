@@ -33,12 +33,27 @@ pub struct StringPointer {
     pub offset: u32,
 }
 
+impl Default for StringPointer {
+    fn default() -> Self {
+        return Self {
+            length: 0,
+            offset: 0,
+        };
+    }
+}
+
 impl StringPointer {
+    /// bit count of the base part
     pub const BASE_LENGTH_BITS: u32 = 5;
+    /// offset to the base part
     pub const BASE_LENGTH_OFFSET: u32 = 32 - Self::BASE_LENGTH_BITS;
+    /// max bit count of the additional length part (in value)
+    /// note that its top 1 bit is not stored in byte representation.
     pub const MAX_VARIABLE_LENGTH_BITS: u32 = 12;
+    /// max string length that can be stored using base part only
     pub const MAX_SIMPLE_LENGTH: u32 =
         2u32.pow(Self::BASE_LENGTH_BITS) - 1 - Self::MAX_VARIABLE_LENGTH_BITS;
+    /// max string length that can be stored
     pub const MAX_LENGTH: u32 =
         2u32.pow(Self::MAX_VARIABLE_LENGTH_BITS) - 1 + Self::MAX_SIMPLE_LENGTH;
 

@@ -16,23 +16,27 @@
 
 use nom::number::complete::{le_i16, le_i32, le_i8, le_u32};
 
+use crate::dic::lexicon::strings::StringPointer;
+use crate::dic::read::error::SudachiNomResult;
 use crate::dic::read::utf16_string::{short_utf16_string, skip_short_utf16_string};
-use crate::dic::read::word_id::le_u32_word_id;
+use crate::dic::read::word_id::le_u32_word_ref;
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::WordRef;
 use crate::error::SudachiResult;
 
-/// Binary representation of a word info entry.
-///
-/// Vec and String can be empty.
+pub fn le_u32_string_pointer(input: &[u8]) -> SudachiNomResult<&[u8], StringPointer> {
+    le_u32(input).map(|(rest, pointer)| (rest, StringPointer::decode(pointer)))
+}
+
+/// Parsed binary representation of a word info entry.
 #[derive(Clone, Debug, Default)]
 pub struct RawWordInfoData {
     pub pos_id: i16,
 
-    pub headword_strptr: u32,
-    pub reading_form_strptr: u32,
-    pub normalized_form_word_ref: WordId,
-    pub dictionary_form_word_ref: WordId,
+    pub headword_strptr: StringPointer,
+    pub reading_form_strptr: StringPointer,
+    pub normalized_form_word_ref: WordRef,
+    pub dictionary_form_word_ref: WordRef,
 
     pub index_form_length: i16,
     pub c_unit_split_length: i8,
@@ -42,10 +46,10 @@ pub struct RawWordInfoData {
     pub synonym_group_ids_length: i8,
     pub user_data_flag: i8,
 
-    pub c_unit_split: Vec<WordId>,
-    pub b_unit_split: Vec<WordId>,
-    pub a_unit_split: Vec<WordId>,
-    pub word_structure: Vec<WordId>,
+    pub c_unit_split: Vec<WordRef>,
+    pub b_unit_split: Vec<WordRef>,
+    pub a_unit_split: Vec<WordRef>,
+    pub word_structure: Vec<WordRef>,
     pub synonym_group_ids: Vec<i32>,
     pub user_data: String,
 }
@@ -150,27 +154,33 @@ impl WordInfoParser {
         let (data, _) = nom::bytes::complete::take(6usize)(data)?;
         parse_field!(self, data, pos_id, InfoSubset::POS_ID, le_i16);
 
-        parse_field!(self, data, headword_strptr, InfoSubset::HEADWORD, le_u32);
+        parse_field!(
+            self,
+            data,
+            headword_strptr,
+            InfoSubset::HEADWORD,
+            le_u32_string_pointer
+        );
         parse_field!(
             self,
             data,
             reading_form_strptr,
             InfoSubset::READING_FORM,
-            le_u32
+            le_u32_string_pointer
         );
         parse_field!(
             self,
             data,
             normalized_form_word_ref,
             InfoSubset::NORMALIZED_FORM,
-            le_u32_word_id
+            le_u32_word_ref
         );
         parse_field!(
             self,
             data,
             dictionary_form_word_ref,
             InfoSubset::DICTIONARY_FORM,
-            le_u32_word_id
+            le_u32_word_ref
         );
 
         parse_field!(
@@ -204,7 +214,7 @@ impl WordInfoParser {
             data,
             c_unit_split,
             InfoSubset::SPLIT_C,
-            nom::multi::count(le_u32_word_id, self.embedded_c_unit_split_length()),
+            nom::multi::count(le_u32_word_ref, self.embedded_c_unit_split_length()),
             nom::bytes::complete::take(4 * self.embedded_c_unit_split_length())
         );
         parse_field!(
@@ -212,7 +222,7 @@ impl WordInfoParser {
             data,
             b_unit_split,
             InfoSubset::SPLIT_B,
-            nom::multi::count(le_u32_word_id, self.embedded_b_unit_split_length()),
+            nom::multi::count(le_u32_word_ref, self.embedded_b_unit_split_length()),
             nom::bytes::complete::take(4 * self.embedded_b_unit_split_length())
         );
         parse_field!(
@@ -220,7 +230,7 @@ impl WordInfoParser {
             data,
             a_unit_split,
             InfoSubset::SPLIT_A,
-            nom::multi::count(le_u32_word_id, self.embedded_a_unit_split_length()),
+            nom::multi::count(le_u32_word_ref, self.embedded_a_unit_split_length()),
             nom::bytes::complete::take(4 * self.embedded_a_unit_split_length())
         );
         parse_field!(
@@ -228,7 +238,7 @@ impl WordInfoParser {
             data,
             word_structure,
             InfoSubset::WORD_STRUCTURE,
-            nom::multi::count(le_u32_word_id, self.embedded_word_structure_length()),
+            nom::multi::count(le_u32_word_ref, self.embedded_word_structure_length()),
             nom::bytes::complete::take(4 * self.embedded_word_structure_length())
         );
 

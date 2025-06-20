@@ -17,8 +17,8 @@
 use nom::number::complete::le_u32;
 
 use crate::dic::read::error::SudachiNomResult;
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::WordRef;
 
-pub fn le_u32_word_id(input: &[u8]) -> SudachiNomResult<&[u8], WordId> {
-    le_u32(input).map(|(rest, id)| (rest, WordId::from_raw(id)))
+pub fn le_u32_word_ref(input: &[u8]) -> SudachiNomResult<&[u8], WordRef> {
+    le_u32(input).map(|(rest, id)| (rest, WordRef::from_raw(id)))
 }
