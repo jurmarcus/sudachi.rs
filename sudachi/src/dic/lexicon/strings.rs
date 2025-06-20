@@ -15,6 +15,7 @@
  */
 
 use crate::dic::lexicon_set::LexiconSetError;
+use crate::dic::read::utf16_string::utf16_string_of_length;
 use crate::error::{SudachiError, SudachiResult};
 
 pub struct CompactedStrings<'a> {
@@ -25,11 +26,21 @@ impl<'a> CompactedStrings<'a> {
     pub fn from_bytes(bytes: &'a [u8]) -> CompactedStrings<'a> {
         CompactedStrings { bytes }
     }
+
+    pub fn get_string(&self, pointer: StringPointer) -> SudachiResult<String> {
+        let (_, parsed) = utf16_string_of_length(
+            &self.bytes[(pointer.offset as usize * 2)..],
+            pointer.length as usize,
+        )?;
+        Ok(parsed)
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct StringPointer {
+    /// length of the string (in utf16 codepoint)
     pub length: u32,
+    /// offset in the CompactedStrings (in utf16 codepoint)
     pub offset: u32,
 }
 

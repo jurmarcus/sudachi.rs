@@ -18,12 +18,12 @@ use nom::number::complete::le_i16;
 
 use crate::error::SudachiResult;
 
-use super::read::utf16_string::short_utf16_string;
+use super::read::utf16_string::utf16_string;
 
 pub const POS_DEPTH: usize = 6;
 
 /// A part of speech
-/// 
+///
 /// Its length must be `POS_DEPTH`
 type POS = Vec<String>;
 
@@ -38,10 +38,8 @@ impl Into<Vec<POS>> for PosList {
 impl PosList {
     pub fn from_bytes(buf: &[u8]) -> SudachiResult<Self> {
         let (rest, num_pos) = le_i16(buf)?;
-        let (_rest, pos_list) = nom::multi::count(
-            nom::multi::count(short_utf16_string, POS_DEPTH),
-            num_pos as usize,
-        )(rest)?;
+        let (_rest, pos_list) =
+            nom::multi::count(nom::multi::count(utf16_string, POS_DEPTH), num_pos as usize)(rest)?;
         Ok(PosList(pos_list))
     }
 }

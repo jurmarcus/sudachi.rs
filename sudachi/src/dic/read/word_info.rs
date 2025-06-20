@@ -18,7 +18,7 @@ use nom::number::complete::{le_i16, le_i32, le_i8, le_u32};
 
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::read::error::SudachiNomResult;
-use crate::dic::read::utf16_string::{short_utf16_string, skip_short_utf16_string};
+use crate::dic::read::utf16_string::{skip_utf16_string, utf16_string};
 use crate::dic::read::word_id::le_u32_word_ref;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_info::WordInfoData;
@@ -232,8 +232,8 @@ impl WordInfoParser {
                 data,
                 user_data,
                 InfoSubset::USER_DATA,
-                short_utf16_string,
-                skip_short_utf16_string
+                utf16_string,
+                skip_utf16_string
             );
         }
 
