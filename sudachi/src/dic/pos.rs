@@ -27,11 +27,33 @@ pub const POS_DEPTH: usize = 6;
 /// Its length must be `POS_DEPTH`
 type POS = Vec<String>;
 
+#[derive(Clone, Debug, Default)]
 pub struct PosList(Vec<POS>);
 
 impl Into<Vec<POS>> for PosList {
     fn into(self) -> Vec<POS> {
         self.0
+    }
+}
+
+impl std::ops::Deref for PosList {
+    type Target = Vec<POS>;
+    fn deref(&self) -> &Vec<POS> {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for PosList {
+    fn deref_mut(&mut self) -> &mut Vec<POS> {
+        &mut self.0
+    }
+}
+
+impl IntoIterator for PosList {
+    type Item = POS;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
