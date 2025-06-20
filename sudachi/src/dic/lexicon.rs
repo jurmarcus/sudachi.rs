@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,22 +15,21 @@
  */
 
 use std::cmp;
-use std::mem::size_of;
-
-use crate::analysis::stateful_tokenizer::StatefulTokenizer;
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
-use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordId;
-use nom::{bytes::complete::take, number::complete::le_u32};
-
-use super::read::error::SudachiNomResult;
-use crate::prelude::*;
 
 use self::trie::Trie;
 use self::word_id_table::WordIdTable;
-use self::word_infos::{WordInfo, WordInfos};
+use self::word_infos::WordInfos;
 use self::word_params::WordParams;
+use crate::analysis::stateful_tokenizer::StatefulTokenizer;
+use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::dic::binary_loader::BinaryLexicon;
+use crate::dic::lexicon::strings::CompactedStrings;
+use crate::dic::subset::InfoSubset;
+use crate::dic::word_id::WordId;
+use crate::dic::word_info::WordInfo;
+use crate::prelude::*;
 
+pub mod strings;
 pub mod trie;
 pub mod word_id_table;
 pub mod word_infos;
@@ -45,11 +44,13 @@ pub const MAX_DICTIONARIES: usize = 15;
 ///
 /// Contains trie, word_id, word_param, word_info
 pub struct Lexicon<'a> {
+    lex_id: u8,
+
     trie: Trie<'a>,
     word_id_table: WordIdTable<'a>,
     word_params: WordParams<'a>,
     word_infos: WordInfos<'a>,
-    lex_id: u8,
+    strings: CompactedStrings<'a>,
 }
 
 /// Result of the Lexicon lookup
@@ -70,34 +71,13 @@ impl LexiconEntry {
 impl<'a> Lexicon<'a> {
     const USER_DICT_COST_PER_MORPH: i32 = -20;
 
-    pub fn parse(
-        buf: &[u8],
-        original_offset: usize,
-        has_synonym_group_ids: bool,
-    ) -> SudachiResult<Lexicon> {
-        let mut offset = original_offset;
-
-        let (_rest, trie_size) = u32_parser_offset(buf, offset)?;
-        offset += 4;
-        let trie_array = trie_array_parser(buf, offset, trie_size)?;
-        let trie = Trie::new(trie_array, trie_size as usize);
-        offset += trie.total_size();
-
-        let (_rest, word_id_table_size) = u32_parser_offset(buf, offset)?;
-        let word_id_table = WordIdTable::new(buf, word_id_table_size, offset + 4);
-        offset += word_id_table.storage_size();
-
-        let (_rest, word_params_size) = u32_parser_offset(buf, offset)?;
-        let word_params = WordParams::new(buf, word_params_size, offset + 4);
-        offset += word_params.storage_size();
-
-        let word_infos = WordInfos::new(buf, offset, word_params.size(), has_synonym_group_ids);
-
-        Ok(Lexicon {
-            trie,
-            word_id_table,
-            word_params,
-            word_infos,
+    pub fn from_binary(binary_lexicon: BinaryLexicon<'a>) -> SudachiResult<Self> {
+        Ok(Self {
+            trie: binary_lexicon.trie,
+            word_id_table: binary_lexicon.word_id_table,
+            word_params: binary_lexicon.word_params,
+            word_infos: binary_lexicon.word_infos,
+            strings: binary_lexicon.strings,
             lex_id: u8::MAX,
         })
     }
@@ -141,7 +121,8 @@ impl<'a> Lexicon<'a> {
     /// Params are (left_id, right_id, cost).
     #[inline]
     pub fn get_word_param(&self, word_id: u32) -> (i16, i16, i16) {
-        self.word_params.get_params(word_id)
+        let params = self.word_params.get_params(word_id);
+        (params.left_id(), params.right_id(), params.cost())
     }
 
     /// update word_param cost based on current tokenizer
@@ -165,25 +146,4 @@ impl<'a> Lexicon<'a> {
 
         Ok(())
     }
-
-    pub fn size(&self) -> u32 {
-        self.word_params.size()
-    }
-}
-
-fn u32_parser_offset(input: &[u8], offset: usize) -> SudachiNomResult<&[u8], u32> {
-    nom::sequence::preceded(take(offset), le_u32)(input)
-}
-
-fn trie_array_parser(input: &[u8], offset: usize, trie_size: u32) -> SudachiResult<&[u8]> {
-    let trie_start = offset;
-    let trie_end = offset + (trie_size as usize) * size_of::<u32>();
-    if input.len() < trie_start {
-        return Err(SudachiError::InvalidRange(trie_start, trie_end));
-    }
-    if input.len() < trie_end {
-        return Err(SudachiError::InvalidRange(trie_start, trie_end));
-    }
-    let trie_data = &input[trie_start..trie_end];
-    Ok(trie_data)
 }

@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-use super::description::{Description, Block};
+use super::connect::ConnectionMatrix;
+use super::description::{Block, Description};
 use super::header::HeaderError;
 use super::pos::PosList;
-use super::connect::ConnectionMatrix;
 
+use super::lexicon::strings::CompactedStrings;
 use super::lexicon::trie::Trie;
 use super::lexicon::word_id_table::WordIdTable;
 use super::lexicon::word_infos::WordInfos;
 use super::lexicon::word_params::WordParams;
-use super::lexicon::strings::ConpactedStrings;
-
 
 use crate::prelude::*;
 
@@ -79,14 +78,13 @@ impl<'a> BinaryDictionary<'a> {
     }
 }
 
-
 /// Grammar part of the single binary dictionary
 pub struct BinaryGrammar<'a> {
     /// The list of part of speechs
     pub pos_list: PosList,
 
     /// The overloadable connection cost matrix
-    /// 
+    ///
     /// Only system dictionary has this.
     pub connection: Option<ConnectionMatrix<'a>>,
 }
@@ -97,36 +95,36 @@ impl<'a> BinaryGrammar<'a> {
         let connection_bytes = description.slice_or_none(buf, Block::ConnectionMatrix)?;
         let connection = match connection_bytes {
             Some(bytes) => {
-                let connection =  ConnectionMatrix::from_bytes(bytes)?;
+                let connection = ConnectionMatrix::from_bytes(bytes)?;
                 Some(connection)
-            },
+            }
             None => None,
         };
 
         let pos_list = PosList::from_bytes(description.slice(buf, Block::POSTable)?)?;
 
-        Ok(Self { pos_list, connection })
+        Ok(Self {
+            pos_list,
+            connection,
+        })
     }
 }
-
-
 
 /// Lexicon part of the single binary dictionary
 pub struct BinaryLexicon<'a> {
     /// TRIE (double array), mapping from index form to WordIdTable offset
-    trie: Trie<'a>,
+    pub trie: Trie<'a>,
     /// list of word ids that have the same index form
-    word_id_table: WordIdTable<'a>,
+    pub word_id_table: WordIdTable<'a>,
     /// list of word information (for analysis)
-    word_params: WordParams<'a>,
+    pub word_params: WordParams<'a>,
     /// list of word information (for non-analysis)
-    word_infos: WordInfos<'a>,
+    pub word_infos: WordInfos<'a>,
     /// Stotage of strings in the lixicon (normalized form etc.)
-    strings: ConpactedStrings<'a>,
+    pub strings: CompactedStrings<'a>,
 }
 
-
-impl <'a> BinaryLexicon<'a> {
+impl<'a> BinaryLexicon<'a> {
     /// load a lexicon from bytes
     pub fn load(buf: &'a [u8], description: &Description) -> SudachiResult<Self> {
         let trie = Trie::from_bytes(description.slice(buf, Block::TRIEIndex)?);
@@ -139,7 +137,7 @@ impl <'a> BinaryLexicon<'a> {
         let word_params = WordParams::from_bytes(entries_bytes);
         let word_infos = WordInfos::from_bytes(entries_bytes);
 
-        let strings = ConpactedStrings::from_bytes(description.slice(buf, Block::Strings)?);
+        let strings = CompactedStrings::from_bytes(description.slice(buf, Block::Strings)?);
 
         Ok(Self {
             trie,
@@ -148,5 +146,5 @@ impl <'a> BinaryLexicon<'a> {
             word_infos,
             strings,
         })
-    }   
+    }
 }
