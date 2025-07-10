@@ -35,7 +35,7 @@ pub struct DictId {
 
 impl DictId {
     /// Create DictId from the compressed representation
-    pub const fn from_raw(raw: u8) -> DictId {
+    const fn from_raw(raw: u8) -> DictId {
         DictId { raw }
     }
 
@@ -59,6 +59,22 @@ impl DictId {
     pub const fn as_raw(&self) -> u8 {
         self.raw
     }
+
+    /// Check if the word comes from the system dictionary
+    pub fn is_system(&self) -> bool {
+        self.raw == 0
+    }
+
+    /// Check if the word comes from the user dictionary
+    pub fn is_user(&self) -> bool {
+        !matches!(self.raw, 0 | 0xf)
+    }
+
+    /// Check if the word is OOV
+    /// An OOV node can come of OOV handlers or be a special system node like BOS or EOS
+    pub fn is_oov(&self) -> bool {
+        self.raw == 0xf
+    }
 }
 
 /// Entry id
@@ -74,7 +90,7 @@ pub struct EntryId {
 
 impl EntryId {
     /// Create WordId from the compressed representation
-    pub const fn from_raw(raw: u32) -> Self {
+    const fn from_raw(raw: u32) -> Self {
         EntryId { raw }
     }
 
@@ -123,42 +139,51 @@ impl Debug for WordId {
 
 impl Display for WordId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let fmtdic = if self.is_oov() { -1 } else { self.dic() as i32 };
-        write!(f, "({}, {})", fmtdic, self.word())
+        let fmtdic = if self.is_oov() {
+            -1
+        } else {
+            self.dict().as_raw() as i32
+        };
+        write!(f, "({}, {})", fmtdic, self.entry().as_raw())
     }
 }
 
 impl WordId {
     /// Create WordId from the compressed representation
-    pub const fn from_raw(raw: u32) -> WordId {
+    const fn from_raw(raw: u32) -> WordId {
         WordId { raw }
     }
 
+    /// Create WordId from Dict and Entry parts.
+    pub fn from_parts(dict: DictId, entry: EntryId) -> WordId {
+        Self::new(dict.as_raw(), entry.as_raw())
+    }
+
     /// Create WordId from parts
-    pub fn new(dic: u8, word: u32) -> WordId {
-        debug_assert_eq!(word & (!WORD_MASK), 0);
-        debug_assert_eq!(dic & (!0xf), 0);
-        let dic_part = ((dic & 0xf) as u32) << 28;
-        let word_part = word & WORD_MASK;
-        let raw = dic_part | word_part;
+    pub fn new(dict: u8, entry: u32) -> WordId {
+        debug_assert_eq!(entry & (!WORD_MASK), 0);
+        debug_assert_eq!(dict & (!0xf), 0);
+        let dic_part = ((dict & 0xf) as u32) << 28;
+        let entry_part = entry & WORD_MASK;
+        let raw = dic_part | entry_part;
         Self::from_raw(raw)
     }
 
     /// Creates the WordId with correctness checking
-    pub fn checked(dic: u8, word: u32) -> SudachiResult<WordId> {
-        if dic & !0xf != 0 {
+    pub fn checked(dic: u8, entry: u32) -> SudachiResult<WordId> {
+        if dic > 15 {
             return Err(SudachiError::LexiconSetError(
                 LexiconSetError::TooLargeDictionaryId(dic as usize),
             ));
         }
 
-        if word & !WORD_MASK != 0 {
+        if entry & !WORD_MASK != 0 {
             return Err(SudachiError::LexiconSetError(
-                LexiconSetError::TooLargeWordId(word, WORD_MASK as usize),
+                LexiconSetError::TooLargeWordId(entry, WORD_MASK as usize),
             ));
         }
 
-        Ok(Self::new(dic, word))
+        Ok(Self::new(dic, entry))
     }
 
     /// Creates an OOV node for pos_id
@@ -167,13 +192,13 @@ impl WordId {
     }
 
     /// Extract Dictionary ID
-    pub fn dic(&self) -> u8 {
-        (self.raw >> 28) as u8
+    pub fn dict(&self) -> DictId {
+        DictId::new((self.raw >> 28) as u8)
     }
 
     /// Extract Word ID
-    pub fn word(&self) -> u32 {
-        self.raw & WORD_MASK
+    pub fn entry(&self) -> EntryId {
+        EntryId::from_raw(self.raw & WORD_MASK)
     }
 
     /// Convert to raw representation
@@ -183,18 +208,18 @@ impl WordId {
 
     /// Check if the word comes from the system dictionary
     pub fn is_system(&self) -> bool {
-        self.dic() == 0
+        self.dict().is_system()
     }
 
     /// Check if the word comes from the user dictionary
     pub fn is_user(&self) -> bool {
-        !matches!(self.dic(), 0 | 0xf)
+        self.dict().is_user()
     }
 
     /// Check if the word is OOV
     /// An OOV node can come of OOV handlers or be a special system node like BOS or EOS
     pub fn is_oov(&self) -> bool {
-        self.dic() == 0xf
+        self.dict().is_oov()
     }
 
     /// Checks if the WordId corresponds to a special node
@@ -234,7 +259,12 @@ impl Debug for WordRef {
 
 impl Display for WordRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.dic(), self.word())
+        write!(
+            f,
+            "({}, {})",
+            if self.is_system() { "sys" } else { "usr" },
+            self.entry().as_raw()
+        )
     }
 }
 
@@ -264,21 +294,35 @@ impl WordRef {
         Ok(Self::new(is_system, entry))
     }
 
-    /// Extract Dictionary ID
-    pub fn dic(&self) -> u8 {
-        (self.raw >> 28) as u8
+    /// Check if the WordRef points to a system word
+    pub fn is_system(&self) -> bool {
+        self.raw >> 28 == 0
     }
 
-    /// Extract Word ID
-    pub fn word(&self) -> u32 {
-        self.raw & WORD_MASK
+    /// Check if the WordRef points to a user word
+    pub fn is_user(&self) -> bool {
+        self.raw >> 28 == 1
+    }
+
+    /// Extract Entry ID
+    pub fn entry(&self) -> EntryId {
+        EntryId::from_raw(self.raw & WORD_MASK)
+    }
+
+    /// Convert to raw representation
+    pub fn as_raw(&self) -> u32 {
+        self.raw
     }
 
     /// Resolve the WordRef with its DictId in the dictionary
-    pub fn resolve(&self, dict: u8) -> WordId {
-        let dic_part = self.dic() * dict;
-        let word_part = self.word();
-        WordId::new(dic_part, word_part)
+    pub fn resolve(&self, dict: DictId) -> WordId {
+        if self.is_system() {
+            // dict part of system wordref is 0 and it is already resolved.
+            WordId::from_raw(self.as_raw())
+        } else {
+            // set actual dict id for user wordref.
+            WordId::from_parts(dict, self.entry())
+        }
     }
 
     pub const INVALID: WordRef = WordRef::from_raw(0xffff_ffff);

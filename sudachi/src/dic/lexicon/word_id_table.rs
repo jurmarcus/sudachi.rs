@@ -78,7 +78,7 @@ impl Iterator for DeltaCompressedEntryIdIter<'_> {
         self.rest = rest;
         self.remining -= 1;
         self.sum += delta;
-        Some(EntryId::from_raw(self.sum))
+        Some(EntryId::new(self.sum))
     }
 }
 
