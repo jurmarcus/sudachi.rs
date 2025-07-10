@@ -21,10 +21,10 @@ use thiserror::Error;
 use crate::config::ConfigError;
 use crate::dic::build::error::DicBuildError;
 use crate::dic::character_category::Error as CharacterCategoryError;
-use crate::dic::read::error::SudachiNomError;
-use crate::dic::header::HeaderError;
 use crate::dic::description::DescriptionError;
+use crate::dic::header::HeaderError;
 use crate::dic::lexicon_set::LexiconSetError;
+use crate::dic::read::error::SudachiNomError;
 use crate::plugin::PluginError;
 
 pub type SudachiResult<T> = Result<T, SudachiError>;
@@ -75,7 +75,7 @@ pub enum SudachiError {
     #[error("Invalid description: {0}")]
     InvalidDescription(#[from] DescriptionError),
 
-    #[error("Lecicon error")]
+    #[error("Lexicon error")]
     LexiconSetError(#[from] LexiconSetError),
 
     #[error("Plugin error")]
@@ -92,6 +92,9 @@ pub enum SudachiError {
 
     #[error("Invalid grammar")]
     InvalidDictionaryGrammar,
+
+    #[error("Connection matrix is missing")]
+    ConnectionMatrixMissing,
 
     #[error("Invalid part of speech: {0}")]
     InvalidPartOfSpeech(String),

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+pub mod binary_loader;
 pub mod build;
 pub mod category_type;
 pub mod character_category;
@@ -25,11 +26,11 @@ pub mod header;
 pub mod lexicon;
 pub mod lexicon_set;
 pub mod loader;
+pub mod pos;
 pub mod read;
 pub mod storage;
 pub mod subset;
 pub mod word_id;
+pub mod word_info;
 
 pub use self::loader::DictionaryLoader;
-
-const POS_DEPTH: usize = 6;

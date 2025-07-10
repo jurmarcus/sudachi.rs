@@ -279,7 +279,7 @@ impl WordRef {
         let dic_part = self.dic() * dict;
         let word_part = self.word();
         WordId::new(dic_part, word_part)
-    }    
+    }
 
     pub const INVALID: WordRef = WordRef::from_raw(0xffff_ffff);
 }

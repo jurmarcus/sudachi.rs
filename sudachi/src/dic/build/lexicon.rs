@@ -36,7 +36,7 @@ use crate::dic::build::report::{ReportBuilder, Reporter};
 use crate::dic::build::MAX_POS_IDS;
 use crate::dic::grammar::Grammar;
 use crate::dic::word_id::WordId;
-use crate::dic::POS_DEPTH;
+use crate::dic::pos::POS_DEPTH;
 use crate::error::SudachiResult;
 
 #[cfg(test)]
