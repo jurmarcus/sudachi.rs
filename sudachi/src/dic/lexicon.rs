@@ -51,27 +51,14 @@ pub struct Lexicon<'a> {
     word_params: WordParams<'a>,
     word_infos: WordInfos<'a>,
     strings: CompactedStrings<'a>,
-}
 
-/// Result of the Lexicon lookup
-#[derive(Eq, PartialEq, Debug)]
-pub struct LexiconEntry {
-    /// Id of the returned word
-    pub word_id: WordId,
-    /// Byte index of the word end
-    pub end: usize,
-}
-
-impl LexiconEntry {
-    pub fn new(word_id: WordId, end: usize) -> LexiconEntry {
-        LexiconEntry { word_id, end }
-    }
+    num_total_entries: u32,
 }
 
 impl<'a> Lexicon<'a> {
     const USER_DICT_COST_PER_MORPH: i32 = -20;
 
-    pub fn from_binary(binary_lexicon: BinaryLexicon<'a>) -> SudachiResult<Self> {
+    pub fn from_binary(binary_lexicon: BinaryLexicon<'a>, num_total_entries: u32) -> SudachiResult<Self> {
         Ok(Self {
             trie: binary_lexicon.trie,
             word_id_table: binary_lexicon.word_id_table,
@@ -79,7 +66,13 @@ impl<'a> Lexicon<'a> {
             word_infos: binary_lexicon.word_infos,
             strings: binary_lexicon.strings,
             lex_id: u8::MAX,
+            num_total_entries,
         })
+    }
+
+    /// Returns the number of entries in the lexicon
+    pub fn size(&self) -> u32 {
+        self.num_total_entries
     }
 
     /// Assign lexicon id to the current Lexicon
@@ -150,5 +143,20 @@ impl<'a> Lexicon<'a> {
         }
 
         Ok(())
+    }
+}
+
+/// Result of the Lexicon lookup
+#[derive(Eq, PartialEq, Debug)]
+pub struct LexiconEntry {
+    /// Id of the returned word
+    pub word_id: WordId,
+    /// Byte index of the word end
+    pub end: usize,
+}
+
+impl LexiconEntry {
+    pub fn new(word_id: WordId, end: usize) -> LexiconEntry {
+        LexiconEntry { word_id, end }
     }
 }
