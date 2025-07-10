@@ -25,8 +25,8 @@ use crate::analysis::stateless_tokenizer::DictionaryAccess;
 use crate::dic::binary_loader::BinaryLexicon;
 use crate::dic::lexicon::strings::CompactedStrings;
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordId;
-use crate::dic::word_info::WordInfo;
+use crate::dic::word_id::{EntryId, WordId};
+use crate::dic::word_info::WordInfoData;
 use crate::prelude::*;
 
 pub mod strings;
@@ -106,22 +106,26 @@ impl<'a> Lexicon<'a> {
             .flat_map(move |e| {
                 self.word_id_table
                     .entries(e.value as usize)
-                    .map(move |wid| LexiconEntry::new(self.word_id(wid), e.end))
+                    .map(move |eid| LexiconEntry::new(self.word_id(eid.as_raw()), e.end))
             })
     }
 
     /// Returns WordInfo for given word_id
     ///
     /// WordInfo will contain only fields included in InfoSubset
-    pub fn get_word_info(&self, word_id: u32, subset: InfoSubset) -> SudachiResult<WordInfo> {
-        self.word_infos.get_word_info(word_id, subset)
+    pub fn get_word_info(
+        &self,
+        entry_id: EntryId,
+        subset: InfoSubset,
+    ) -> SudachiResult<WordInfoData> {
+        self.word_infos.get_word_info(entry_id, subset)
     }
 
     /// Returns word_param for given word_id.
     /// Params are (left_id, right_id, cost).
     #[inline]
-    pub fn get_word_param(&self, word_id: u32) -> (i16, i16, i16) {
-        let params = self.word_params.get_params(word_id);
+    pub fn get_word_param(&self, entry_id: EntryId) -> (i16, i16, i16) {
+        let params = self.word_params.get_params(entry_id);
         (params.left_id(), params.right_id(), params.cost())
     }
 
@@ -129,11 +133,12 @@ impl<'a> Lexicon<'a> {
     pub fn update_cost<D: DictionaryAccess>(&mut self, dict: &D) -> SudachiResult<()> {
         let mut tok = StatefulTokenizer::create(dict, false, Mode::C);
         let mut ms = MorphemeList::empty(dict);
-        for wid in 0..self.word_params.size() {
-            if self.word_params.get_cost(wid) != i16::MIN {
+
+        for entry_id in self.word_id_table.all_entries() {
+            if self.word_params.get_cost(entry_id) != i16::MIN {
                 continue;
             }
-            let wi = self.get_word_info(wid, InfoSubset::HEADWORD)?;
+            let wi = self.get_word_info(entry_id, InfoSubset::HEADWORD)?;
             tok.reset().push_str(wi.surface());
             tok.do_tokenize()?;
             ms.collect_results(&mut tok)?;
@@ -141,7 +146,7 @@ impl<'a> Lexicon<'a> {
             let cost = internal_cost + Lexicon::USER_DICT_COST_PER_MORPH * ms.len() as i32;
             let cost = cmp::min(cost, i16::MAX as i32);
             let cost = cmp::max(cost, i16::MIN as i32);
-            self.word_params.set_cost(wid, cost as i16);
+            self.word_params.set_cost(entry_id, cost as i16);
         }
 
         Ok(())
