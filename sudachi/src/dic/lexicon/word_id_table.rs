@@ -16,7 +16,8 @@
 
 use std::iter::FusedIterator;
 
-use crate::dic::read::varint::{ varint32 };
+use crate::dic::read::varint::varint32;
+use crate::dic::word_id::EntryId;
 
 pub struct WordIdTable<'a> {
     bytes: &'a [u8],
@@ -32,30 +33,39 @@ impl<'a> WordIdTable<'a> {
     }
 
     #[inline]
-    pub fn entries(&self, index: usize) -> DeltaCompressedWordIdIter<'a> {
+    pub fn entries(&self, index: usize) -> DeltaCompressedEntryIdIter<'a> {
         debug_assert!(index < self.bytes.len());
-        DeltaCompressedWordIdIter::new(&self.bytes[index..])
+        DeltaCompressedEntryIdIter::new(&self.bytes[index..])
+    }
+
+    pub fn all_entries(&self) -> EntryIdIter<'a> {
+        EntryIdIter {
+            inner: DeltaCompressedEntryIdIter::new(&self.bytes),
+        }
     }
 }
 
 /// Iterator over word ids in a delta-compressed varint32 format.
-pub struct DeltaCompressedWordIdIter<'a> {
-    rest: &'a [u8],
+pub struct DeltaCompressedEntryIdIter<'a> {
+    pub(crate) rest: &'a [u8],
     remining: u32,
     sum: u32,
 }
 
-impl<'a> DeltaCompressedWordIdIter<'a> {
+impl<'a> DeltaCompressedEntryIdIter<'a> {
     pub fn new(bytes: &'a [u8]) -> Self {
-        let (rest, remining) = varint32(bytes)
-            .expect("Failed to parse length in WordIdTable");
+        let (rest, remining) = varint32(bytes).expect("Failed to parse length in WordIdTable");
 
-        DeltaCompressedWordIdIter { rest, remining, sum:0 }
+        DeltaCompressedEntryIdIter {
+            rest,
+            remining,
+            sum: 0,
+        }
     }
 }
 
-impl Iterator for DeltaCompressedWordIdIter<'_> {
-    type Item = u32;
+impl Iterator for DeltaCompressedEntryIdIter<'_> {
+    type Item = EntryId;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -63,14 +73,37 @@ impl Iterator for DeltaCompressedWordIdIter<'_> {
             return None;
         }
 
-        let (rest, delta) = varint32(self.rest)
-            .expect("Failed to parse next word id delta");
+        let (rest, delta) = varint32(self.rest).expect("Failed to parse next word id delta");
 
         self.rest = rest;
         self.remining -= 1;
         self.sum += delta;
-        Some(self.sum)
+        Some(EntryId::from_raw(self.sum))
     }
 }
 
-impl FusedIterator for DeltaCompressedWordIdIter<'_> {}
+impl FusedIterator for DeltaCompressedEntryIdIter<'_> {}
+
+/// Iterator over all word ids in the table.
+pub struct EntryIdIter<'a> {
+    inner: DeltaCompressedEntryIdIter<'a>,
+}
+
+impl Iterator for EntryIdIter<'_> {
+    type Item = EntryId;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().or_else(|| {
+            // If we reached the end of the inner iterator, move to the next list (if exists)
+            if self.inner.rest.is_empty() {
+                None
+            } else {
+                self.inner = DeltaCompressedEntryIdIter::new(self.inner.rest);
+                self.next()
+            }
+        })
+    }
+}
+
+impl FusedIterator for EntryIdIter<'_> {}
