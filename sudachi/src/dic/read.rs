@@ -21,5 +21,4 @@ pub(crate) mod u16str;
 pub(crate) mod utf16_string;
 pub(crate) mod utf8_string;
 pub(crate) mod varint;
-pub(crate) mod word_id;
 pub(crate) mod word_info;

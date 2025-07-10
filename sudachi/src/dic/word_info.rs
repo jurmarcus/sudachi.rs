@@ -15,18 +15,45 @@
  */
 
 use crate::dic::lexicon::strings::StringPointer;
-use crate::dic::word_id::WordId;
-use crate::dic::word_id::WordRef;
+use crate::dic::subset::InfoSubset;
+use crate::dic::word_id::{DictId,WordId, WordRef};
 
-/// Parsed binary representation of a word info entry.
+/// Raw word info contains word references
+#[derive(Copy, Clone, Debug)]
+pub enum WordIdOrRef {
+    Id(WordId),
+    Ref(WordRef),
+}
+
+impl Default for WordIdOrRef {
+    fn default() -> Self {
+        WordIdOrRef::Id(WordId::default())
+    }
+}
+
+impl WordIdOrRef {
+    pub fn resolve(&self, dict_id: DictId) -> Self {
+        match self {
+            WordIdOrRef::Id(_) => {
+                // Already resolved
+                *self
+            }
+            WordIdOrRef::Ref(word_ref) => {
+                WordIdOrRef::Id(word_ref.resolve(dict_id))
+            }
+        }
+    }
+}
+
+/// Parsed raw binary representation of a word info entry.
 #[derive(Clone, Debug, Default)]
 pub struct WordInfoData {
     pub pos_id: i16,
 
     pub headword_strptr: StringPointer,
     pub reading_form_strptr: StringPointer,
-    pub normalized_form_word_ref: WordRef,
-    pub dictionary_form_word_ref: WordRef,
+    pub normalized_form: WordIdOrRef,
+    pub dictionary_form: WordIdOrRef,
 
     pub index_form_length: i16,
     pub c_unit_split_length: i8,
@@ -36,12 +63,43 @@ pub struct WordInfoData {
     pub synonym_group_ids_length: i8,
     pub user_data_flag: i8,
 
-    pub c_unit_split: Vec<WordRef>,
-    pub b_unit_split: Vec<WordRef>,
-    pub a_unit_split: Vec<WordRef>,
-    pub word_structure: Vec<WordRef>,
+    pub c_unit_split: Vec<WordIdOrRef>,
+    pub b_unit_split: Vec<WordIdOrRef>,
+    pub a_unit_split: Vec<WordIdOrRef>,
+    pub word_structure: Vec<WordIdOrRef>,
     pub synonym_group_ids: Vec<i32>,
     pub user_data: String,
+}
+
+impl WordInfoData {
+    /// resolve word references in the WordInfoData
+    pub fn resolve_word_ref(&mut self, dict_id: DictId, subset: InfoSubset) {
+        if subset.contains(InfoSubset::NORMALIZED_FORM) {
+            self.normalized_form = self.normalized_form.resolve(dict_id);
+        }
+        if subset.contains(InfoSubset::DICTIONARY_FORM) {
+            self.dictionary_form = self.dictionary_form.resolve(dict_id);
+        }
+
+        if subset.contains(InfoSubset::SPLIT_C) {
+            Self::resolve_word_refs(&mut self.c_unit_split, dict_id);
+        }
+        if subset.contains(InfoSubset::SPLIT_B) {
+            Self::resolve_word_refs(&mut self.b_unit_split, dict_id);
+        }
+        if subset.contains(InfoSubset::SPLIT_A) {
+            Self::resolve_word_refs(&mut self.a_unit_split, dict_id);
+        }
+        if subset.contains(InfoSubset::WORD_STRUCTURE) {
+            Self::resolve_word_refs(&mut self.word_structure, dict_id);
+        }
+    }
+
+    fn resolve_word_refs(refs: &mut Vec<WordIdOrRef>, dict_id: DictId) {
+        for id_or_ref in refs.iter_mut() {
+            *id_or_ref = id_or_ref.resolve(dict_id);
+        }
+    }
 }
 
 /// WordInfo API.

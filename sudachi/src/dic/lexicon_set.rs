@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2025 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,10 @@
 
 use thiserror::Error;
 
-use crate::dic::lexicon::word_infos::{WordInfo, WordInfoData};
 use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
+use crate::dic::word_info::{WordInfo, WordInfoData};
 use crate::prelude::*;
 
 /// Sudachi error
@@ -110,50 +110,32 @@ impl LexiconSet<'_> {
     /// Only fills a requested subset of fields.
     /// Rest will be of default values (0 or empty).
     pub fn get_word_info_subset(&self, id: WordId, subset: InfoSubset) -> SudachiResult<WordInfo> {
-        let dict_id = id.dic();
-        let mut word_info: WordInfoData = self.lexicons[dict_id as usize]
-            .get_word_info(id.word(), subset)?
+        let dict_id = id.dict();
+        let mut word_info: WordInfoData = self.lexicons[dict_id.as_raw() as usize]
+            .get_word_info(id.entry(), subset)?
             .into();
 
+        // resolve user defined part-of-speech id
         if subset.contains(InfoSubset::POS_ID) {
             let pos_id = word_info.pos_id as usize;
-            if dict_id > 0 && pos_id >= self.num_system_pos {
+            if dict_id.is_user() && pos_id >= self.num_system_pos {
                 // user defined part-of-speech
-                word_info.pos_id =
-                    (pos_id - self.num_system_pos + self.pos_offsets[dict_id as usize]) as u16;
+                word_info.pos_id = (pos_id - self.num_system_pos
+                    + self.pos_offsets[dict_id.as_raw() as usize])
+                    as i16;
             }
         }
 
-        if subset.contains(InfoSubset::SPLIT_A) {
-            Self::update_dict_id(&mut word_info.a_unit_split, dict_id)?;
-        }
-
-        if subset.contains(InfoSubset::SPLIT_B) {
-            Self::update_dict_id(&mut word_info.b_unit_split, dict_id)?;
-        }
-
-        if subset.contains(InfoSubset::WORD_STRUCTURE) {
-            Self::update_dict_id(&mut word_info.word_structure, dict_id)?;
-        }
+        // resolve word references
+        word_info.resolve_word_ref(dict_id, subset);
 
         Ok(word_info.into())
     }
 
     /// Returns word_param for given word_id
     pub fn get_word_param(&self, id: WordId) -> (i16, i16, i16) {
-        let dic_id = id.dic() as usize;
-        self.lexicons[dic_id].get_word_param(id.word())
-    }
-
-    fn update_dict_id(split: &mut Vec<WordId>, dict_id: u8) -> SudachiResult<()> {
-        for id in split.iter_mut() {
-            let cur_dict_id = id.dic();
-            if cur_dict_id > 0 {
-                // update if target word is not in system_dict
-                *id = WordId::checked(dict_id, id.word())?;
-            }
-        }
-        Ok(())
+        let dict_id = id.dict().as_raw() as usize;
+        self.lexicons[dict_id].get_word_param(id.entry())
     }
 
     pub fn size(&self) -> u32 {

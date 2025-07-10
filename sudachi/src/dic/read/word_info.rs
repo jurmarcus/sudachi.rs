@@ -19,10 +19,14 @@ use nom::number::complete::{le_i16, le_i32, le_i8, le_u32};
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::read::error::SudachiNomResult;
 use crate::dic::read::utf16_string::{skip_utf16_string, utf16_string};
-use crate::dic::read::word_id::le_u32_word_ref;
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_info::WordInfoData;
+use crate::dic::word_id::WordRef;
+use crate::dic::word_info::{WordIdOrRef, WordInfoData};
 use crate::error::SudachiResult;
+
+pub fn le_u32_word_ref(input: &[u8]) -> SudachiNomResult<&[u8], WordIdOrRef> {
+    le_u32(input).map(|(rest, id)| (rest, WordIdOrRef::Ref(WordRef::from_raw(id))))
+}
 
 pub fn le_u32_string_pointer(input: &[u8]) -> SudachiNomResult<&[u8], StringPointer> {
     le_u32(input).map(|(rest, pointer)| (rest, StringPointer::decode(pointer)))
@@ -145,14 +149,14 @@ impl WordInfoParser {
         parse_field!(
             self,
             data,
-            normalized_form_word_ref,
+            normalized_form,
             InfoSubset::NORMALIZED_FORM,
             le_u32_word_ref
         );
         parse_field!(
             self,
             data,
-            dictionary_form_word_ref,
+            dictionary_form,
             InfoSubset::DICTIONARY_FORM,
             le_u32_word_ref
         );
