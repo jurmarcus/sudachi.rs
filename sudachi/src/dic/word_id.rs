@@ -150,7 +150,7 @@ impl Display for WordId {
 
 impl WordId {
     /// Create WordId from the compressed representation
-    const fn from_raw(raw: u32) -> WordId {
+    pub(crate) const fn from_raw(raw: u32) -> WordId {
         WordId { raw }
     }
 
@@ -323,6 +323,11 @@ impl WordRef {
             // set actual dict id for user wordref.
             WordId::from_parts(dict, self.entry())
         }
+    }
+
+    /// resolve raw
+    pub fn resolve_raw(raw: u32, dict: DictId) -> u32 {
+        WordRef::from_raw(raw).resolve(dict).as_raw()
     }
 
     pub const INVALID: WordRef = WordRef::from_raw(0xffff_ffff);

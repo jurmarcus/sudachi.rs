@@ -19,7 +19,7 @@ use thiserror::Error;
 use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
-use crate::dic::word_info::{WordInfo, WordInfoData};
+use crate::dic::word_info::{WordInfo, WordInfoRefData};
 use crate::prelude::*;
 
 /// Sudachi error
@@ -111,25 +111,15 @@ impl LexiconSet<'_> {
     /// Rest will be of default values (0 or empty).
     pub fn get_word_info_subset(&self, id: WordId, subset: InfoSubset) -> SudachiResult<WordInfo> {
         let dict_id = id.dict();
-        let mut word_info: WordInfoData = self.lexicons[dict_id.as_raw() as usize]
-            .get_word_info(id.entry(), subset)?
-            .into();
+        let word_info: WordInfoRefData = self.lexicons[dict_id.as_raw() as usize]
+            .get_word_info(id.entry(), subset)?;
 
-        // resolve user defined part-of-speech id
-        if subset.contains(InfoSubset::POS_ID) {
-            let pos_id = word_info.pos_id as usize;
-            if dict_id.is_user() && pos_id >= self.num_system_pos {
-                // user defined part-of-speech
-                word_info.pos_id = (pos_id - self.num_system_pos
-                    + self.pos_offsets[dict_id.as_raw() as usize])
-                    as i16;
-            }
-        }
-
-        // resolve word references
-        word_info.resolve_word_ref(dict_id, subset);
-
-        Ok(word_info.into())
+        Ok(word_info.resolve(
+            dict_id,
+            self.num_system_pos,
+            &self.pos_offsets,
+            subset,
+        ).into())
     }
 
     /// Returns word_param for given word_id

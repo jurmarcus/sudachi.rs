@@ -17,7 +17,7 @@
 use crate::dic::read::word_info::WordInfoParser;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::EntryId;
-use crate::dic::word_info::WordInfoData;
+use crate::dic::word_info::WordInfoRefData;
 use crate::prelude::*;
 
 pub struct WordInfos<'a> {
@@ -42,10 +42,10 @@ impl<'a> WordInfos<'a> {
         &self,
         entry_id: EntryId,
         subset: InfoSubset,
-    ) -> SudachiResult<WordInfoData> {
+    ) -> SudachiResult<WordInfoRefData> {
         let offset = Self::entry_id_to_offset(entry_id);
         let parser = WordInfoParser::subset(subset);
         let word_info = parser.parse(&self.bytes[offset..])?;
-        Ok(word_info.into())
+        Ok(WordInfoRefData::from_raw(word_info))
     }
 }

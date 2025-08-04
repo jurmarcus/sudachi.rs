@@ -20,20 +20,43 @@ use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::read::error::SudachiNomResult;
 use crate::dic::read::utf16_string::{skip_utf16_string, utf16_string};
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordRef;
-use crate::dic::word_info::{WordIdOrRef, WordInfoData};
 use crate::error::SudachiResult;
-
-pub fn le_u32_word_ref(input: &[u8]) -> SudachiNomResult<&[u8], WordIdOrRef> {
-    le_u32(input).map(|(rest, id)| (rest, WordIdOrRef::Ref(WordRef::from_raw(id))))
-}
 
 pub fn le_u32_string_pointer(input: &[u8]) -> SudachiNomResult<&[u8], StringPointer> {
     le_u32(input).map(|(rest, pointer)| (rest, StringPointer::decode(pointer)))
 }
 
+/// Parsed raw binary representation of a word info entry.
+///
+/// word id/ref fields are typed as u32 to avoid type conversion. 
+/// crate::dic::word_info::{WordInfoData, WordInfoRefData} will handle those types.
+#[derive(Clone, Debug, Default)]
+pub struct WordInfoRawData {
+    pub pos_id: i16,
+
+    pub headword_strptr: StringPointer,
+    pub reading_form_strptr: StringPointer,
+    pub normalized_form: u32,
+    pub dictionary_form: u32,
+
+    pub index_form_length: i16,
+    pub c_unit_split_length: i8,
+    pub b_unit_split_length: i8,
+    pub a_unit_split_length: i8,
+    pub word_structure_length: i8,
+    pub synonym_group_ids_length: i8,
+    pub user_data_flag: i8,
+
+    pub c_unit_split: Vec<u32>,
+    pub b_unit_split: Vec<u32>,
+    pub a_unit_split: Vec<u32>,
+    pub word_structure: Vec<u32>,
+    pub synonym_group_ids: Vec<i32>,
+    pub user_data: String,
+}
+
 pub struct WordInfoParser {
-    info: WordInfoData,
+    info: WordInfoRawData,
     flds: InfoSubset,
 }
 
@@ -127,7 +150,7 @@ impl WordInfoParser {
     }
 
     #[inline]
-    pub fn parse(mut self, data: &[u8]) -> SudachiResult<WordInfoData> {
+    pub fn parse(mut self, data: &[u8]) -> SudachiResult<WordInfoRawData> {
         // skip the parameters part (i16 * 3)
         let (data, _) = nom::bytes::complete::take(6usize)(data)?;
         parse_field!(self, data, pos_id, InfoSubset::POS_ID, le_i16);
@@ -151,14 +174,14 @@ impl WordInfoParser {
             data,
             normalized_form,
             InfoSubset::NORMALIZED_FORM,
-            le_u32_word_ref
+            le_u32
         );
         parse_field!(
             self,
             data,
             dictionary_form,
             InfoSubset::DICTIONARY_FORM,
-            le_u32_word_ref
+            le_u32
         );
 
         parse_field!(
@@ -192,7 +215,7 @@ impl WordInfoParser {
             data,
             c_unit_split,
             InfoSubset::SPLIT_C,
-            nom::multi::count(le_u32_word_ref, self.embedded_c_unit_split_length()),
+            nom::multi::count(le_u32, self.embedded_c_unit_split_length()),
             nom::bytes::complete::take(4 * self.embedded_c_unit_split_length())
         );
         parse_field!(
@@ -200,7 +223,7 @@ impl WordInfoParser {
             data,
             b_unit_split,
             InfoSubset::SPLIT_B,
-            nom::multi::count(le_u32_word_ref, self.embedded_b_unit_split_length()),
+            nom::multi::count(le_u32, self.embedded_b_unit_split_length()),
             nom::bytes::complete::take(4 * self.embedded_b_unit_split_length())
         );
         parse_field!(
@@ -208,7 +231,7 @@ impl WordInfoParser {
             data,
             a_unit_split,
             InfoSubset::SPLIT_A,
-            nom::multi::count(le_u32_word_ref, self.embedded_a_unit_split_length()),
+            nom::multi::count(le_u32, self.embedded_a_unit_split_length()),
             nom::bytes::complete::take(4 * self.embedded_a_unit_split_length())
         );
         parse_field!(
@@ -216,7 +239,7 @@ impl WordInfoParser {
             data,
             word_structure,
             InfoSubset::WORD_STRUCTURE,
-            nom::multi::count(le_u32_word_ref, self.embedded_word_structure_length()),
+            nom::multi::count(le_u32, self.embedded_word_structure_length()),
             nom::bytes::complete::take(4 * self.embedded_word_structure_length())
         );
 

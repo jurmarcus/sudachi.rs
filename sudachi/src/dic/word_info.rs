@@ -15,90 +15,142 @@
  */
 
 use crate::dic::lexicon::strings::StringPointer;
+use crate::dic::read::word_info::WordInfoRawData;
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::{DictId,WordId, WordRef};
+use crate::dic::word_id::{DictId, WordId, WordRef};
 
-/// Raw word info contains word references
-#[derive(Copy, Clone, Debug)]
-pub enum WordIdOrRef {
-    Id(WordId),
-    Ref(WordRef),
+/// wrapper type that indicates inner data are not resolved for the specific lexicon set.
+#[derive(Clone, Debug, Default)]
+#[repr(transparent)]
+pub struct WordInfoRefData {
+    raw: WordInfoRawData,
 }
 
-impl Default for WordIdOrRef {
-    fn default() -> Self {
-        WordIdOrRef::Id(WordId::default())
+impl WordInfoRefData {
+    pub fn from_raw(raw: WordInfoRawData) -> Self {
+        WordInfoRefData { raw }
     }
-}
 
-impl WordIdOrRef {
-    pub fn resolve(&self, dict_id: DictId) -> Self {
-        match self {
-            WordIdOrRef::Id(_) => {
-                // Already resolved
-                *self
-            }
-            WordIdOrRef::Ref(word_ref) => {
-                WordIdOrRef::Id(word_ref.resolve(dict_id))
+    /// Convert into WordInfoData resolving part-of-speech and word references.
+    pub fn resolve(
+        self,
+        dict_id: DictId,
+        num_system_pos: usize,
+        pos_offsets: &[usize],
+        subset: InfoSubset,
+    ) -> WordInfoData {
+        let mut raw = self.raw;
+
+        if subset.contains(InfoSubset::POS_ID) {
+            let pos_id = raw.pos_id as usize;
+            if dict_id.is_user() && pos_id >= num_system_pos {
+                // is user defined part-of-speech
+                let pos_id_diff = pos_id - num_system_pos;
+                let pos_offset = pos_offsets[dict_id.as_raw() as usize];
+
+                raw.pos_id = (pos_offset + pos_id_diff) as i16;
             }
         }
-    }
-}
 
-/// Parsed raw binary representation of a word info entry.
-#[derive(Clone, Debug, Default)]
-pub struct WordInfoData {
-    pub pos_id: i16,
-
-    pub headword_strptr: StringPointer,
-    pub reading_form_strptr: StringPointer,
-    pub normalized_form: WordIdOrRef,
-    pub dictionary_form: WordIdOrRef,
-
-    pub index_form_length: i16,
-    pub c_unit_split_length: i8,
-    pub b_unit_split_length: i8,
-    pub a_unit_split_length: i8,
-    pub word_structure_length: i8,
-    pub synonym_group_ids_length: i8,
-    pub user_data_flag: i8,
-
-    pub c_unit_split: Vec<WordIdOrRef>,
-    pub b_unit_split: Vec<WordIdOrRef>,
-    pub a_unit_split: Vec<WordIdOrRef>,
-    pub word_structure: Vec<WordIdOrRef>,
-    pub synonym_group_ids: Vec<i32>,
-    pub user_data: String,
-}
-
-impl WordInfoData {
-    /// resolve word references in the WordInfoData
-    pub fn resolve_word_ref(&mut self, dict_id: DictId, subset: InfoSubset) {
         if subset.contains(InfoSubset::NORMALIZED_FORM) {
-            self.normalized_form = self.normalized_form.resolve(dict_id);
+            raw.normalized_form = WordRef::resolve_raw(raw.normalized_form, dict_id);
         }
         if subset.contains(InfoSubset::DICTIONARY_FORM) {
-            self.dictionary_form = self.dictionary_form.resolve(dict_id);
+            raw.dictionary_form = WordRef::resolve_raw(raw.dictionary_form, dict_id);
         }
 
         if subset.contains(InfoSubset::SPLIT_C) {
-            Self::resolve_word_refs(&mut self.c_unit_split, dict_id);
+            Self::resolve_ref_vec(&mut raw.c_unit_split, dict_id);
         }
         if subset.contains(InfoSubset::SPLIT_B) {
-            Self::resolve_word_refs(&mut self.b_unit_split, dict_id);
+            Self::resolve_ref_vec(&mut raw.b_unit_split, dict_id);
         }
         if subset.contains(InfoSubset::SPLIT_A) {
-            Self::resolve_word_refs(&mut self.a_unit_split, dict_id);
+            Self::resolve_ref_vec(&mut raw.a_unit_split, dict_id);
         }
         if subset.contains(InfoSubset::WORD_STRUCTURE) {
-            Self::resolve_word_refs(&mut self.word_structure, dict_id);
+            Self::resolve_ref_vec(&mut raw.word_structure, dict_id);
+        }
+
+        WordInfoData::from_resolved(raw)
+    }
+
+    fn resolve_ref_vec(refs: &mut Vec<u32>, dict_id: DictId) {
+        for raw in refs.iter_mut() {
+            *raw = WordRef::resolve_raw(*raw, dict_id);
+        }
+    }
+}
+
+/// wrapper type that indicates inner data are resolved for the specific lexicon set.
+#[derive(Clone, Debug, Default)]
+#[repr(transparent)]
+pub struct WordInfoData {
+    raw: WordInfoRawData,
+}
+
+impl WordInfoData {
+    pub fn from_resolved(raw: WordInfoRawData) -> Self {
+        WordInfoData { raw }
+    }
+
+    pub fn pos_id(&self) -> u16 {
+        self.raw.pos_id as u16
+    }
+
+    pub fn headword_strptr(&self) -> StringPointer {
+        self.raw.headword_strptr
+    }
+
+    pub fn reading_form_strptr(&self) -> StringPointer {
+        self.raw.reading_form_strptr
+    }
+
+    pub fn normalized_form_word_id(&self) -> WordId {
+        WordId::from_raw(self.raw.normalized_form)
+    }
+
+    pub fn dictionary_form_word_id(&self) -> WordId {
+        WordId::from_raw(self.raw.dictionary_form)
+    }
+
+    pub fn index_form_length(&self) -> usize {
+        self.raw.index_form_length as usize
+    }
+
+    pub fn c_unit_split(&self) -> &[WordId] {
+        Self::as_word_id_slice(&self.raw.c_unit_split)
+    }
+
+    pub fn b_unit_split(&self) -> &[WordId] {
+        Self::as_word_id_slice(&self.raw.b_unit_split)
+    }
+
+    pub fn a_unit_split(&self) -> &[WordId] {
+        Self::as_word_id_slice(&self.raw.a_unit_split)
+    }
+
+    pub fn word_structure(&self) -> &[WordId] {
+        Self::as_word_id_slice(&self.raw.word_structure)
+    }
+
+    fn as_word_id_slice(raw_slice: &[u32]) -> &[WordId] {
+        if raw_slice.is_empty() {
+            &[]
+        } else {
+            // values in the slice are resolved and safely casted to WordId
+            unsafe {
+                std::slice::from_raw_parts(raw_slice.as_ptr() as *const WordId, raw_slice.len())
+            }
         }
     }
 
-    fn resolve_word_refs(refs: &mut Vec<WordIdOrRef>, dict_id: DictId) {
-        for id_or_ref in refs.iter_mut() {
-            *id_or_ref = id_or_ref.resolve(dict_id);
-        }
+    pub fn synonym_group_ids(&self) -> &[i32] {
+        &self.raw.synonym_group_ids
+    }
+
+    pub fn user_data(&self) -> &str {
+        &self.raw.user_data
     }
 }
 

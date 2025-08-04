@@ -26,7 +26,7 @@ use crate::dic::binary_loader::BinaryLexicon;
 use crate::dic::lexicon::strings::CompactedStrings;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::{EntryId, WordId};
-use crate::dic::word_info::WordInfoData;
+use crate::dic::word_info::WordInfoRefData;
 use crate::prelude::*;
 
 pub mod strings;
@@ -58,7 +58,10 @@ pub struct Lexicon<'a> {
 impl<'a> Lexicon<'a> {
     const USER_DICT_COST_PER_MORPH: i32 = -20;
 
-    pub fn from_binary(binary_lexicon: BinaryLexicon<'a>, num_total_entries: u32) -> SudachiResult<Self> {
+    pub fn from_binary(
+        binary_lexicon: BinaryLexicon<'a>,
+        num_total_entries: u32,
+    ) -> SudachiResult<Self> {
         Ok(Self {
             trie: binary_lexicon.trie,
             word_id_table: binary_lexicon.word_id_table,
@@ -110,7 +113,7 @@ impl<'a> Lexicon<'a> {
         &self,
         entry_id: EntryId,
         subset: InfoSubset,
-    ) -> SudachiResult<WordInfoData> {
+    ) -> SudachiResult<WordInfoRefData> {
         self.word_infos.get_word_info(entry_id, subset)
     }
 
