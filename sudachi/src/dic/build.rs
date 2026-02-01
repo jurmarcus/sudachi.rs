@@ -17,7 +17,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::analysis::DictionaryAccess;
 use crate::dic::build::error::{BuildFailure, DicBuildError, DicCompilationCtx};
 use crate::dic::build::index::IndexBuilder;
 use crate::dic::build::lexicon::LexiconWriter;

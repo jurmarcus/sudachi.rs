@@ -15,7 +15,7 @@
  */
 
 use crate::analysis::node::{LatticeNode, PathCost, ResultNode};
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::analysis::DictionaryAccess;
 use crate::dic::lexicon::word_infos::WordInfo;
 use crate::dic::word_id::WordId;
 use crate::input_text::InputTextIndex;

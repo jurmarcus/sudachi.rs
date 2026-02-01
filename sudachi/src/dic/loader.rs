@@ -21,7 +21,7 @@ use super::grammar::Grammar;
 use super::header::{Header, HeaderError, HeaderVersion};
 use super::lexicon::Lexicon;
 use super::lexicon_set::LexiconSet;
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::analysis::DictionaryAccess;
 
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;

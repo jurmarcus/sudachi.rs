@@ -19,7 +19,7 @@ use std::path::Path;
 
 use memmap2::Mmap;
 
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::analysis::DictionaryAccess;
 use crate::config::Config;
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon_set::LexiconSet;

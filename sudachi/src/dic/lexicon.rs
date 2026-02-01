@@ -21,7 +21,7 @@ use self::word_id_table::WordIdTable;
 use self::word_infos::WordInfos;
 use self::word_params::WordParams;
 use crate::analysis::stateful_tokenizer::StatefulTokenizer;
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::analysis::DictionaryAccess;
 use crate::dic::binary_loader::BinaryLexicon;
 use crate::dic::lexicon::strings::CompactedStrings;
 use crate::dic::subset::InfoSubset;

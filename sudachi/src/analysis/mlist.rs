@@ -17,7 +17,7 @@
 use crate::analysis::morpheme::Morpheme;
 use crate::analysis::node::{PathCost, ResultNode};
 use crate::analysis::stateful_tokenizer::StatefulTokenizer;
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::analysis::DictionaryAccess;
 use crate::analysis::{Mode, Node};
 use crate::dic::subset::InfoSubset;
 use crate::error::{SudachiError, SudachiResult};
