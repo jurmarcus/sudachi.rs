@@ -31,6 +31,10 @@ impl WordInfoRefData {
         WordInfoRefData { raw }
     }
 
+    pub fn headword_strptr(&self) -> StringPointer {
+        self.raw.headword_strptr
+    }
+
     /// Convert into WordInfoData resolving part-of-speech and word references.
     pub fn resolve(
         self,
@@ -166,60 +170,44 @@ pub struct WordInfo {
 }
 
 impl WordInfo {
-    pub fn headword(&self) -> &str {
-        &self.data.headword
+    pub fn headword_strptr(&self) -> StringPointer {
+        self.data.headword_strptr()
     }
 
     pub fn index_form_length(&self) -> usize {
-        self.data.index_form_length as usize
+        self.data.index_form_length() as usize
     }
 
     pub fn pos_id(&self) -> u16 {
-        self.data.pos_id
+        self.data.pos_id()
     }
 
-    pub fn normalized_form(&self) -> &str {
-        if self.data.normalized_form.is_empty() {
-            self.headword()
-        } else {
-            &self.data.normalized_form
-        }
+    pub fn normalized_form_word_id(&self) -> WordId {
+        self.data.normalized_form_word_id()
+    }
+ 
+    pub fn dictionary_form_word_id(&self) -> WordId {
+        self.data.dictionary_form_word_id()
     }
 
-    pub fn dictionary_form_word_id(&self) -> i32 {
-        self.data.dictionary_form_word_id
-    }
-
-    pub fn dictionary_form(&self) -> &str {
-        if self.data.dictionary_form.is_empty() {
-            self.headword()
-        } else {
-            &self.data.dictionary_form
-        }
-    }
-
-    pub fn reading_form(&self) -> &str {
-        if self.data.reading_form.is_empty() {
-            self.headword()
-        } else {
-            &self.data.reading_form
-        }
+    pub fn reading_form_strptr(&self) -> StringPointer {
+        self.data.reading_form_strptr()
     }
 
     pub fn a_unit_split(&self) -> &[WordId] {
-        &self.data.a_unit_split
+        &self.data.a_unit_split()
     }
 
     pub fn b_unit_split(&self) -> &[WordId] {
-        &self.data.b_unit_split
+        &self.data.b_unit_split()
     }
 
     pub fn word_structure(&self) -> &[WordId] {
-        &self.data.word_structure
+        &self.data.word_structure()
     }
 
-    pub fn synonym_group_ids(&self) -> &[u32] {
-        &self.data.synonym_group_ids
+    pub fn synonym_group_ids(&self) -> &[i32] {
+        &self.data.synonym_group_ids()
     }
 
     pub fn borrow_data(&self) -> &WordInfoData {
