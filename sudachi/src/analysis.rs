@@ -24,6 +24,7 @@ pub mod morpheme;
 pub mod node;
 pub mod stateful_tokenizer;
 pub mod stateless_tokenizer;
+mod strings_cache;
 
 pub use inner::Node;
 pub use mode::Mode;
