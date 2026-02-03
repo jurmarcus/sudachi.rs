@@ -19,10 +19,12 @@ use std::iter::FusedIterator;
 use std::ops::Range;
 
 use crate::analysis::inner::Node;
-use crate::dic::lexicon::word_infos::{WordInfo, WordInfoData};
+use crate::analysis::strings_cache::StringsCache;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::{EntryId, WordId};
+use crate::dic::read::word_info::WordInfoRawData;
+use crate::dic::word_info::{WordInfo, WordInfoData};
 use crate::input_text::InputBuffer;
 use crate::prelude::*;
 
@@ -79,45 +81,63 @@ pub trait LatticeNode: RightId {
 /// Full lattice node, as the result of analysis.
 /// All indices (including inner) are in the modified sentence space
 /// Indices are converted to original sentence space when user request them.
-pub struct ResultNode {
+pub struct ResultNode<'a> {
     inner: Node,
     total_cost: i32,
     begin_bytes: u16,
     end_bytes: u16,
-    word_info: WordInfo,
+
+    strings: StringsCache<'a>,
 }
 
-impl ResultNode {
+impl<'a> ResultNode<'a> {
     pub fn new(
         inner: Node,
         total_cost: i32,
         begin_bytes: u16,
         end_bytes: u16,
         word_info: WordInfo,
-    ) -> ResultNode {
+        lexicon_set: &'a LexiconSet<'a>,
+    ) -> ResultNode<'a> {
         ResultNode {
             inner,
             total_cost,
             begin_bytes,
             end_bytes,
-            word_info,
+            strings: StringsCache::new_with_info(lexicon_set, inner.word_id(), word_info),
+        }
+    }
+
+    pub fn new_with_strings(
+        inner: Node,
+        total_cost: i32,
+        begin_bytes: u16,
+        end_bytes: u16,
+        strings: StringsCache<'a>,
+    ) -> ResultNode<'a> {
+        ResultNode {
+            inner,
+            total_cost,
+            begin_bytes,
+            end_bytes,
+            strings,
         }
     }
 }
 
-impl RightId for ResultNode {
+impl RightId for ResultNode<'_> {
     fn right_id(&self) -> u16 {
         self.inner.right_id()
     }
 }
 
-impl PathCost for ResultNode {
+impl PathCost for ResultNode<'_> {
     fn total_cost(&self) -> i32 {
         self.total_cost
     }
 }
 
-impl LatticeNode for ResultNode {
+impl LatticeNode for ResultNode<'_> {
     fn begin(&self) -> usize {
         self.inner.begin()
     }
@@ -139,9 +159,9 @@ impl LatticeNode for ResultNode {
     }
 }
 
-impl ResultNode {
+impl ResultNode<'_> {
     pub fn word_info(&self) -> &WordInfo {
-        &self.word_info
+        self.strings.word_info()
     }
 
     /// Returns begin offset in bytes of node surface in a sentence
@@ -205,14 +225,14 @@ impl ResultNode {
     }
 }
 
-impl fmt::Display for ResultNode {
+impl fmt::Display for ResultNode<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "{} {} {}{} {} {} {} {}",
             self.begin(),
             self.end(),
-            self.word_info.headword(),
+            self.strings.surface(),
             self.word_id(),
             self.word_info().pos_id(),
             self.left_id(),
@@ -234,8 +254,8 @@ pub struct NodeSplitIterator<'a> {
     byte_end: u16,
 }
 
-impl Iterator for NodeSplitIterator<'_> {
-    type Item = ResultNode;
+impl<'a> Iterator for NodeSplitIterator<'a> {
+    type Item = ResultNode<'a>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -267,7 +287,7 @@ impl Iterator for NodeSplitIterator<'_> {
 
         let inner = Node::new(char_start, char_end, u16::MAX, u16::MAX, i16::MAX, word_id);
 
-        let node = ResultNode::new(inner, i32::MAX, byte_start, byte_end, word_info);
+        let node = ResultNode::new(inner, i32::MAX, byte_start, byte_end, word_info, self.lexicon);
 
         self.index += 1;
         Some(node)
@@ -298,36 +318,41 @@ pub fn concat_nodes(
     let mut headword = String::with_capacity(end_bytes - beg_bytes);
     let mut reading_form = String::with_capacity(end_bytes - beg_bytes);
     let mut dictionary_form = String::with_capacity(end_bytes - beg_bytes);
-    let mut index_form_length: u16 = 0;
+    let mut index_form_length: i16 = 0;
 
     for node in path[begin..end].iter() {
-        let data = node.word_info().borrow_data();
-        headword.push_str(&data.headword);
-        reading_form.push_str(&data.reading_form);
-        dictionary_form.push_str(&data.dictionary_form);
-        index_form_length += data.index_form_length;
+        headword.push_str(node.strings.surface());
+        reading_form.push_str(node.strings.reading());
+        dictionary_form.push_str(node.strings.dictionary());
+        index_form_length += node.word_info().index_form_length();
     }
 
     let normalized_form = normalized_form.unwrap_or_else(|| {
         let mut norm = String::with_capacity(end_bytes - beg_bytes);
         for node in path[begin..end].iter() {
-            norm.push_str(&node.word_info().borrow_data().normalized_form);
+            norm.push_str(node.strings.normalized_form());
         }
         norm
     });
 
-    let pos_id = path[begin].word_info().pos_id();
+    let pos_id = path[begin].word_info().pos_id() as i16;
 
-    let new_wi = WordInfoData {
-        headword,
-        index_form_length,
-        pos_id,
-        normalized_form,
+    let new_wi = WordInfoData::from_resolved(
+        WordInfoRawData {
+            pos_id,
+            index_form_length,
+            ..Default::default()
+        }
+    );
+    let strings = StringsCache::new_with_strings(
+        &path[begin].strings.lexicon_set(),
+        WordId::oov(pos_id as u32),
+        new_wi.into(), 
+        headword, 
         reading_form,
-        dictionary_form,
-        dictionary_form_word_id: -1,
-        ..Default::default()
-    };
+        normalized_form,
+        dictionary_form
+    );
 
     let inner = Node::new(
         path[begin].begin() as u16,
@@ -338,12 +363,12 @@ pub fn concat_nodes(
         WordId::INVALID,
     );
 
-    let node = ResultNode::new(
+    let node = ResultNode::new_with_strings(
         inner,
         path[end - 1].total_cost,
         path[begin].begin_bytes,
         path[end - 1].end_bytes,
-        new_wi.into(),
+        strings,
     );
 
     path[begin] = node;
@@ -365,29 +390,34 @@ pub fn concat_oov_nodes(
     let capa = path[end - 1].end_bytes() - path[begin].begin_bytes();
 
     let mut headword = String::with_capacity(capa);
-    let mut index_form_length: u16 = 0;
+    let mut index_form_length: i16 = 0;
     let mut wid = WordId::from_raw(0);
 
     for node in path[begin..end].iter() {
-        let data = node.word_info().borrow_data();
-        headword.push_str(&data.headword);
-        index_form_length += data.index_form_length;
+        headword.push_str(node.strings.surface());
+        index_form_length += node.word_info().index_form_length();
+        // prioritize oov/user dict-id among merged nodes
         wid = wid.max(node.word_id());
     }
 
+    // concatenated node should be OOV or have non-existing entry id
     if !wid.is_oov() {
-        wid = WordId::new(wid.dic(), WordId::MAX_WORD);
+        wid = WordId::new(wid.dic(), EntryId::MAX);
     }
 
-    let new_wi = WordInfoData {
-        normalized_form: headword.clone(),
-        dictionary_form: headword.clone(),
+    let new_wi = WordInfoData::from_resolved( 
+        WordInfoRawData{
+            pos_id: pos_id as i16,
+            index_form_length,
+            ..Default::default()
+    });
+
+    let strings = StringsCache::new_with_single_string(
+        &path[begin].strings.lexicon_set(),
+        wid,
+        new_wi.into(),
         headword,
-        index_form_length,
-        pos_id,
-        dictionary_form_word_id: -1,
-        ..Default::default()
-    };
+    );
 
     let inner = Node::new(
         path[begin].begin() as u16,
@@ -398,12 +428,12 @@ pub fn concat_oov_nodes(
         wid,
     );
 
-    let node = ResultNode::new(
+    let node = ResultNode::new_with_strings(
         inner,
         path[end - 1].total_cost,
         path[begin].begin_bytes,
         path[end - 1].end_bytes,
-        new_wi.into(),
+        strings,
     );
 
     path[begin] = node;
