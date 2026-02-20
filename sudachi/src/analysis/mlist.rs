@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,18 +14,19 @@
  *  limitations under the License.
  */
 
-use crate::analysis::morpheme::Morpheme;
-use crate::analysis::node::{PathCost, ResultNode};
-use crate::analysis::stateful_tokenizer::StatefulTokenizer;
-use crate::analysis::DictionaryAccess;
-use crate::analysis::{Mode, Node};
-use crate::dic::subset::InfoSubset;
-use crate::error::{SudachiError, SudachiResult};
-use crate::input_text::InputBuffer;
 use std::cell::{Ref, RefCell};
 use std::iter::FusedIterator;
 use std::ops::{Deref, DerefMut, Index};
 use std::rc::Rc;
+
+use crate::analysis::morpheme::Morpheme;
+use crate::analysis::node::{PathCost, ResultNode};
+use crate::analysis::stateful_tokenizer::StatefulTokenizer;
+use crate::analysis::{Mode, Node};
+use crate::dic::DictionaryAccess;
+use crate::dic::subset::InfoSubset;
+use crate::error::{SudachiError, SudachiResult};
+use crate::input_text::InputBuffer;
 
 struct InputPart {
     input: InputBuffer,

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ use std::path::Path;
 
 use memmap2::Mmap;
 
-use crate::analysis::DictionaryAccess;
 use crate::config::Config;
+use crate::dic::{DictionaryAccess, LexiconAccess};
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::storage::{Storage, SudachiDicData};
@@ -180,13 +180,15 @@ impl JapaneseDictionary {
     }
 }
 
+impl LexiconAccess for JapaneseDictionary {
+    fn lexicon(&self) -> &LexiconSet<'_> {
+        self.lexicon()
+    }
+}
+
 impl DictionaryAccess for JapaneseDictionary {
     fn grammar(&self) -> &Grammar<'_> {
         self.grammar()
-    }
-
-    fn lexicon(&self) -> &LexiconSet<'_> {
-        self.lexicon()
     }
 
     fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {

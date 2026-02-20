@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  */
 
 use crate::analysis::node::{LatticeNode, PathCost, ResultNode};
-use crate::analysis::DictionaryAccess;
-use crate::dic::lexicon::word_infos::WordInfo;
+use crate::dic::DictionaryAccess;
+use crate::dic::word_info::WordInfo;
 use crate::dic::word_id::WordId;
 use crate::input_text::InputTextIndex;
 use crate::prelude::*;

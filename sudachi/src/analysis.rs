@@ -15,7 +15,6 @@
  */
 
 pub mod created;
-pub mod dictionary_access;
 mod inner;
 pub mod lattice;
 pub mod mlist;
@@ -28,7 +27,6 @@ mod strings_cache;
 
 pub use inner::Node;
 pub use mode::Mode;
-pub use dictionary_access::DictionaryAccess;
 
 use crate::analysis::mlist::MorphemeList;
 use crate::error::SudachiResult;

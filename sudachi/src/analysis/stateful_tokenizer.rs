@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,12 +14,13 @@
  *  limitations under the License.
  */
 
+use crate::analysis::{Mode};
 use crate::analysis::created::CreatedWords;
 use crate::analysis::inner::{Node, NodeIdx};
 use crate::analysis::lattice::Lattice;
 use crate::analysis::node::{LatticeNode, ResultNode};
 use crate::analysis::stateless_tokenizer::{dump_path, split_path};
-use crate::analysis::{Mode, DictionaryAccess};
+use crate::dic::{DictionaryAccess};
 use crate::dic::category_type::CategoryType;
 use crate::dic::connect::ConnectionMatrix;
 use crate::dic::lexicon::word_infos::WordInfoData;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
 use crate::dic::word_info::{WordInfo, WordInfoRefData};
+use crate::dic::LexiconAccess;
 use crate::prelude::*;
 
 /// Sudachi error
@@ -46,6 +47,12 @@ pub struct LexiconSet<'a> {
     lexicons: Vec<Lexicon<'a>>,
     pos_offsets: Vec<usize>,
     num_system_pos: usize,
+}
+
+impl LexiconAccess for LexiconSet<'_> {
+    fn lexicon(&self) -> &LexiconSet<'_> {
+        self
+    }
 }
 
 impl<'a> LexiconSet<'a> {

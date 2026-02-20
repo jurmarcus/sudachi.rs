@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
  *  limitations under the License.
  */
 
-use crate::analysis::node::ResultNode;
-use crate::analysis::stateful_tokenizer::StatefulTokenizer;
 use std::ops::Deref;
 
+use crate::analysis::{Mode, Tokenize};
+use crate::analysis::mlist::MorphemeList;
+use crate::analysis::node::ResultNode;
+use crate::analysis::stateful_tokenizer::StatefulTokenizer;
+use crate::dic::DictionaryAccess;
 use crate::dic::subset::InfoSubset;
 use crate::error::SudachiResult;
 use crate::input_text::InputBuffer;
-use crate::analysis::dictionary_access::DictionaryAccess;
-use crate::analysis::mlist::MorphemeList;
-use crate::analysis::{Mode, Tokenize};
 
 /// Implementation of a Tokenizer which does not have tokenization state.
 ///

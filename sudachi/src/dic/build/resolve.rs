@@ -14,7 +14,7 @@
  *  limitations under the License.
  */
 
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::dic::DictionaryAccess;
 use crate::dic::build::lexicon::{RawLexiconEntry, SplitUnitResolver};
 use crate::dic::lexicon::word_infos::WordInfoData;
 use crate::dic::subset::InfoSubset;

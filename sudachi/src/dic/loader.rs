@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Works Applications Co., Ltd.
+ * Copyright (c) 2025-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ use super::grammar::Grammar;
 use super::header::{Header, HeaderError, HeaderVersion};
 use super::lexicon::Lexicon;
 use super::lexicon_set::LexiconSet;
-use crate::analysis::DictionaryAccess;
+use crate::dic::{DictionaryAccess, LexiconAccess};
 
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
@@ -164,13 +164,15 @@ impl<'a> LoadedDictionary<'a> {
     }
 }
 
+impl<'a> LexiconAccess for LoadedDictionary<'a> {
+    fn lexicon(&self) -> &LexiconSet<'a> {
+        &self.lexicon_set
+    }
+}
+
 impl<'a> DictionaryAccess for LoadedDictionary<'a> {
     fn grammar(&self) -> &Grammar<'a> {
         &self.grammar
-    }
-
-    fn lexicon(&self) -> &LexiconSet<'a> {
-        &self.lexicon_set
     }
 
     fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {

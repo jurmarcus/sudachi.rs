@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ use std::fmt;
 use std::iter::FusedIterator;
 use std::ops::Range;
 
+use crate::dic::DictionaryAccess;
 use crate::analysis::inner::Node;
 use crate::analysis::strings_cache::StringsCache;
 use crate::dic::lexicon_set::LexiconSet;

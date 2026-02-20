@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ pub mod character_category;
 pub mod connect;
 pub mod description;
 pub mod dictionary;
+mod dictionary_access;
 pub mod grammar;
 pub mod header;
 pub mod lexicon;
@@ -29,8 +30,10 @@ pub mod loader;
 pub mod pos;
 pub mod read;
 pub mod storage;
+mod strings_cache;
 pub mod subset;
 pub mod word_id;
 pub mod word_info;
 
 pub use self::loader::DictionaryLoader;
+pub use dictionary_access::{DictionaryAccess, LexiconAccess};

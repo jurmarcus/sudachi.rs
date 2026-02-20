@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ use self::word_id_table::WordIdTable;
 use self::word_infos::WordInfos;
 use self::word_params::WordParams;
 use crate::analysis::stateful_tokenizer::StatefulTokenizer;
-use crate::analysis::DictionaryAccess;
+use crate::dic::DictionaryAccess;
 use crate::dic::binary_loader::BinaryLexicon;
 use crate::dic::lexicon::strings::CompactedStrings;
 use crate::dic::subset::InfoSubset;

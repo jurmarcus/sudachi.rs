@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::analysis::DictionaryAccess;
+use crate::dic::{DictionaryAccess, LexiconAccess};
 use crate::dic::build::error::{BuildFailure, DicBuildError, DicCompilationCtx};
 use crate::dic::build::index::IndexBuilder;
 use crate::dic::build::lexicon::LexiconWriter;
@@ -99,13 +99,15 @@ impl<'a, const N: usize> AsDataSource<'a> for &'a [u8; N] {
 
 pub enum NoDic {}
 
+impl LexiconAccess for NoDic {
+    fn lexicon(&self) -> &LexiconSet<'_> {
+        panic!("there is no lexicon here")
+    }
+}
+
 impl DictionaryAccess for NoDic {
     fn grammar(&self) -> &Grammar<'_> {
         panic!("there is no grammar here")
-    }
-
-    fn lexicon(&self) -> &LexiconSet<'_> {
-        panic!("there is no lexicon here")
     }
 
     fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
