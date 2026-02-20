@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ pub mod morpheme;
 pub mod node;
 pub mod stateful_tokenizer;
 pub mod stateless_tokenizer;
-mod strings_cache;
 
 pub use inner::Node;
 pub use mode::Mode;
