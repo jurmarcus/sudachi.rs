@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -463,14 +463,14 @@ impl LexiconReader {
         dic1_max: usize,
         label: &'static str,
     ) -> DicWriteResult<()> {
-        let max = match wid.dic() {
+        let max = match wid.dict().as_raw() {
             0 => dic0_max,
             1 => dic1_max,
             x => panic!("invalid dictionary ID={}, should not happen", x),
         };
-        if wid.word() >= max as u32 {
+        if wid.entry().as_raw() >= max as u32 {
             return Err(BuildFailure::InvalidFieldSize {
-                actual: wid.word() as _,
+                actual: wid.entry().as_raw() as _,
                 expected: max,
                 field: label,
             });

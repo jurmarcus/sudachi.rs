@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -97,7 +97,7 @@ pub(crate) fn parse_dic_form(data: &str) -> DicWriteResult<WordId> {
 pub(crate) fn parse_wordid(data: &str) -> DicWriteResult<WordId> {
     if let Some(stripped) = data.strip_prefix('U') {
         let wid = parse_wordid_raw(stripped);
-        wid.map(|w| WordId::new(1, w.word()))
+        wid.map(|w| WordId::new(1, w.entry().as_raw()))
     } else {
         parse_wordid_raw(data)
     }

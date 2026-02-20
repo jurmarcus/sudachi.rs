@@ -85,8 +85,8 @@ impl<'a> Lexicon<'a> {
     }
 
     #[inline]
-    fn word_id(&self, raw_id: u32) -> WordId {
-        WordId::new(self.lex_id, raw_id)
+    fn word_id(&self, entry_id: u32) -> WordId {
+        WordId::new(self.lex_id, entry_id)
     }
 
     /// Returns an iterator of word_id and end of words that matches given input

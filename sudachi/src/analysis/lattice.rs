@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -233,7 +233,8 @@ impl Lattice {
                 let (surface, pos) = if r_node.is_special_node() {
                     ("(null)", PosData::Bos)
                 } else if r_node.is_oov() {
-                    let pos_id = r_node.word_id().word() as usize;
+                    // entry part of OOV word id contains pos_id
+                    let pos_id = r_node.word_id().entry().as_raw() as usize; 
                     (
                         input.curr_slice_c(r_node.begin()..r_node.end()),
                         PosData::Borrow(&grammar.pos_list[pos_id]),

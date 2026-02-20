@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -23,9 +23,10 @@ const WORD_MASK: u32 = 0x0fff_ffff;
 
 /// Dictionary ID
 ///
-/// Id of the binary dictionary in the sudachi dictionary.
+/// Id of the binary dictionary in a combined dictionary.
+/// 
 /// 0: system dictionary
-/// 1-14: user dictionaries
+/// 1-14: user dictionary
 /// 15: OOV and other special nodes
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[repr(transparent)]
@@ -75,13 +76,16 @@ impl DictId {
     pub fn is_oov(&self) -> bool {
         self.raw == 0xf
     }
+
+    pub const SYSTEM: Self = DictId::from_raw(0);
+    pub const MAX_USER: Self = DictId::from_raw(14);
+    pub const SPECIAL: Self = DictId::from_raw(15);
 }
 
 /// Entry id
 ///
-/// Id of the entry in the dictionary.
-///
-/// Top 4 bits are always 0
+/// Id of the entry in a single binary dictionary.
+/// Top 4 bits are always 0.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[repr(transparent)]
 pub struct EntryId {
@@ -114,11 +118,14 @@ impl EntryId {
     pub const fn as_raw(&self) -> u32 {
         self.raw
     }
+
+    pub const MAX: u32 = 0x0fff_ffff;
 }
 
 /// Dictionary Word ID
 ///
-/// Encode dictionary ID and entry ID as 4 bits and 28 bits respectively
+/// Id of the word in a combined dictionary.
+/// Encode dictionary ID and entry ID as 4 bits and 28 bits respectively.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct WordId {
@@ -228,17 +235,18 @@ impl WordId {
     }
 
     pub const INVALID: WordId = WordId::from_raw(0xffff_ffff);
-    pub const BOS: WordId = WordId::from_raw(0xffff_fffe);
-    pub const EOS: WordId = WordId::from_raw(0xffff_fffd);
-    pub const MAX_WORD: u32 = 0x0fff_ffff;
+    pub const OOV_NOPOS: WordId = WordId::from_raw(0xf000_ffff);
+    pub const BOS: WordId = WordId::from_raw(0xffff_fff0);
+    pub const EOS: WordId = WordId::from_raw(0xffff_fff1);
 }
 
 /// Word reference
 ///
-/// Entry id with a flag indicating if it is a system or user word.
-/// Encodes the flag and entry ID in the same way as WordId.
-/// Top 4 bit is 0 - points to the word in the system dictionary
-/// Top 4 bit is 1 - points to the word in the user dictionary which this wordref is used in
+/// Reference which points to a entry in the system or user dictionary.
+/// Similar to the WordId but the dict id part is a flag which indicates if it is a system or user word.
+/// 
+/// Top 4 bit is 0000 - points to the word in the system dictionary.
+/// Top 4 bit is 0001 - points to the word in the user dictionary which this wordref is used in.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct WordRef {
