@@ -16,11 +16,12 @@
 
 use thiserror::Error;
 
+use crate::dic::LexiconAccess;
 use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
+use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
 use crate::dic::word_info::{WordInfo, WordInfoRefData};
-use crate::dic::LexiconAccess;
 use crate::prelude::*;
 
 /// Sudachi error
@@ -134,6 +135,12 @@ impl LexiconSet<'_> {
         let dict_id = id.dict().as_raw() as usize;
         self.lexicons[dict_id].get_word_param(id.entry())
     }
+
+    #[inline]
+    pub fn get_string(&self, word_id: WordId, strptr: StringPointer) -> SudachiResult<String> {
+        self.lexicons[word_id.dict().as_raw() as usize].get_string(strptr)
+    }
+
 
     pub fn size(&self) -> u32 {
         self.lexicons.iter().fold(0, |acc, lex| acc + lex.size())

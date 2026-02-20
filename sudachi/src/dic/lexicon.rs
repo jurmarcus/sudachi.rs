@@ -125,6 +125,11 @@ impl<'a> Lexicon<'a> {
         (params.left_id(), params.right_id(), params.cost())
     }
 
+    #[inline]
+    pub fn get_string(&self, strptr: strings::StringPointer) -> SudachiResult<String> {
+        self.strings.get_string(strptr)
+    }
+
     /// update word_param cost based on current tokenizer
     pub fn update_cost<D: DictionaryAccess>(&mut self, dict: &D) -> SudachiResult<()> {
         let mut tok = StatefulTokenizer::create(dict, false, Mode::C);

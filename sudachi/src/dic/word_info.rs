@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Works Applications Co., Ltd.
+ * Copyright (c) 2025-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
+use crate::dic::LexiconAccess;
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::read::word_info::WordInfoRawData;
+use crate::dic::strings_cache::StringsCache;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::{DictId, WordId, WordRef};
 
@@ -94,12 +96,21 @@ pub struct WordInfoData {
 }
 
 impl WordInfoData {
+    /// WordRefs in the given WortInfoRawData must be resolved.
     pub fn from_resolved(raw: WordInfoRawData) -> Self {
         WordInfoData { raw }
     }
 
+    pub fn new_oov(pos_id: i16) -> Self {
+        Self { raw: WordInfoRawData { pos_id, ..Default::default() }}
+    }
+
     pub fn pos_id(&self) -> u16 {
         self.raw.pos_id as u16
+    }
+
+    pub fn index_form_length(&self) -> usize {
+        self.raw.index_form_length as usize
     }
 
     pub fn headword_strptr(&self) -> StringPointer {
@@ -116,10 +127,6 @@ impl WordInfoData {
 
     pub fn dictionary_form_word_id(&self) -> WordId {
         WordId::from_raw(self.raw.dictionary_form)
-    }
-
-    pub fn index_form_length(&self) -> usize {
-        self.raw.index_form_length as usize
     }
 
     pub fn c_unit_split(&self) -> &[WordId] {
@@ -158,19 +165,51 @@ impl WordInfoData {
     }
 }
 
+/// Data structure needed to resolve references in the WordInfoData.
+/// Currently only lexicon set is needed, but it can be extended in the future if needed.
+pub trait WordInfoResolver: LexiconAccess {}
+
+impl<T: LexiconAccess> WordInfoResolver for T {}
+
 /// WordInfo API.
 ///
 /// Internal data is not accessible by default, but can be extracted as
 /// `let data: WordInfoData = info.into()`.
 /// Note: this will consume WordInfo.
-#[derive(Clone, Default)]
-#[repr(transparent)]
+#[derive(Clone)]
 pub struct WordInfo {
     data: WordInfoData,
+
+    // keep self word_id for the purpose of simplisity
+    word_id: WordId,
+
+    // In dict v1, word info contains only string pointers, and the actual strings are resolved via lexicon set.
+    // keep them in the cache to avoid redundant lookups.
+    strings: StringsCache,
 }
 
 impl WordInfo {
+    pub fn new(
+        data: WordInfoData,
+        word_id: WordId,
+    ) -> Self {
+        WordInfo {
+            data,
+            word_id,
+            strings: StringsCache::new(),
+        }
+    }
+
+    pub fn new_oov(pos_id: u16, surface: String) -> Self {
+        Self {
+            data: WordInfoData::new_oov(pos_id as i16),
+            word_id: WordId::oov(pos_id as u32),
+            strings: StringsCache::new_with_single_string(surface),
+        }
+    }
+
     pub fn headword_strptr(&self) -> StringPointer {
+        // provide access to this for the normalized/dictionary form resolution via WorfRef.
         self.data.headword_strptr()
     }
 
@@ -182,16 +221,20 @@ impl WordInfo {
         self.data.pos_id()
     }
 
-    pub fn normalized_form_word_id(&self) -> WordId {
-        self.data.normalized_form_word_id()
-    }
- 
-    pub fn dictionary_form_word_id(&self) -> WordId {
-        self.data.dictionary_form_word_id()
+    pub fn headword<T: WordInfoResolver>(&mut self, resolver: T) -> &str {
+        self.strings.surface(resolver.lexicon(), &self.data, self.word_id)
     }
 
-    pub fn reading_form_strptr(&self) -> StringPointer {
-        self.data.reading_form_strptr()
+    pub fn reading_form<T: WordInfoResolver>(&mut self, resolver: T) -> &str {
+        self.strings.reading(resolver.lexicon(), &self.data, self.word_id)
+    }
+
+    pub fn normalized_form<T: WordInfoResolver>(&mut self, resolver: T) -> &str {
+        self.strings.normalized_form(resolver.lexicon(), &self.data, self.word_id)
+    }
+ 
+    pub fn dictionary_form<T: WordInfoResolver>(&mut self, resolver: T) -> &str {
+        self.strings.dictionary_form(resolver.lexicon(), &self.data, self.word_id)
     }
 
     pub fn a_unit_split(&self) -> &[WordId] {
@@ -215,13 +258,7 @@ impl WordInfo {
     }
 }
 
-impl From<WordInfoData> for WordInfo {
-    fn from(data: WordInfoData) -> Self {
-        WordInfo { data }
-    }
-}
-
-impl From<WordInfo> for WordInfoData {
+impl<'a> From<WordInfo> for WordInfoData {
     fn from(info: WordInfo) -> Self {
         info.data
     }
