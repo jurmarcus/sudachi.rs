@@ -14,6 +14,7 @@
  *  limitations under the License.
  */
 
+use std::sync::OnceLock;
 
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::word_info::{ WordInfoData};
@@ -23,20 +24,20 @@ use crate::dic::subset::InfoSubset;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct StringsCache {
-    surface: Option<String>,
-    reading: Option<String>,
-    normalized_form: Option<String>,
-    dictionary_form: Option<String>,
+    surface: OnceLock<String>,
+    reading: OnceLock<String>,
+    normalized_form: OnceLock<String>,
+    dictionary_form: OnceLock<String>,
 }
 
 impl StringsCache {
     /// Creates a new StringsCache for the WordId
     pub fn new() -> Self {
         StringsCache {
-            surface: None,
-            reading: None,
-            normalized_form: None,
-            dictionary_form: None,
+            surface: OnceLock::new(),
+            reading: OnceLock::new(),
+            normalized_form: OnceLock::new(),
+            dictionary_form: OnceLock::new(),
         }
     }
 
@@ -48,10 +49,26 @@ impl StringsCache {
         dictionary_form: String,
     ) -> Self {
         StringsCache {
-            surface: Some(surface),
-            reading: Some(reading),
-            normalized_form: Some(normalized_form),
-            dictionary_form: Some(dictionary_form),
+            surface: {
+                let lock = OnceLock::new();
+                lock.set(surface).unwrap();
+                lock
+            },
+            reading: {
+                let lock = OnceLock::new();
+                lock.set(reading).unwrap();
+                lock
+            },
+            normalized_form: {
+                let lock = OnceLock::new();
+                lock.set(normalized_form).unwrap();
+                lock
+            },
+            dictionary_form: {
+                let lock = OnceLock::new();
+                lock.set(dictionary_form).unwrap();
+                lock
+            },
         }
     }
 
@@ -68,59 +85,58 @@ impl StringsCache {
 }
 
 impl StringsCache {
-    pub fn surface(&mut self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
-        if self.surface.is_none() {
+    pub fn surface(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+        self.surface.get_or_init(|| {
             let strptr = word_info.headword_strptr();
-
-            let s = lexicon_set
+            lexicon_set
                 .get_string(word_id, strptr)
-                .expect("Headword must exist for non-OOV word IDs");
-            self.surface = Some(s);
-        }
-        self.surface.as_ref().unwrap()
+                .expect("Headword must exist for non-OOV word IDs")
+        })
     }
 
-    pub fn reading(&mut self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
-        if self.reading.is_none() {
+    pub fn reading(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+        self.reading.get_or_init(|| {
             let strptr = word_info.reading_form_strptr();
-
-            let s = lexicon_set
+            lexicon_set
                 .get_string(word_id, strptr)
-                .expect("Reading form must exist for non-OOV word IDs");
-            self.reading = Some(s);
-        }
-        self.reading.as_ref().unwrap()
+                .expect("Reading form must exist for non-OOV word IDs")
+        })
     }
 
-    pub fn normalized_form(&mut self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
-        if self.normalized_form.is_none() {
+    pub fn normalized_form(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+        self.normalized_form.get_or_init(|| {
             let ref_word_id = word_info.normalized_form_word_id();
-            let ref_word_info = lexicon_set
-                .get_word_info_subset(ref_word_id, InfoSubset::HEADWORD)
-                .expect("WordInfo must exist for non-OOV word IDs");
-            let strptr = ref_word_info.headword_strptr();
-
-            let s = lexicon_set
-                .get_string(word_id, strptr)
-                .expect("Normalized form must exist for non-OOV word IDs");
-            self.normalized_form = Some(s);
-        }
-        self.normalized_form.as_ref().unwrap()
+            let s = if ref_word_id == word_id {
+                self.surface(lexicon_set, word_info, word_id).to_string()
+            } else {
+                let ref_word_info = lexicon_set
+                    .get_word_info_subset(ref_word_id, InfoSubset::HEADWORD)
+                    .expect("WordInfo must exist for non-OOV word IDs");
+                let strptr = ref_word_info.headword_strptr();
+                lexicon_set
+                    .get_string(ref_word_id, strptr)
+                    .expect("Normalized form must exist for non-OOV word IDs")
+            };
+            s
+        })
     }
 
-    pub fn dictionary_form(&mut self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
-        if self.dictionary_form.is_none() {
+    pub fn dictionary_form(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+        self.dictionary_form.get_or_init(|| {
             let ref_word_id = word_info.dictionary_form_word_id();
-            let ref_word_info = lexicon_set
-                .get_word_info_subset(ref_word_id, InfoSubset::HEADWORD)
-                .expect("WordInfo must exist for non-OOV word IDs");
-            let strptr = ref_word_info.headword_strptr();
+            let s = if ref_word_id == word_id {
+                self.surface(lexicon_set, word_info, word_id).to_string()
+            } else {
 
-            let s = lexicon_set
-                .get_string(word_id, strptr)
-                .expect("Dictionary form must exist for non-OOV word IDs");
-            self.dictionary_form = Some(s);
-        }
-        self.dictionary_form.as_ref().unwrap()
+                let ref_word_info = lexicon_set
+                    .get_word_info_subset(ref_word_id, InfoSubset::HEADWORD)
+                    .expect("WordInfo must exist for non-OOV word IDs");
+                let strptr = ref_word_info.headword_strptr();
+                lexicon_set
+                    .get_string(ref_word_id, strptr)
+                    .expect("Dictionary form must exist for non-OOV word IDs")
+            };
+            s
+        })
     }
 }
