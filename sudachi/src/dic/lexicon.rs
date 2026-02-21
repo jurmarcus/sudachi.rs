@@ -139,8 +139,9 @@ impl<'a> Lexicon<'a> {
             if self.word_params.get_cost(entry_id) != i16::MIN {
                 continue;
             }
+            // headword does not requires resolution
             let wi = self.get_word_info(entry_id, InfoSubset::HEADWORD)?;
-            tok.reset().push_str(wi.surface());
+            tok.reset().push_str(self.strings.get_string(wi.headword_strptr())?.as_str());
             tok.do_tokenize()?;
             ms.collect_results(&mut tok)?;
             let internal_cost = ms.get_internal_cost();

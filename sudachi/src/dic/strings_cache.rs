@@ -24,7 +24,7 @@ use crate::dic::subset::InfoSubset;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct StringsCache {
-    surface: OnceLock<String>,
+    headword: OnceLock<String>,
     reading: OnceLock<String>,
     normalized_form: OnceLock<String>,
     dictionary_form: OnceLock<String>,
@@ -34,7 +34,7 @@ impl StringsCache {
     /// Creates a new StringsCache for the WordId
     pub fn new() -> Self {
         StringsCache {
-            surface: OnceLock::new(),
+            headword: OnceLock::new(),
             reading: OnceLock::new(),
             normalized_form: OnceLock::new(),
             dictionary_form: OnceLock::new(),
@@ -43,15 +43,15 @@ impl StringsCache {
 
     /// Creates a new StringsCache for the WordId with all strings pre-fetched
     pub fn new_with_strings(
-        surface: String,
+        headword: String,
         reading: String,
         normalized_form: String,
         dictionary_form: String,
     ) -> Self {
         StringsCache {
-            surface: {
+            headword: {
                 let lock = OnceLock::new();
-                lock.set(surface).unwrap();
+                lock.set(headword).unwrap();
                 lock
             },
             reading: {
@@ -85,8 +85,8 @@ impl StringsCache {
 }
 
 impl StringsCache {
-    pub fn surface(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
-        self.surface.get_or_init(|| {
+    pub fn headword(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+        self.headword.get_or_init(|| {
             let strptr = word_info.headword_strptr();
             lexicon_set
                 .get_string(word_id, strptr)
@@ -107,7 +107,7 @@ impl StringsCache {
         self.normalized_form.get_or_init(|| {
             let ref_word_id = word_info.normalized_form_word_id();
             let s = if ref_word_id == word_id {
-                self.surface(lexicon_set, word_info, word_id).to_string()
+                self.headword(lexicon_set, word_info, word_id).to_string()
             } else {
                 let ref_word_info = lexicon_set
                     .get_word_info_subset(ref_word_id, InfoSubset::HEADWORD)
@@ -125,7 +125,7 @@ impl StringsCache {
         self.dictionary_form.get_or_init(|| {
             let ref_word_id = word_info.dictionary_form_word_id();
             let s = if ref_word_id == word_id {
-                self.surface(lexicon_set, word_info, word_id).to_string()
+                self.headword(lexicon_set, word_info, word_id).to_string()
             } else {
 
                 let ref_word_info = lexicon_set

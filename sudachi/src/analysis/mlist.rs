@@ -55,15 +55,15 @@ impl Nodes {
     }
 }
 
-pub struct MorphemeList<T> {
-    dict: T,
+pub struct MorphemeList<D> {
+    dict: D,
     input: Rc<RefCell<InputPart>>,
     nodes: Nodes,
 }
 
-impl<T: DictionaryAccess> MorphemeList<T> {
+impl<D: DictionaryAccess> MorphemeList<D> {
     /// Returns an empty morpheme list
-    pub fn empty(dict: T) -> Self {
+    pub fn empty(dict: D) -> Self {
         let input = Default::default();
         Self {
             dict,
@@ -74,7 +74,7 @@ impl<T: DictionaryAccess> MorphemeList<T> {
 
     /// Creates MorphemeList from components
     pub fn from_components(
-        dict: T,
+        dict: D,
         input: InputBuffer,
         path: Vec<ResultNode>,
         subset: InfoSubset,
@@ -136,7 +136,7 @@ impl<T: DictionaryAccess> MorphemeList<T> {
         self.nodes.data.is_empty()
     }
 
-    pub fn get(&self, idx: usize) -> Morpheme<T> {
+    pub fn get(&self, idx: usize) -> Morpheme<D> {
         return Morpheme::for_list(self, idx);
     }
 
@@ -145,7 +145,7 @@ impl<T: DictionaryAccess> MorphemeList<T> {
         Ref::map(inp, |i| i.original())
     }
 
-    pub fn iter(&self) -> MorphemeIter<T> {
+    pub fn iter(&self) -> MorphemeIter<D> {
         MorphemeIter {
             index: 0,
             list: self,
@@ -168,7 +168,7 @@ impl<T: DictionaryAccess> MorphemeList<T> {
         self.nodes.data.index(idx)
     }
 
-    pub fn dict(&self) -> &T {
+    pub fn dict(&self) -> &D {
         &self.dict
     }
 
@@ -192,6 +192,8 @@ impl<T: DictionaryAccess> MorphemeList<T> {
         out_data.extend_from_slice(&self.nodes.data[start..end]);
     }
 
+    /// Looks up the given query and reset the morpheme list to the result.
+    /// Returns the number of found entries.
     pub fn lookup(&mut self, query: &str, subset: InfoSubset) -> SudachiResult<usize> {
         let end_chars = {
             let input = &mut self.input.borrow_mut().input;

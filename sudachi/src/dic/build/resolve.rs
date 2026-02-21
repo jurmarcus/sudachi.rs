@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 use crate::dic::DictionaryAccess;
 use crate::dic::build::lexicon::{RawLexiconEntry, SplitUnitResolver};
-use crate::dic::lexicon::word_infos::WordInfoData;
+use crate::dic::word_info::WordInfo;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
 use crate::error::SudachiResult;
@@ -39,15 +39,14 @@ impl BinDictResolver {
         let mut index: ResolutionCandidateMap<String> = HashMap::default();
         for id in 0..size {
             let wid = WordId::new(0, id);
-            let winfo: WordInfoData = lex
+            let mut winfo: WordInfo = lex
                 .get_word_info_subset(
                     wid,
                     InfoSubset::HEADWORD | InfoSubset::READING_FORM | InfoSubset::POS_ID,
-                )?
-                .into();
-            let headword = winfo.headword;
-            let reading = winfo.reading_form;
-            let pos_id = winfo.pos_id;
+                )?;
+            let headword = winfo.headword(&dict).to_string();
+            let reading = winfo.reading_form(&dict).to_string();
+            let pos_id = winfo.pos_id();
 
             let rdfield = if reading.is_empty() || headword == reading {
                 None

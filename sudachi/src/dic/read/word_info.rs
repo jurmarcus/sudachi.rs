@@ -39,6 +39,7 @@ pub struct WordInfoRawData {
     pub normalized_form: u32,
     pub dictionary_form: u32,
 
+    /// bytes length of the index form in utf-8.
     pub index_form_length: i16,
     pub c_unit_split_length: i8,
     pub b_unit_split_length: i8,

@@ -21,7 +21,7 @@ use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
-use crate::dic::word_info::{WordInfo, WordInfoRefData};
+use crate::dic::word_info::WordInfo;
 use crate::prelude::*;
 
 /// Sudachi error
@@ -119,15 +119,11 @@ impl LexiconSet<'_> {
     /// Rest will be of default values (0 or empty).
     pub fn get_word_info_subset(&self, id: WordId, subset: InfoSubset) -> SudachiResult<WordInfo> {
         let dict_id = id.dict();
-        let word_info: WordInfoRefData = self.lexicons[dict_id.as_raw() as usize]
-            .get_word_info(id.entry(), subset)?;
+        let word_info_data = self.lexicons[dict_id.as_raw() as usize]
+            .get_word_info(id.entry(), subset)?
+            .resolve(dict_id, self.num_system_pos, &self.pos_offsets, subset);
 
-        Ok(word_info.resolve(
-            dict_id,
-            self.num_system_pos,
-            &self.pos_offsets,
-            subset,
-        ).into())
+        Ok(WordInfo::new(word_info_data, id))
     }
 
     /// Returns word_param for given word_id
