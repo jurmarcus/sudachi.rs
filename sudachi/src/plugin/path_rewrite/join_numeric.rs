@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ use crate::analysis::node::{concat_nodes, LatticeNode, ResultNode};
 use crate::config::Config;
 use crate::dic::category_type::CategoryType;
 use crate::dic::grammar::Grammar;
+use crate::dic::word_info::WordInfoResolver;
 use crate::input_text::InputBuffer;
 use crate::input_text::InputTextIndex;
 use crate::plugin::path_rewrite::PathRewritePlugin;
@@ -55,6 +56,7 @@ impl JoinNumericPlugin {
         begin: usize,
         end: usize,
         parser: &mut NumericParser,
+        resolver: &dyn WordInfoResolver,
     ) -> SudachiResult<Vec<ResultNode>> {
         let word_info = path[begin].word_info();
 
@@ -64,14 +66,14 @@ impl JoinNumericPlugin {
 
         if self.enable_normalize {
             let normalized_form = parser.get_normalized();
-            if end - begin > 1 || normalized_form != word_info.normalized_form() {
-                path = concat_nodes(path, begin, end, Some(normalized_form))?;
+            if end - begin > 1 || normalized_form != word_info.normalized_form(resolver) {
+                path = concat_nodes(path, begin, end, Some(normalized_form), resolver)?;
             }
             return Ok(path);
         }
 
         if end - begin > 1 {
-            path = concat_nodes(path, begin, end, None)?;
+            path = concat_nodes(path, begin, end, None, resolver)?;
         }
         Ok(path)
     }
@@ -80,6 +82,7 @@ impl JoinNumericPlugin {
         &self,
         text: &T,
         mut path: Vec<ResultNode>,
+        resolver: &dyn WordInfoResolver,
     ) -> SudachiResult<Vec<ResultNode>> {
         let mut begin_idx = -1;
         let mut comma_as_digit = true;
@@ -90,7 +93,7 @@ impl JoinNumericPlugin {
             i += 1;
             let node = &path[i as usize];
             let ctypes = text.cat_of_range(node.char_range());
-            let s = node.word_info().normalized_form();
+            let s = node.word_info().normalized_form(resolver);
             if ctypes.intersects(CategoryType::NUMERIC | CategoryType::KANJINUMERIC)
                 || (comma_as_digit && s == ",")
                 || (period_as_digit && s == ".")
@@ -128,15 +131,15 @@ impl JoinNumericPlugin {
 
             if begin_idx >= 0 {
                 if parser.done() {
-                    path = self.concat(path, begin_idx as usize, i as usize, &mut parser)?;
+                    path = self.concat(path, begin_idx as usize, i as usize, &mut parser, resolver)?;
                     i = begin_idx + 1;
                 } else {
-                    let ss = path[i as usize - 1].word_info().normalized_form();
+                    let ss = path[i as usize - 1].word_info().normalized_form(resolver);
                     if (parser.error_state == numeric_parser::Error::Comma && ss == ",")
                         || (parser.error_state == numeric_parser::Error::Point && ss == ".")
                     {
                         path =
-                            self.concat(path, begin_idx as usize, i as usize - 1, &mut parser)?;
+                            self.concat(path, begin_idx as usize, i as usize - 1, &mut parser, resolver)?;
                         i = begin_idx + 2;
                     }
                 }
@@ -154,13 +157,13 @@ impl JoinNumericPlugin {
         if begin_idx >= 0 {
             let len = path.len();
             if parser.done() {
-                path = self.concat(path, begin_idx as usize, len, &mut parser)?;
+                path = self.concat(path, begin_idx as usize, len, &mut parser, resolver)?;
             } else {
-                let ss = path[len - 1].word_info().normalized_form();
+                let ss = path[len - 1].word_info().normalized_form(resolver);
                 if (parser.error_state == numeric_parser::Error::Comma && ss == ",")
                     || (parser.error_state == numeric_parser::Error::Point && ss == ".")
                 {
-                    path = self.concat(path, begin_idx as usize, len - 1, &mut parser)?;
+                    path = self.concat(path, begin_idx as usize, len - 1, &mut parser, resolver)?;
                 }
             }
         }
@@ -196,7 +199,8 @@ impl PathRewritePlugin for JoinNumericPlugin {
         text: &InputBuffer,
         path: Vec<ResultNode>,
         _lattice: &Lattice,
+        resolver: &dyn WordInfoResolver,
     ) -> SudachiResult<Vec<ResultNode>> {
-        self.rewrite_gen(text, path)
+        self.rewrite_gen(text, path, resolver)
     }
 }

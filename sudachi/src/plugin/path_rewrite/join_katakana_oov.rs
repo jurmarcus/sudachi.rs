@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ use crate::analysis::node::{concat_oov_nodes, LatticeNode, ResultNode};
 use crate::config::Config;
 use crate::dic::category_type::CategoryType;
 use crate::dic::grammar::Grammar;
+use crate::dic::word_info::WordInfoResolver;
 use crate::input_text::InputBuffer;
 use crate::input_text::InputTextIndex;
 use crate::plugin::path_rewrite::PathRewritePlugin;
@@ -73,6 +74,7 @@ impl JoinKatakanaOovPlugin {
         text: &T,
         mut path: Vec<ResultNode>,
         _lattice: &Lattice,
+        resolver: &dyn WordInfoResolver,
     ) -> SudachiResult<Vec<ResultNode>> {
         let mut i = 0;
         loop {
@@ -112,7 +114,7 @@ impl JoinKatakanaOovPlugin {
             }
 
             if (end - begin) > 1 {
-                path = concat_oov_nodes(path, begin, end, self.oov_pos_id)?;
+                path = concat_oov_nodes(path, begin, end, self.oov_pos_id, resolver)?;
                 // skip next node, as we already know it is not a joinable katakana
                 i = begin + 1;
             }
@@ -149,7 +151,8 @@ impl PathRewritePlugin for JoinKatakanaOovPlugin {
         text: &InputBuffer,
         path: Vec<ResultNode>,
         lattice: &Lattice,
+        resolver: &dyn WordInfoResolver,
     ) -> SudachiResult<Vec<ResultNode>> {
-        self.rewrite_gen(text, path, lattice)
+        self.rewrite_gen(text, path, lattice, resolver)
     }
 }

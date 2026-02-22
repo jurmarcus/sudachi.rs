@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ use crate::analysis::lattice::Lattice;
 use crate::analysis::node::ResultNode;
 use crate::config::Config;
 use crate::dic::grammar::Grammar;
+use crate::dic::word_info::WordInfoResolver;
 use crate::input_text::InputBuffer;
 use crate::plugin::path_rewrite::join_katakana_oov::JoinKatakanaOovPlugin;
 use crate::plugin::path_rewrite::join_numeric::JoinNumericPlugin;
@@ -41,6 +42,7 @@ pub trait PathRewritePlugin: Sync + Send {
         text: &InputBuffer,
         path: Vec<ResultNode>,
         lattice: &Lattice,
+        resolver: &dyn WordInfoResolver,
     ) -> SudachiResult<Vec<ResultNode>>;
 }
 

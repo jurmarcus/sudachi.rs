@@ -153,7 +153,7 @@ impl<D: DictionaryAccess> StatefulTokenizer<D> {
         };
 
         for plugin in self.dictionary.path_rewrite_plugins() {
-            path = plugin.rewrite(&self.input, path, &self.lattice)?;
+            path = plugin.rewrite(&self.input, path, &self.lattice, self.dictionary.lexicon())?;
         }
 
         path = split_path(&self.dictionary, path, self.mode, self.subset, &self.input)?;
