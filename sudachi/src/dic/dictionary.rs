@@ -21,10 +21,12 @@ use memmap2::Mmap;
 
 use crate::config::Config;
 use crate::dic::{DictionaryAccess, LexiconAccess};
+use crate::dic::binary_loader::BinaryDictionary;
+use crate::dic::character_category::CharacterCategory;
 use crate::dic::grammar::Grammar;
+use crate::dic::lexicon::Lexicon;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::storage::{Storage, SudachiDicData};
-use crate::dic::loader::{DictionaryLoader, LoadedDictionary};
 use crate::error::{SudachiError, SudachiResult};
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
@@ -72,7 +74,49 @@ impl JapaneseDictionary {
             )
         }
 
-        Self::from_cfg_storage(cfg, sb)
+        let chardef_path = cfg.complete_path(&cfg.character_definition_file)?;
+        let chardef = CharacterCategory::from_file(chardef_path.as_path())?;
+
+        Self::from_cfg_storage_chardef(cfg, sb, chardef)
+    }
+
+    pub fn from_cfg_storage_chardef(
+        cfg: &Config,
+        storage: SudachiDicData,
+        chardef: CharacterCategory,
+    ) -> SudachiResult<JapaneseDictionary> {
+        let system_binary = BinaryDictionary::load_system(unsafe { storage.system_static_slice() })?;
+
+        let mut grammar = Grammar::from_system_binary(system_binary.grammar)?;
+        grammar.set_character_category(chardef);
+
+        let plugins = {
+            Plugins::load(cfg, &mut grammar)?
+        };
+        if plugins.oov.is_empty() {
+            return Err(SudachiError::NoOOVPluginProvided);
+        }
+        for p in plugins.connect_cost.plugins() {
+            p.edit(&mut grammar);
+        }
+
+        let lexicon_set = LexiconSet::from_system_binary(system_binary.lexicon, grammar.pos_list.len());
+
+        let mut dic = JapaneseDictionary {
+            storage,
+            plugins,
+            _grammar: grammar,
+            _lexicon: lexicon_set,
+        };
+
+        // this Vec is needed to prevent double borrowing of dic
+        let user_dicts: Vec<_> = dic.storage.user_static_slice();
+        for udic in user_dicts {
+            dic = dic.merge_user_dictionary(udic)?;
+        }
+
+        Ok(dic)
+
     }
 
     /// Creates a dictionary from the specified configuration and storage
@@ -80,38 +124,9 @@ impl JapaneseDictionary {
         cfg: &Config,
         storage: SudachiDicData,
     ) -> SudachiResult<JapaneseDictionary> {
-        let mut basic_dict = LoadedDictionary::from_system_dictionary(
-            unsafe { storage.system_static_slice() },
-            cfg.complete_path(&cfg.character_definition_file)?.as_path(),
-        )?;
-
-        let plugins = {
-            let grammar = &mut basic_dict.grammar;
-            Plugins::load(cfg, grammar)?
-        };
-
-        if plugins.oov.is_empty() {
-            return Err(SudachiError::NoOOVPluginProvided);
-        }
-
-        for p in plugins.connect_cost.plugins() {
-            p.edit(&mut basic_dict.grammar);
-        }
-
-        let mut dic = JapaneseDictionary {
-            storage,
-            plugins,
-            _grammar: basic_dict.grammar,
-            _lexicon: basic_dict.lexicon_set,
-        };
-
-        // this Vec is needed to prevent double borrowing of dic
-        let user_dicts: Vec<_> = dic.storage.user_static_slice();
-        for udic in user_dicts {
-            dic = dic.merge_user_dictionary(udic)?;
-        }
-
-        Ok(dic)
+        let chardef_path = cfg.complete_path(&cfg.character_definition_file)?;
+        let chardef = CharacterCategory::from_file(chardef_path.as_path())?;
+        Self::from_cfg_storage_chardef(cfg, storage, chardef)
     }
 
     /// Creates a dictionary from the specified configuration and storage, with embedded character definition
@@ -119,37 +134,8 @@ impl JapaneseDictionary {
         cfg: &Config,
         storage: SudachiDicData,
     ) -> SudachiResult<JapaneseDictionary> {
-        let mut basic_dict = LoadedDictionary::from_system_dictionary_embedded(unsafe {
-            storage.system_static_slice()
-        })?;
-
-        let plugins = {
-            let grammar = &mut basic_dict.grammar;
-            Plugins::load(cfg, grammar)?
-        };
-
-        if plugins.oov.is_empty() {
-            return Err(SudachiError::NoOOVPluginProvided);
-        }
-
-        for p in plugins.connect_cost.plugins() {
-            p.edit(&mut basic_dict.grammar);
-        }
-
-        let mut dic = JapaneseDictionary {
-            storage,
-            plugins,
-            _grammar: basic_dict.grammar,
-            _lexicon: basic_dict.lexicon_set,
-        };
-
-        // this Vec is needed to prevent double borrowing of dic
-        let user_dicts: Vec<_> = dic.storage.user_static_slice();
-        for udic in user_dicts {
-            dic = dic.merge_user_dictionary(udic)?;
-        }
-
-        Ok(dic)
+        let chardef = CharacterCategory::from_embedded();
+        Self::from_cfg_storage_chardef(cfg, storage, chardef)
     }
 
     /// Returns grammar with the correct lifetime
@@ -163,18 +149,15 @@ impl JapaneseDictionary {
     }
 
     fn merge_user_dictionary(mut self, dictionary_bytes: &'static [u8]) -> SudachiResult<Self> {
-        let user_dict = DictionaryLoader::read_user_dictionary(dictionary_bytes)?;
+        let user_dict = BinaryDictionary::load_user(dictionary_bytes)?;
 
         // we need to update lexicon first, since it needs the current number of pos
-        let mut user_lexicon = user_dict.lexicon;
+        let mut user_lexicon = Lexicon::from_binary(user_dict.lexicon);
         user_lexicon.update_cost(&self)?;
-
         self._lexicon
             .append(user_lexicon, self._grammar.pos_list.len())?;
 
-        if let Some(g) = user_dict.grammar {
-            self._grammar.merge(g);
-        }
+        self._grammar.merge_binary(user_dict.grammar);
 
         Ok(self)
     }

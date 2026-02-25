@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,6 +54,20 @@ impl<'a> Grammar<'a> {
             connection,
             character_category: CharacterCategory::default(),
         })
+    }
+
+    /// Merge a another (user) grammar into this grammar
+    ///
+    /// Only pos_list is merged
+    pub fn merge(&mut self, other: Grammar) {
+        self.pos_list.extend(other.pos_list);
+    }
+
+    /// Merge a another (user) binary grammar into this grammar
+    ///
+    /// Only pos_list is merged
+    pub fn merge_binary(&mut self, other: BinaryGrammar) {
+        self.pos_list.extend(other.pos_list);
     }
 
     /// Returns connection cost of nodes
@@ -132,13 +146,6 @@ impl<'a> Grammar<'a> {
     /// Panics if out of bounds.
     pub fn pos_components(&self, pos_id: u16) -> &[String] {
         self.pos_list.index(pos_id as usize)
-    }
-
-    /// Merge a another grammar into this grammar
-    ///
-    /// Only pos_list is merged
-    pub fn merge(&mut self, other: Grammar) {
-        self.pos_list.extend(other.pos_list);
     }
 }
 

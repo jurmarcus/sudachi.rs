@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Works Applications Co., Ltd.
+ * Copyright (c) 2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,15 @@
  * limitations under the License.
  */
 
-use super::connect::ConnectionMatrix;
-use super::description::{Block, Description};
-use super::header::HeaderError;
-use super::pos::PosList;
-
-use super::lexicon::strings::CompactedStrings;
-use super::lexicon::trie::Trie;
-use super::lexicon::word_id_table::WordIdTable;
-use super::lexicon::word_infos::WordInfos;
-use super::lexicon::word_params::WordParams;
-
+use crate::dic::connect::ConnectionMatrix;
+use crate::dic::description::{Block, Description};
+use crate::dic::header::HeaderError;
+use crate::dic::lexicon::strings::CompactedStrings;
+use crate::dic::lexicon::trie::Trie;
+use crate::dic::lexicon::word_id_table::WordIdTable;
+use crate::dic::lexicon::word_infos::WordInfos;
+use crate::dic::lexicon::word_params::WordParams;
+use crate::dic::pos::PosList;
 use crate::prelude::*;
 
 const DEFAULT_CHAR_DEF_BYTES: &[u8] = include_bytes!("../../../resources/char.def");
@@ -41,7 +39,7 @@ impl<'a> BinaryDictionary<'a> {
     ///
     /// # Safety
     /// This function is marked unsafe because it does not perform header validation
-    pub unsafe fn load(buf: &'a [u8]) -> SudachiResult<Self> {
+    unsafe fn load(buf: &'a [u8]) -> SudachiResult<Self> {
         let description = Description::load(buf)?;
         let grammar = BinaryGrammar::load(buf, &description)?;
         let lexicon = BinaryLexicon::load(buf, &description)?;
@@ -59,6 +57,7 @@ impl<'a> BinaryDictionary<'a> {
         if dict.description.is_system_dictionary() {
             Ok(dict)
         } else {
+            // TODO: fix error type
             Err(SudachiError::InvalidHeader(
                 HeaderError::InvalidSystemDictVersion,
             ))
@@ -71,6 +70,7 @@ impl<'a> BinaryDictionary<'a> {
         if dict.description.is_user_dictionary() {
             Ok(dict)
         } else {
+            // TODO: fix error type
             Err(SudachiError::InvalidHeader(
                 HeaderError::InvalidUserDictVersion,
             ))
@@ -122,6 +122,8 @@ pub struct BinaryLexicon<'a> {
     pub word_infos: WordInfos<'a>,
     /// Stotage of strings in the lixicon (normalized form etc.)
     pub strings: CompactedStrings<'a>,
+    /// The number of entries in the lexicon
+    pub num_total_entries: u32,
 }
 
 impl<'a> BinaryLexicon<'a> {
@@ -145,6 +147,7 @@ impl<'a> BinaryLexicon<'a> {
             word_params,
             word_infos,
             strings,
+            num_total_entries: description.num_total_entries(),
         })
     }
 }

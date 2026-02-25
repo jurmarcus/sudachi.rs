@@ -60,17 +60,16 @@ impl<'a> Lexicon<'a> {
 
     pub fn from_binary(
         binary_lexicon: BinaryLexicon<'a>,
-        num_total_entries: u32,
-    ) -> SudachiResult<Self> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             trie: binary_lexicon.trie,
             word_id_table: binary_lexicon.word_id_table,
             word_params: binary_lexicon.word_params,
             word_infos: binary_lexicon.word_infos,
             strings: binary_lexicon.strings,
             lex_id: u8::MAX,
-            num_total_entries,
-        })
+            num_total_entries: binary_lexicon.num_total_entries,
+        }
     }
 
     /// Returns the number of entries in the lexicon

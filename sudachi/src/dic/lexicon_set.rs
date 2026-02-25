@@ -17,6 +17,7 @@
 use thiserror::Error;
 
 use crate::dic::LexiconAccess;
+use crate::dic::binary_loader::BinaryLexicon;
 use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::subset::InfoSubset;
@@ -57,10 +58,19 @@ impl LexiconAccess for LexiconSet<'_> {
 }
 
 impl<'a> LexiconSet<'a> {
-    /// Creates a LexiconSet given a lexicon
-    ///
-    /// It is assumed that the passed lexicon is the system dictionary
-    pub fn new(mut system_lexicon: Lexicon, num_system_pos: usize) -> LexiconSet {
+    /// Creates a LexiconSet from a system lexicon
+    pub fn from_system_binary(system_lexicon: BinaryLexicon<'a>, num_system_pos: usize) -> LexiconSet<'a> {
+        let mut lexicon = Lexicon::from_binary(system_lexicon);
+        lexicon.set_dic_id(0);
+        LexiconSet {
+            lexicons: vec![lexicon],
+            pos_offsets: vec![0],
+            num_system_pos,
+        }
+    }
+
+    /// Creates a LexiconSet given a system lexicon
+    pub fn new(mut system_lexicon: Lexicon<'a>, num_system_pos: usize) -> LexiconSet<'a> {
         system_lexicon.set_dic_id(0);
         LexiconSet {
             lexicons: vec![system_lexicon],

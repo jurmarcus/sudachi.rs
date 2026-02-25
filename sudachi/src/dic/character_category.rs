@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ use thiserror::Error;
 
 use crate::dic::category_type::CategoryType;
 use crate::prelude::*;
+
+const DEFAULT_CHAR_DEF_BYTES: &[u8] = include_bytes!("../../../resources/char.def");
 
 /// Sudachi error
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -93,6 +95,10 @@ impl CharacterCategory {
     pub fn from_reader<T: BufRead>(data: T) -> SudachiResult<CharacterCategory> {
         let ranges = Self::read_character_definition(data)?;
         Ok(Self::compile(&ranges))
+    }
+
+    pub fn from_embedded() -> CharacterCategory {
+        Self::from_bytes(DEFAULT_CHAR_DEF_BYTES).unwrap()
     }
 
     /// Reads character type definition as a list of Ranges
