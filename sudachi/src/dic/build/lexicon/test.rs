@@ -17,8 +17,8 @@
 use super::*;
 use crate::dic::build::error::DicBuildError;
 use crate::dic::build::DictBuilder;
-use crate::dic::lexicon::word_infos::WordInfo;
 use crate::dic::read::word_info::WordInfoParser;
+use crate::dic::word_info::WordInfo;
 use crate::error::SudachiError;
 use claim::assert_matches;
 use std::fmt::Write;

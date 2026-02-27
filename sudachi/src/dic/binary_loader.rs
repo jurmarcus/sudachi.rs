@@ -25,8 +25,6 @@ use crate::dic::lexicon::word_params::WordParams;
 use crate::dic::pos::PosList;
 use crate::prelude::*;
 
-const DEFAULT_CHAR_DEF_BYTES: &[u8] = include_bytes!("../../../resources/char.def");
-
 /// A single system or user dictionary
 pub struct BinaryDictionary<'a> {
     pub description: Description,

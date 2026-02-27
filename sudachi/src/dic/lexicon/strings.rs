@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Works Applications Co., Ltd.
+ * Copyright (c) 2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,7 +70,7 @@ impl StringPointer {
 
     /// Check if the given length and offset satisfy the constraints for a valid StringPointer.
     fn is_valid(length: u32, offset: u32) -> bool {
-        if length < 0 || length > Self::MAX_LENGTH {
+        if length > Self::MAX_LENGTH {
             return false;
         }
         let alignment = Self::required_alignment(length);

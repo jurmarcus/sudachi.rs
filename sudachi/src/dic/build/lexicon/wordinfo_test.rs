@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,12 +18,11 @@ use crate::dic::build::lexicon::LexiconReader;
 use crate::dic::build::primitives::Utf16Writer;
 use crate::dic::read::word_info::WordInfoParser;
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordId;
 
 #[test]
 fn wordinfo_subset_surface() {
     let data = make_data();
-    let wi = WordInfoParser::subset(InfoSubset::SURFACE)
+    let wi = WordInfoParser::subset(InfoSubset::HEADWORD)
         .parse(&data)
         .unwrap();
     assert_eq!(wi.surface, "京都");
@@ -32,10 +31,10 @@ fn wordinfo_subset_surface() {
 #[test]
 fn wordinfo_subset_len() {
     let data = make_data();
-    let wi = WordInfoParser::subset(InfoSubset::HEAD_WORD_LENGTH)
+    let wi = WordInfoParser::subset(InfoSubset::INDEX_FORM_LENGTH)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.head_word_length, 6);
+    assert_eq!(wi.index_form_length, 6);
 }
 
 #[test]
@@ -68,7 +67,7 @@ fn wordinfo_subset_reading() {
 #[test]
 fn wordinfo_subset_dic_form_id() {
     let data = make_data();
-    let wi = WordInfoParser::subset(InfoSubset::DIC_FORM_WORD_ID)
+    let wi = WordInfoParser::subset(InfoSubset::DICTIONARY_FORM)
         .parse(&data)
         .unwrap();
     assert_eq!(wi.dictionary_form_word_id, 1);
@@ -80,7 +79,7 @@ fn wordinfo_subset_dic_split_a() {
     let wi = WordInfoParser::subset(InfoSubset::SPLIT_A)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.a_unit_split, [WordId::new(0, 1), WordId::new(0, 2)]);
+    assert_eq!(wi.a_unit_split, [1, 2]);
 }
 
 #[test]
@@ -89,7 +88,7 @@ fn wordinfo_subset_dic_split_b() {
     let wi = WordInfoParser::subset(InfoSubset::SPLIT_B)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.b_unit_split, [WordId::new(0, 3), WordId::new(0, 4)]);
+    assert_eq!(wi.b_unit_split, [3, 4]);
 }
 
 #[test]
@@ -98,16 +97,13 @@ fn wordinfo_subset_dic_word_structure() {
     let wi = WordInfoParser::subset(InfoSubset::WORD_STRUCTURE)
         .parse(&data)
         .unwrap();
-    assert_eq!(
-        wi.word_structure,
-        vec![WordId::new(0, 5), WordId::new(0, 6)]
-    );
+    assert_eq!(wi.word_structure, vec![5, 6]);
 }
 
 #[test]
 fn wordinfo_subset_dic_synonym() {
     let data = make_data();
-    let wi = WordInfoParser::subset(InfoSubset::SYNONYM_GROUP_ID)
+    let wi = WordInfoParser::subset(InfoSubset::SYNONYM_GROUP_IDS)
         .parse(&data)
         .unwrap();
     assert_eq!(wi.synonym_group_ids, [7, 8]);

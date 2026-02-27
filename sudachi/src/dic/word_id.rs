@@ -24,7 +24,7 @@ const WORD_MASK: u32 = 0x0fff_ffff;
 /// Dictionary ID
 ///
 /// Id of the binary dictionary in a combined dictionary.
-/// 
+///
 /// 0: system dictionary
 /// 1-14: user dictionary
 /// 15: OOV and other special nodes
@@ -244,7 +244,7 @@ impl WordId {
 ///
 /// Reference which points to a entry in the system or user dictionary.
 /// Similar to the WordId but the dict id part is a flag which indicates if it is a system or user word.
-/// 
+///
 /// Top 4 bit is 0000 - points to the word in the system dictionary.
 /// Top 4 bit is 0001 - points to the word in the user dictionary which this wordref is used in.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -347,8 +347,8 @@ mod test {
 
     fn assert_create(dic: u8, word: u32) {
         let id = WordId::new(dic, word);
-        assert_eq!(dic, id.dic());
-        assert_eq!(word, id.word());
+        assert_eq!(dic, id.dict().as_raw());
+        assert_eq!(word, id.entry().as_raw());
     }
 
     #[test]

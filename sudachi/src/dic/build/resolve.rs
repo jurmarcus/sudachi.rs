@@ -39,7 +39,7 @@ impl BinDictResolver {
         let mut index: ResolutionCandidateMap<String> = HashMap::default();
         for id in 0..size {
             let wid = WordId::new(0, id);
-            let mut winfo: WordInfo = lex
+            let winfo: WordInfo = lex
                 .get_word_info_subset(
                     wid,
                     InfoSubset::HEADWORD | InfoSubset::READING_FORM | InfoSubset::POS_ID,

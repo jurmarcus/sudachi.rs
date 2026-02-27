@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ fn morpheme_attributes() {
 
     assert!(!ms.get(0).is_oov());
 
-    assert_eq!(3, ms.get(0).word_id().word());
+    assert_eq!(3, ms.get(0).word_id().entry().as_raw());
     assert_eq!(0, ms.get(0).dictionary_id());
     assert_eq!([1, 5], ms.get(0).synonym_group_ids());
 }
