@@ -26,7 +26,6 @@ pub mod grammar;
 pub mod header;
 pub mod lexicon;
 pub mod lexicon_set;
-pub mod loader;
 pub mod pos;
 pub mod read;
 pub mod storage;
@@ -35,5 +34,4 @@ pub mod subset;
 pub mod word_id;
 pub mod word_info;
 
-pub use self::loader::DictionaryLoader;
 pub use dictionary_access::{DictionaryAccess, LexiconAccess};

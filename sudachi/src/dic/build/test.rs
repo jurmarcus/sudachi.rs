@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -16,19 +16,79 @@
 
 mod with_analysis;
 
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
+use crate::dic::binary_loader::BinaryDictionary;
 use crate::dic::build::error::{BuildFailure, DicBuildError};
 use crate::dic::build::DictBuilder;
 use crate::dic::grammar::Grammar;
-use crate::dic::header::{HeaderVersion, SystemDictVersion};
 use crate::dic::lexicon::{Lexicon, LexiconEntry};
+use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
-use crate::dic::DictionaryLoader;
+use crate::dic::{DictionaryAccess, LexiconAccess};
 use crate::error::SudachiError;
+use crate::plugin::input_text::InputTextPlugin;
+use crate::plugin::oov::OovProviderPlugin;
+use crate::plugin::path_rewrite::PathRewritePlugin;
 use std::io::sink;
 
 static MATRIX_10_10: &[u8] = include_bytes!("test/matrix_10x10.def");
+
+struct LoadedDictionaryForTest<'a> {
+    grammar: Grammar<'a>,
+    lexicon_set: LexiconSet<'a>,
+}
+
+impl LexiconAccess for LoadedDictionaryForTest<'_> {
+    fn lexicon(&self) -> &LexiconSet<'_> {
+        &self.lexicon_set
+    }
+}
+
+impl DictionaryAccess for LoadedDictionaryForTest<'_> {
+    fn grammar(&self) -> &Grammar<'_> {
+        &self.grammar
+    }
+
+    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
+        &[]
+    }
+
+    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>] {
+        &[]
+    }
+
+    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
+        &[]
+    }
+}
+
+impl<'a> LoadedDictionaryForTest<'a> {
+    fn load_system(bytes: &'a [u8]) -> crate::error::SudachiResult<Self> {
+        let dict = BinaryDictionary::load_system(bytes)?;
+        let grammar = Grammar::from_system_binary(dict.grammar)?;
+        let lexicon_set = LexiconSet::from_system_binary(dict.lexicon, grammar.pos_list.len());
+        Ok(Self {
+            grammar,
+            lexicon_set,
+        })
+    }
+
+    fn load_user(bytes: &'a [u8]) -> crate::error::SudachiResult<BinaryDictionary<'a>> {
+        BinaryDictionary::load_user(bytes)
+    }
+
+    fn merge_dictionary(
+        mut self,
+        other: BinaryDictionary<'a>,
+    ) -> crate::error::SudachiResult<Self> {
+        self.lexicon_set.append(
+            Lexicon::from_binary(other.lexicon),
+            self.grammar.pos_list.len(),
+        )?;
+        self.grammar.merge_binary(other.grammar);
+        Ok(self)
+    }
+}
 
 #[test]
 fn build_grammar() {
@@ -36,7 +96,8 @@ fn build_grammar() {
     bldr.read_conn(MATRIX_10_10).unwrap();
     assert_eq!(
         1,
-        bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap()
+        bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
+            .unwrap()
     );
     let mut built = Vec::new();
     let written = bldr.write_grammar(&mut built).unwrap();
@@ -57,7 +118,8 @@ fn build_lexicon_1word() {
     let mut bldr = DictBuilder::new_system();
     assert_eq!(
         1,
-        bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap()
+        bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
+            .unwrap()
     );
     let mut built = Vec::new();
     bldr.write_lexicon(&mut built, 0).unwrap();
@@ -86,17 +148,12 @@ fn build_system_1word() {
     bldr.read_conn(MATRIX_10_10).unwrap();
     assert_eq!(
         1,
-        bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap()
+        bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
+            .unwrap()
     );
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
-    let dic = DictionaryLoader::read_system_dictionary(&built).unwrap();
-    assert_eq!(
-        dic.header.version,
-        HeaderVersion::SystemDict(SystemDictVersion::Version2)
-    );
-
-    let dic = dic.to_loaded().unwrap();
+    let dic = LoadedDictionaryForTest::load_system(&built).unwrap();
 
     let entry = dic.lexicon().lookup("京都".as_bytes(), 0).next().unwrap();
     assert_eq!(entry.word_id, WordId::new(0, 0));
@@ -117,8 +174,7 @@ fn build_system_3words() {
     bldr.resolve().unwrap();
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
-    let dic = DictionaryLoader::read_system_dictionary(&built).unwrap();
-    let dic = dic.to_loaded().unwrap();
+    let dic = LoadedDictionaryForTest::load_system(&built).unwrap();
     let mut iter = dic.lexicon().lookup("東京".as_bytes(), 0);
     let entry = iter.next().unwrap();
     assert_eq!(entry.word_id, WordId::new(0, 1));
@@ -132,7 +188,8 @@ fn build_system_3words() {
 #[test]
 fn build_user_dictionary_crossrefs() {
     let mut bldr = DictBuilder::new_system();
-    bldr.read_conn(include_bytes!("test/matrix_10x10.def")).unwrap();
+    bldr.read_conn(include_bytes!("test/matrix_10x10.def"))
+        .unwrap();
     assert_eq!(
         3,
         bldr.read_lexicon(include_bytes!("test/data_3words.csv"))
@@ -141,8 +198,7 @@ fn build_user_dictionary_crossrefs() {
     bldr.resolve().unwrap();
     let mut system_bin = Vec::new();
     bldr.compile(&mut system_bin).unwrap();
-    let dic = DictionaryLoader::read_system_dictionary(&system_bin).unwrap();
-    let dic = dic.to_loaded().unwrap();
+    let dic = LoadedDictionaryForTest::load_system(&system_bin).unwrap();
     // user dictionary
     let mut bldr2 = DictBuilder::new_user(&dic);
     assert_eq!(
@@ -154,7 +210,7 @@ fn build_user_dictionary_crossrefs() {
     bldr2.resolve().unwrap();
     let mut user_dic = Vec::new();
     bldr2.compile(&mut user_dic).unwrap();
-    let udic = DictionaryLoader::read_user_dictionary(&user_dic).unwrap();
+    let udic = LoadedDictionaryForTest::load_user(&user_dic).unwrap();
     let dic = dic.merge_dictionary(udic).unwrap();
     let mut iter = dic.lexicon_set.lookup("関東".as_bytes(), 0);
     let entry = iter.next().unwrap();
@@ -304,8 +360,7 @@ fn word_id_too_big_dicform_userdic_insystem() {
     .unwrap();
     let mut data = Vec::new();
     bldr.compile(&mut data).unwrap();
-    let dic = DictionaryLoader::read_system_dictionary(&data).unwrap();
-    let dic = dic.to_loaded().unwrap();
+    let dic = LoadedDictionaryForTest::load_system(&data).unwrap();
     let mut bldr = DictBuilder::new_user(&dic);
     bldr.read_lexicon("東,6,6,5293,東,名詞,一般,*,*,*,*,ヒガシ,*,10,A,*,*,*,*".as_bytes())
         .unwrap();
@@ -334,8 +389,7 @@ fn word_id_too_big_dicform_userdic_inuser() {
     .unwrap();
     let mut data = Vec::new();
     bldr.compile(&mut data).unwrap();
-    let dic = DictionaryLoader::read_system_dictionary(&data).unwrap();
-    let dic = dic.to_loaded().unwrap();
+    let dic = LoadedDictionaryForTest::load_system(&data).unwrap();
     let mut bldr = DictBuilder::new_user(&dic);
     bldr.read_lexicon("東,6,6,5293,東,名詞,一般,*,*,*,*,ヒガシ,*,U15,A,*,*,*,*".as_bytes())
         .unwrap();
@@ -363,8 +417,7 @@ fn resolve_user_entry_without_system_in_trie() {
     bldr.resolve().unwrap();
     let mut data = Vec::new();
     bldr.compile(&mut data).unwrap();
-    let dic = DictionaryLoader::read_system_dictionary(&data).unwrap();
-    let dic = dic.to_loaded().unwrap();
+    let dic = LoadedDictionaryForTest::load_system(&data).unwrap();
     let mut iter = dic.lexicon().lookup("東京".as_bytes(), 0);
     let e = iter.next().unwrap();
     assert_eq!(e.end, 6);
@@ -376,7 +429,7 @@ fn resolve_user_entry_without_system_in_trie() {
     bldr.resolve().unwrap();
     let mut data2 = Vec::new();
     bldr.compile(&mut data2).unwrap();
-    let udic = DictionaryLoader::read_user_dictionary(&data2).unwrap();
+    let udic = LoadedDictionaryForTest::load_user(&data2).unwrap();
     let dic = dic.merge_dictionary(udic).unwrap();
     let mut iter = dic.lexicon().lookup("関東".as_bytes(), 0);
     let _ = iter.next().unwrap();

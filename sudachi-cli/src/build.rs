@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -21,17 +21,17 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Subcommand};
 use memmap2::Mmap;
 
-use sudachi::analysis::stateless_tokenizer::DictionaryAccess;
 use sudachi::config::Config;
+use sudachi::dic::binary_loader::BinaryDictionary;
 use sudachi::dic::build::report::DictPartReport;
 use sudachi::dic::build::DictBuilder;
+use sudachi::dic::description::Description;
 use sudachi::dic::dictionary::JapaneseDictionary;
 use sudachi::dic::grammar::Grammar;
-use sudachi::dic::header::HeaderVersion;
-use sudachi::dic::lexicon::word_infos::WordInfo;
+use sudachi::dic::lexicon::Lexicon;
 use sudachi::dic::lexicon_set::LexiconSet;
 use sudachi::dic::word_id::WordId;
-use sudachi::dic::DictionaryLoader;
+use sudachi::dic::word_info::WordInfo;
 use sudachi::error::SudachiResult;
 
 /// Check that the first argument is a subcommand and the file with the same name does
@@ -194,28 +194,27 @@ fn output_file(p: &Path) -> File {
 fn dump_part(dict: PathBuf, system: Option<PathBuf>, part: String, output: PathBuf) {
     let file = File::open(dict).expect("open dict failed");
     let data = unsafe { Mmap::map(&file) }.expect("mmap dict failed");
-    let loader =
-        unsafe { DictionaryLoader::read_any_dictionary(&data) }.expect("failed to load dictionary");
+    let desc = Description::load(&data).expect("failed to load dictionary description");
+    let loaded = if desc.is_system_dictionary() {
+        BinaryDictionary::load_system(&data).expect("failed to load system dictionary")
+    } else {
+        BinaryDictionary::load_user(&data).expect("failed to load user dictionary")
+    };
 
     let outf = output_file(&output);
     let mut writer = BufWriter::new(outf);
 
     match part.as_str() {
-        "pos" => dump_pos(loader, &mut writer),
-        "matrix" => dump_matrix(loader, &mut writer),
-        "winfo" => dump_word_info(loader, system, &mut writer).unwrap(),
+        "pos" => dump_pos(loaded, &mut writer),
+        "matrix" => dump_matrix(loaded, &mut writer),
+        "winfo" => dump_word_info(loaded, system, &mut writer).unwrap(),
         _ => unimplemented!(),
     }
     writer.flush().unwrap();
 }
 
-fn dump_pos<W: Write>(dict: DictionaryLoader, w: &mut W) {
-    let dict = dict
-        .to_loaded()
-        .expect("target dict should contain grammar");
-    let grammar = dict.grammar();
-
-    for (id, p) in grammar.pos_list.iter().enumerate() {
+fn dump_pos<W: Write>(dict: BinaryDictionary, w: &mut W) {
+    for (id, p) in dict.grammar.pos_list.iter().enumerate() {
         write!(w, "{},", id).unwrap();
         for (i, e) in p.iter().enumerate() {
             w.write_all(e.as_bytes()).unwrap();
@@ -228,17 +227,12 @@ fn dump_pos<W: Write>(dict: DictionaryLoader, w: &mut W) {
     }
 }
 
-fn dump_matrix<W: Write>(dict: DictionaryLoader, w: &mut W) {
-    if let HeaderVersion::UserDict(_) = dict.header.version {
+fn dump_matrix<W: Write>(dict: BinaryDictionary, w: &mut W) {
+    if dict.description.is_user_dictionary() {
         panic!("user dictionary does not have connection matrix.")
     }
 
-    let dict = dict
-        .to_loaded()
-        .expect("target dict should contain grammar");
-    let grammar = dict.grammar();
-    let conn = grammar.conn_matrix();
-
+    let conn = dict.grammar.connection.unwrap();
     writeln!(w, "{} {}", conn.num_left(), conn.num_right()).unwrap();
     for left in 0..conn.num_left() {
         for right in 0..conn.num_right() {
@@ -249,27 +243,26 @@ fn dump_matrix<W: Write>(dict: DictionaryLoader, w: &mut W) {
 }
 
 fn dump_word_info<W: Write>(
-    dict: DictionaryLoader,
+    dict: BinaryDictionary,
     system: Option<PathBuf>,
     w: &mut W,
 ) -> SudachiResult<()> {
-    let is_user = match dict.header.version {
-        HeaderVersion::UserDict(_) => true,
-        HeaderVersion::SystemDict(_) => false,
-    };
+    let is_user = dict.description.is_user_dictionary();
     let did = if is_user { 1 } else { 0 };
-    let size = dict.lexicon.size();
+    let size = dict.description.num_total_entries();
 
     let data = system.map(|system_path| {
         let file = File::open(system_path).expect("open system failed");
         unsafe { Mmap::map(&file) }.expect("mmap system failed")
     });
     let system = data.as_ref().map(|data| {
-        let loader = DictionaryLoader::read_system_dictionary(data)
+        let system_dict =
+            BinaryDictionary::load_system(data).expect("failed to load system dictionary");
+        let grammar = Grammar::from_system_binary(system_dict.grammar)
             .expect("failed to load system dictionary");
-        loader
-            .to_loaded()
-            .expect("failed to load system dictionary")
+        let lexicon_set =
+            LexiconSet::from_system_binary(system_dict.lexicon, grammar.pos_list.len());
+        (grammar, lexicon_set)
     });
 
     let (base, user) = if is_user {
@@ -278,16 +271,15 @@ fn dump_word_info<W: Write>(
             Some(dict),
         )
     } else {
-        (dict.to_loaded().expect("failed to load dictionary"), None)
+        let grammar = Grammar::from_system_binary(dict.grammar).expect("failed to load dictionary");
+        let lexicon_set = LexiconSet::from_system_binary(dict.lexicon, grammar.pos_list.len());
+        ((grammar, lexicon_set), None)
     };
 
-    let mut lex = base.lexicon_set;
-    let mut grammar = base.grammar;
+    let (mut grammar, mut lex) = base;
     if let Some(udic) = user {
-        lex.append(udic.lexicon, grammar.pos_list.len())?;
-        if let Some(g) = udic.grammar {
-            grammar.merge(g)
-        }
+        lex.append(Lexicon::from_binary(udic.lexicon), grammar.pos_list.len())?;
+        grammar.merge_binary(udic.grammar);
     }
 
     for i in 0..size {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,18 +23,65 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use lazy_static::lazy_static;
+
 use sudachi::analysis::stateful_tokenizer::StatefulTokenizer;
 use sudachi::analysis::stateless_tokenizer::StatelessTokenizer;
-use sudachi::config::{Config, ConfigBuilder};
-use sudachi::dic::dictionary::JapaneseDictionary;
-use sudachi::dic::{grammar::Grammar, header::Header, lexicon::Lexicon, DictionaryLoader};
-use sudachi::prelude::*;
-
-use lazy_static::lazy_static;
 use sudachi::analysis::Tokenize;
+use sudachi::config::{Config, ConfigBuilder};
+use sudachi::dic::binary_loader::{BinaryDictionary, BinaryGrammar, BinaryLexicon};
 use sudachi::dic::build::DictBuilder;
+use sudachi::dic::description::Description;
+use sudachi::dic::dictionary::JapaneseDictionary;
+use sudachi::dic::lexicon_set::LexiconSet;
 use sudachi::dic::storage::{Storage, SudachiDicData};
 use sudachi::dic::subset::InfoSubset;
+use sudachi::dic::{grammar::Grammar, lexicon::Lexicon, DictionaryAccess, LexiconAccess};
+use sudachi::plugin::input_text::InputTextPlugin;
+use sudachi::plugin::oov::OovProviderPlugin;
+use sudachi::plugin::path_rewrite::PathRewritePlugin;
+use sudachi::prelude::*;
+
+struct TestSystemDictionary<'a> {
+    grammar: Grammar<'a>,
+    lexicon_set: LexiconSet<'a>,
+}
+
+impl LexiconAccess for TestSystemDictionary<'_> {
+    fn lexicon(&self) -> &LexiconSet<'_> {
+        &self.lexicon_set
+    }
+}
+
+impl DictionaryAccess for TestSystemDictionary<'_> {
+    fn grammar(&self) -> &Grammar<'_> {
+        &self.grammar
+    }
+
+    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
+        &[]
+    }
+
+    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>] {
+        &[]
+    }
+
+    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
+        &[]
+    }
+}
+
+impl<'a> TestSystemDictionary<'a> {
+    pub fn from_binary(binary: BinaryDictionary<'a>) -> Self {
+        let grammar = Grammar::from_system_binary(binary.grammar).expect("Failed to load grammar");
+        let lexicon_set = LexiconSet::from_system_binary(binary.lexicon, grammar.pos_list.len());
+
+        Self {
+            grammar,
+            lexicon_set,
+        }
+    }
+}
 
 pub fn dictionary_bytes_from_path<P: AsRef<Path>>(dictionary_path: P) -> SudachiResult<Vec<u8>> {
     let dictionary_path = dictionary_path.as_ref();
@@ -73,17 +120,19 @@ lazy_static! {
         }
         bytes
     };
-    pub static ref HEADER: Header =
-        Header::parse(&DICTIONARY_BYTES).expect("Failed to create Header for tests");
-    pub static ref GRAMMAR: Grammar<'static> =
-        Grammar::parse(&DICTIONARY_BYTES, Header::STORAGE_SIZE)
+    pub static ref DESCRIPTION: Description =
+        Description::load(&DICTIONARY_BYTES).expect("Failed to read description for tests");
+    pub static ref GRAMMAR: Grammar<'static> = {
+        let binary_grammar = BinaryGrammar::load(&DICTIONARY_BYTES, &DESCRIPTION)
             .expect("Failed to read grammar for tests");
+        Grammar::from_system_binary(binary_grammar).expect("Failed to convert grammar for tests")
+    };
     pub static ref LEXICON: Lexicon<'static> = {
-        let offset = Header::STORAGE_SIZE + GRAMMAR.storage_size;
-        let mut lex = Lexicon::parse(&DICTIONARY_BYTES, offset, HEADER.has_synonym_group_ids())
-            .expect("Failed to read lexicon for tests");
-        lex.set_dic_id(0);
-        lex
+        let binary_lexicon = BinaryLexicon::load(&DICTIONARY_BYTES, &DESCRIPTION)
+            .expect("Failed to load system dictionary");
+        let mut lexicon = Lexicon::from_binary(binary_lexicon);
+        lexicon.set_dic_id(0);
+        lexicon
     };
 }
 
@@ -159,11 +208,9 @@ impl<'a> TestTokenizerBuilder<'a> {
         let mut data = SudachiDicData::new(Storage::Owned(sys_bytes));
 
         if !self.user.is_empty() {
-            let dic =
-                DictionaryLoader::read_system_dictionary(unsafe { data.system_static_slice() })
-                    .unwrap()
-                    .to_loaded()
-                    .unwrap();
+            let dic = TestSystemDictionary::from_binary(
+                BinaryDictionary::load_system(unsafe { data.system_static_slice() }).unwrap(),
+            );
 
             for u in self.user {
                 let mut ubld = DictBuilder::new_user(&dic);
