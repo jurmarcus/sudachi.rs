@@ -16,13 +16,20 @@
 
 use crate::dic::connect::ConnectionMatrix;
 use crate::dic::description::{Block, Description};
+use crate::dic::grammar::Grammar;
 use crate::dic::header::HeaderError;
 use crate::dic::lexicon::strings::CompactedStrings;
 use crate::dic::lexicon::trie::Trie;
 use crate::dic::lexicon::word_id_table::WordIdTable;
 use crate::dic::lexicon::word_infos::WordInfos;
 use crate::dic::lexicon::word_params::WordParams;
+use crate::dic::lexicon::Lexicon;
+use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::pos::PosList;
+use crate::dic::{DictionaryAccess, LexiconAccess};
+use crate::plugin::input_text::InputTextPlugin;
+use crate::plugin::oov::OovProviderPlugin;
+use crate::plugin::path_rewrite::PathRewritePlugin;
 use crate::prelude::*;
 
 /// A single system or user dictionary
@@ -147,5 +154,62 @@ impl<'a> BinaryLexicon<'a> {
             strings,
             num_total_entries: description.num_total_entries(),
         })
+    }
+}
+
+/// A dictionary consists of one system_dict and zero or more user_dicts.
+///
+/// This is mostly used for testing purpose.
+pub struct LoadedDictionary<'a> {
+    pub grammar: Grammar<'a>,
+    pub lexicon_set: LexiconSet<'a>,
+}
+
+impl<'a> LoadedDictionary<'a> {
+    /// Convert to Loaded dictionary
+    pub fn from_system_binary(binary: BinaryDictionary<'a>) -> SudachiResult<Self> {
+        let grammar = Grammar::from_system_binary(binary.grammar)?;
+        let lexicon_set = LexiconSet::from_system_binary(binary.lexicon, grammar.pos_list.len());
+        Ok(LoadedDictionary {
+            grammar,
+            lexicon_set,
+        })
+    }
+
+    pub fn load_system(bytes: &'a [u8]) -> SudachiResult<Self> {
+        Self::from_system_binary(BinaryDictionary::load_system(bytes)?)
+    }
+
+    pub fn merge_dictionary(mut self, other: BinaryDictionary<'a>) -> SudachiResult<Self> {
+        self.lexicon_set.append(
+            Lexicon::from_binary(other.lexicon),
+            self.grammar.pos_list.len(),
+        )?;
+        self.grammar.merge_binary(other.grammar);
+        Ok(self)
+    }
+}
+
+impl LexiconAccess for LoadedDictionary<'_> {
+    fn lexicon(&self) -> &LexiconSet<'_> {
+        &self.lexicon_set
+    }
+}
+
+impl DictionaryAccess for LoadedDictionary<'_> {
+    fn grammar(&self) -> &Grammar<'_> {
+        &self.grammar
+    }
+
+    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
+        &[]
+    }
+
+    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>] {
+        &[]
+    }
+
+    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
+        &[]
     }
 }
