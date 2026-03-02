@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,12 +76,14 @@ impl EditConnectionCostPlugin for InhibitConnectionPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dic::connect::ConnectionMatrix;
+    use crate::dic::pos::PosList;
 
     #[test]
     fn edit() {
         let left = 0;
         let right = 0;
-        let bytes = build_mock_bytes();
+        let bytes = build_mock_connection_bytes();
         let mut grammar = build_mock_grammar(&bytes);
         let plugin = InhibitConnectionPlugin {
             inhibit_pairs: vec![(left, right)],
@@ -94,7 +96,7 @@ mod tests {
         );
     }
 
-    fn build_mock_bytes() -> Vec<u8> {
+    fn build_mock_connection_bytes() -> Vec<u8> {
         let mut buf = Vec::new();
         // 0 - pos size, 1x1 connection with 0 element
         buf.extend(&0_i16.to_le_bytes());
@@ -104,7 +106,10 @@ mod tests {
         buf
     }
 
-    fn build_mock_grammar(bytes: &[u8]) -> Grammar {
-        Grammar::parse(bytes, 0).expect("Failed to create grammar")
+    fn build_mock_grammar(connection_bytes: &[u8]) -> Grammar {
+        let pos_list = PosList::default();
+        let connection = ConnectionMatrix::from_bytes(connection_bytes)
+            .expect("Failed to parse connection matrix");
+        Grammar::from_parts(pos_list, connection)
     }
 }

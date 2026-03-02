@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -153,7 +153,6 @@ mod test {
     use crate::dic::build::error::DicWriteResult;
     use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
     use crate::dic::read::u16str::utf16_string_parser;
-    use crate::dic::read::u32_array_parser;
     use claim::assert_matches;
 
     #[test]
@@ -206,7 +205,14 @@ mod test {
         let mut data: Vec<u8> = Vec::new();
         let array = [0, 5, u32::MAX, u32::MIN];
         let written = write_u32_array(&mut data, &array).expect("ok");
-        let (rem, parsed) = u32_array_parser(&data).expect("ok");
+        let len = data[0] as usize;
+        let parsed: Vec<u32> = (0..len)
+            .map(|i| {
+                let start = 1 + i * 4;
+                u32::from_le_bytes(data[start..start + 4].try_into().unwrap())
+            })
+            .collect();
+        let rem = &data[1 + len * 4..];
         assert_eq!(rem, b"");
         assert_eq!(parsed, array);
         assert_eq!(written, 4 * 4 + 1);

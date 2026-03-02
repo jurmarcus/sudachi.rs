@@ -17,6 +17,7 @@
 use crate::dic::build::lexicon::LexiconReader;
 use crate::dic::build::primitives::Utf16Writer;
 use crate::dic::read::word_info::WordInfoParser;
+use crate::dic::word_id::WordId;
 use crate::dic::subset::InfoSubset;
 
 #[test]
@@ -25,7 +26,7 @@ fn wordinfo_subset_surface() {
     let wi = WordInfoParser::subset(InfoSubset::HEADWORD)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.surface, "京都");
+    assert!(wi.headword_strptr.length > 0);
 }
 
 #[test]
@@ -52,7 +53,7 @@ fn wordinfo_subset_norm() {
     let wi = WordInfoParser::subset(InfoSubset::NORMALIZED_FORM)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.normalized_form, "東京");
+    assert_eq!(wi.normalized_form, WordId::new(0, 1).as_raw());
 }
 
 #[test]
@@ -61,7 +62,7 @@ fn wordinfo_subset_reading() {
     let wi = WordInfoParser::subset(InfoSubset::READING_FORM)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.reading_form, "キョウト");
+    assert!(wi.reading_form_strptr.length > 0);
 }
 
 #[test]
@@ -70,7 +71,7 @@ fn wordinfo_subset_dic_form_id() {
     let wi = WordInfoParser::subset(InfoSubset::DICTIONARY_FORM)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.dictionary_form_word_id, 1);
+    assert_eq!(wi.dictionary_form, WordId::new(0, 1).as_raw());
 }
 
 #[test]
@@ -118,5 +119,6 @@ fn make_data() -> Vec<u8> {
     rdr.entries[1]
         .write_word_info(&mut u16w, &mut data)
         .unwrap();
+    data.splice(0..0, [0_u8; 6]);
     data
 }

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,14 +15,18 @@
  */
 
 use crate::dic::character_category::CharacterCategory;
+use crate::dic::connect::ConnectionMatrix;
 use crate::dic::grammar::Grammar;
+use crate::dic::pos::PosList;
 use lazy_static::lazy_static;
 
-const ZERO_GRAMMAR_BYTES: &[u8] = &[0u8; 6];
+const ZERO_CONNECTION_BYTES: &[u8] = &[0, 0, 0, 0];
 
 /// Returns Grammar with empty data
 pub fn zero_grammar() -> Grammar<'static> {
-    Grammar::parse(ZERO_GRAMMAR_BYTES, 0).expect("Failed to make grammar")
+    let connection = ConnectionMatrix::from_bytes(ZERO_CONNECTION_BYTES)
+        .expect("Failed to make connection matrix");
+    Grammar::from_parts(PosList::default(), connection)
 }
 
 const TEST_CHAR_DEF: &[u8] = include_bytes!("../tests/resources/char.def");

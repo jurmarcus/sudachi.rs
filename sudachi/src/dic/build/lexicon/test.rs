@@ -15,12 +15,10 @@
  */
 
 use super::*;
-use crate::dic::binary_loader::LoadedDictionary;
 use crate::dic::build::error::DicBuildError;
 use crate::dic::build::DictBuilder;
 use crate::dic::read::word_info::WordInfoParser;
 use crate::dic::word_id::WordId;
-use crate::dic::word_info::WordInfo;
 use crate::error::SudachiError;
 use claim::assert_matches;
 use std::fmt::Write;
@@ -198,26 +196,16 @@ fn word_info_rw() {
     rdr.entries[0]
         .write_word_info(&mut u16w, &mut data)
         .unwrap();
+    // `WordInfoParser` reads the final binary entry layout (params + word-info body).
+    // prepend 6-byte word params to reuse the parser for this writer test.
+    data.splice(0..0, [0_u8; 6]);
 
-    // TODO: check WordInfoRawData instead of WordInfo. expected value will depends on how word-info writer work
-    let mut bldr = DictBuilder::new_system();
-    bldr.read_conn(include_bytes!("../test/matrix_10x10.def"))
-        .unwrap();
-    bldr.read_lexicon(include_bytes!("data_kyoto_inline.csv"))
-        .unwrap();
-    bldr.resolve().unwrap();
-    let mut dic_bytes = Vec::new();
-    bldr.compile(&mut dic_bytes).unwrap();
-    let resolver = LoadedDictionary::load_system(&dic_bytes).unwrap();
-
-    let wi: WordInfo = WordInfoParser::default().parse(&data).unwrap().into();
-    assert_eq!(wi.headword(&resolver), "京都");
-    assert_eq!(wi.dictionary_form(&resolver), "京都");
-    assert_eq!(wi.normalized_form(&resolver), "京都");
-    assert_eq!(wi.reading_form(&resolver), "キョウト");
-    assert_eq!(wi.a_unit_split().len(), 0);
-    assert_eq!(wi.b_unit_split().len(), 0);
-    assert_eq!(wi.word_structure().len(), 0);
-    assert_eq!(wi.synonym_group_ids().len(), 0);
-    assert_eq!(wi.borrow_data().dictionary_form_word_id(), WordId::INVALID);
+    let wi = WordInfoParser::default().parse(&data).unwrap();
+    assert_eq!(wi.pos_id, 0);
+    assert_eq!(wi.index_form_length, "京都".len() as i16);
+    assert_eq!(wi.dictionary_form, WordId::INVALID.as_raw());
+    assert_eq!(wi.a_unit_split.len(), 0);
+    assert_eq!(wi.b_unit_split.len(), 0);
+    assert_eq!(wi.word_structure.len(), 0);
+    assert_eq!(wi.synonym_group_ids.len(), 0);
 }

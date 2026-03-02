@@ -19,11 +19,9 @@ mod with_analysis;
 use crate::dic::binary_loader::{BinaryDictionary, LoadedDictionary};
 use crate::dic::build::error::{BuildFailure, DicBuildError};
 use crate::dic::build::DictBuilder;
-use crate::dic::grammar::Grammar;
-use crate::dic::lexicon::{Lexicon, LexiconEntry};
-use crate::dic::lexicon_set::LexiconSet;
+use crate::dic::lexicon::LexiconEntry;
+use crate::dic::word_id::WordId;
 use crate::dic::LexiconAccess;
-use crate::dic::word_id::{EntryId, WordId};
 use crate::error::SudachiError;
 use std::io::sink;
 
@@ -39,9 +37,9 @@ fn build_grammar() {
             .unwrap()
     );
     let mut built = Vec::new();
-    let written = bldr.write_grammar(&mut built).unwrap();
-    assert_eq!(built.len(), written);
-    let grammar = Grammar::parse(&built, 0).unwrap();
+    bldr.compile(&mut built).unwrap();
+    let dic = LoadedDictionary::load_system(&built).unwrap();
+    let grammar = &dic.grammar;
     assert_eq!(grammar.pos_list.len(), 1);
     assert_eq!(
         grammar.pos_list[0],
@@ -55,16 +53,16 @@ fn build_grammar() {
 #[test]
 fn build_lexicon_1word() {
     let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
     assert_eq!(
         1,
         bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
             .unwrap()
     );
     let mut built = Vec::new();
-    bldr.write_lexicon(&mut built, 0).unwrap();
-    let mut lex = Lexicon::parse(&built, 0, true).unwrap();
-    lex.set_dic_id(0);
-    let mut iter = lex.lookup("京都".as_bytes(), 0);
+    bldr.compile(&mut built).unwrap();
+    let dic = LoadedDictionary::load_system(&built).unwrap();
+    let mut iter = dic.lexicon().lookup("京都".as_bytes(), 0);
     assert_eq!(
         iter.next(),
         Some(LexiconEntry {
@@ -73,14 +71,15 @@ fn build_lexicon_1word() {
         })
     );
     assert_eq!(iter.next(), None);
-    assert_eq!((6, 6, 5293), lex.get_word_param(EntryId::new(0)));
-    // num_system_pos won't be used here
-    let lexicon_set = LexiconSet::new(lex, 0);
-    let wi = lexicon_set.get_word_info(WordId::new(0, 0)).unwrap();
-    assert_eq!(wi.headword(&lexicon_set), "京都");
-    assert_eq!(wi.normalized_form(&lexicon_set), "京都");
-    assert_eq!(wi.dictionary_form(&lexicon_set), "京都");
-    assert_eq!(wi.reading_form(&lexicon_set), "キョウト");
+    assert_eq!(
+        (6, 6, 5293),
+        dic.lexicon().get_word_param(WordId::new(0, 0))
+    );
+    let wi = dic.lexicon().get_word_info(WordId::new(0, 0)).unwrap();
+    assert_eq!(wi.headword(&dic), "京都");
+    assert_eq!(wi.normalized_form(&dic), "京都");
+    assert_eq!(wi.dictionary_form(&dic), "京都");
+    assert_eq!(wi.reading_form(&dic), "キョウト");
 }
 
 #[test]

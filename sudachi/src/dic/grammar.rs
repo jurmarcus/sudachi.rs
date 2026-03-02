@@ -44,16 +44,20 @@ impl<'a> Grammar<'a> {
     pub const BOS_PARAMETER: (i16, i16, i16) = (0, 0, 0); // left_id, right_id, cost
     pub const EOS_PARAMETER: (i16, i16, i16) = (0, 0, 0); // left_id, right_id, cost
 
-    pub fn from_system_binary(binary_grammar: BinaryGrammar) -> SudachiResult<Grammar> {
+    pub fn from_system_binary(binary_grammar: BinaryGrammar<'a>) -> SudachiResult<Grammar<'a>> {
         let connection = binary_grammar
             .connection
             .ok_or(SudachiError::ConnectionMatrixMissing)?;
 
-        Ok(Grammar {
-            pos_list: binary_grammar.pos_list,
+        Ok(Self::from_parts(binary_grammar.pos_list, connection))
+    }
+
+    pub(crate) fn from_parts(pos_list: PosList, connection: ConnectionMatrix<'a>) -> Self {
+        Grammar {
+            pos_list,
             connection,
             character_category: CharacterCategory::default(),
-        })
+        }
     }
 
     /// Merge a another (user) grammar into this grammar
@@ -155,15 +159,15 @@ mod tests {
 
     #[test]
     fn storage_size() {
-        let bytes = setup_bytes();
-        let grammar = Grammar::parse(&bytes, 0).expect("failed to create grammar");
-        assert_eq!(bytes.len(), grammar.storage_size);
+        let grammar = setup_grammar();
+        assert_eq!(grammar.pos_list.len(), 3);
+        assert_eq!(grammar.conn_matrix().num_left(), 3);
+        assert_eq!(grammar.conn_matrix().num_right(), 3);
     }
 
     #[test]
     fn partofspeech_string() {
-        let bytes = setup_bytes();
-        let grammar = Grammar::parse(&bytes, 0).expect("failed to create grammar");
+        let grammar = setup_grammar();
         assert_eq!(6, grammar.pos_list[0].len());
         assert_eq!("BOS/EOS", grammar.pos_list[0][0]);
         assert_eq!("*", grammar.pos_list[0][5]);
@@ -177,8 +181,7 @@ mod tests {
 
     #[test]
     fn get_connect_cost() {
-        let bytes = setup_bytes();
-        let grammar = Grammar::parse(&bytes, 0).expect("failed to create grammar");
+        let grammar = setup_grammar();
         assert_eq!(0, grammar.connect_cost(0, 0));
         assert_eq!(-100, grammar.connect_cost(2, 1));
         assert_eq!(200, grammar.connect_cost(1, 2));
@@ -186,16 +189,14 @@ mod tests {
 
     #[test]
     fn set_connect_cost() {
-        let bytes = setup_bytes();
-        let mut grammar = Grammar::parse(&bytes, 0).expect("failed to create grammar");
+        let mut grammar = setup_grammar();
         grammar.set_connect_cost(0, 0, 300);
         assert_eq!(300, grammar.connect_cost(0, 0));
     }
 
     #[test]
     fn register_pos() {
-        let bytes = setup_bytes();
-        let mut grammar = Grammar::parse(&bytes, 0).expect("failed to create grammar");
+        let mut grammar = setup_grammar();
 
         let id1 = grammar
             .register_pos(["a", "b", "c", "d", "e", "f"].as_slice())
@@ -220,11 +221,19 @@ mod tests {
         assert_eq!(0, Grammar::EOS_PARAMETER.2);
     }
 
-    fn setup_bytes() -> Vec<u8> {
-        let mut storage: Vec<u8> = Vec::new();
-        build_partofspeech(&mut storage);
-        build_connect_table(&mut storage);
-        storage
+    fn setup_grammar() -> Grammar<'static> {
+        let mut pos_bytes: Vec<u8> = Vec::new();
+        let mut conn_bytes: Vec<u8> = Vec::new();
+        build_partofspeech(&mut pos_bytes);
+        build_connect_table(&mut conn_bytes);
+        let pos_list = PosList::from_bytes(&pos_bytes).expect("failed to create pos");
+        let connection =
+            ConnectionMatrix::from_bytes(Box::leak(conn_bytes.into_boxed_slice())).expect("failed to create conn");
+        Grammar {
+            pos_list,
+            connection,
+            character_category: CharacterCategory::default(),
+        }
     }
     fn string_to_bytes(s: &str) -> Vec<u8> {
         s.encode_utf16().flat_map(|c| c.to_le_bytes()).collect()
