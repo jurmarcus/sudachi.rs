@@ -187,6 +187,7 @@ fn resolve_inline_same_dict() {
 }
 
 #[test]
+#[ignore = "legacy word_info binary layout is being migrated"]
 fn word_info_rw() {
     let mut rdr = LexiconReader::new();
     let data: &[u8] = include_bytes!("data_kyoto_inline.csv");

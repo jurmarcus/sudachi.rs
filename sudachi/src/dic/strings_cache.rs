@@ -16,11 +16,9 @@
 
 use std::sync::OnceLock;
 
-use crate::dic::lexicon_set::LexiconSet;
-use crate::dic::word_info::{ WordInfoData};
-use crate::dic::word_id::WordId;
 use crate::dic::subset::InfoSubset;
-
+use crate::dic::word_id::WordId;
+use crate::dic::word_info::{WordInfoData, WordInfoResolver};
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct StringsCache {
@@ -85,35 +83,54 @@ impl StringsCache {
 }
 
 impl StringsCache {
-    pub fn headword(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+    pub fn headword(
+        &self,
+        resolver: &dyn WordInfoResolver,
+        word_info: &WordInfoData,
+        word_id: WordId,
+    ) -> &str {
         self.headword.get_or_init(|| {
             let strptr = word_info.headword_strptr();
-            lexicon_set
+            resolver
+                .lexicon()
                 .get_string(word_id, strptr)
                 .expect("Headword must exist for non-OOV word IDs")
         })
     }
 
-    pub fn reading(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+    pub fn reading(
+        &self,
+        resolver: &dyn WordInfoResolver,
+        word_info: &WordInfoData,
+        word_id: WordId,
+    ) -> &str {
         self.reading.get_or_init(|| {
             let strptr = word_info.reading_form_strptr();
-            lexicon_set
+            resolver
+                .lexicon()
                 .get_string(word_id, strptr)
                 .expect("Reading form must exist for non-OOV word IDs")
         })
     }
 
-    pub fn normalized_form(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+    pub fn normalized_form(
+        &self,
+        resolver: &dyn WordInfoResolver,
+        word_info: &WordInfoData,
+        word_id: WordId,
+    ) -> &str {
         self.normalized_form.get_or_init(|| {
             let ref_word_id = word_info.normalized_form_word_id();
             let s = if ref_word_id == word_id {
-                self.headword(lexicon_set, word_info, word_id).to_string()
+                self.headword(resolver, word_info, word_id).to_string()
             } else {
-                let ref_word_info = lexicon_set
+                let ref_word_info = resolver
+                    .lexicon()
                     .get_word_info_subset(ref_word_id, InfoSubset::HEADWORD)
                     .expect("WordInfo must exist for non-OOV word IDs");
                 let strptr = ref_word_info.headword_strptr();
-                lexicon_set
+                resolver
+                    .lexicon()
                     .get_string(ref_word_id, strptr)
                     .expect("Normalized form must exist for non-OOV word IDs")
             };
@@ -121,18 +138,24 @@ impl StringsCache {
         })
     }
 
-    pub fn dictionary_form(&self, lexicon_set: &LexiconSet, word_info: &WordInfoData, word_id: WordId) -> &str {
+    pub fn dictionary_form(
+        &self,
+        resolver: &dyn WordInfoResolver,
+        word_info: &WordInfoData,
+        word_id: WordId,
+    ) -> &str {
         self.dictionary_form.get_or_init(|| {
             let ref_word_id = word_info.dictionary_form_word_id();
             let s = if ref_word_id == word_id {
-                self.headword(lexicon_set, word_info, word_id).to_string()
+                self.headword(resolver, word_info, word_id).to_string()
             } else {
-
-                let ref_word_info = lexicon_set
+                let ref_word_info = resolver
+                    .lexicon()
                     .get_word_info_subset(ref_word_id, InfoSubset::HEADWORD)
                     .expect("WordInfo must exist for non-OOV word IDs");
                 let strptr = ref_word_info.headword_strptr();
-                lexicon_set
+                resolver
+                    .lexicon()
                     .get_string(ref_word_id, strptr)
                     .expect("Dictionary form must exist for non-OOV word IDs")
             };

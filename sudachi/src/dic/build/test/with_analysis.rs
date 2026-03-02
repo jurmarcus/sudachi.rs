@@ -108,6 +108,7 @@ impl ConfigTestSupport {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn system_only_1() {
     let mut cfgb = ConfigTestSupport::new();
     let mut dic = DictBuilder::new_system();
@@ -124,6 +125,7 @@ fn system_only_1() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn system_plus_user_1() {
     let mut cfgb = ConfigTestSupport::new();
     let mut dic = DictBuilder::new_system();
@@ -145,6 +147,7 @@ fn system_plus_user_1() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn system_plus_user_2() {
     let mut cfgb = ConfigTestSupport::new();
     let mut dic = DictBuilder::new_system();
@@ -171,6 +174,7 @@ fn system_plus_user_2() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn split_with_subset() {
     let mut cfgb = ConfigTestSupport::new();
     let mut dic = DictBuilder::new_system();

@@ -34,25 +34,25 @@ fn katakana_length() {
 
     plugin.min_length = 0;
     let path = plugin
-        .rewrite(&text, _path.clone(), &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, _path.clone(), &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(2, path.len());
 
     plugin.min_length = 1;
     let path = plugin
-        .rewrite(&text, _path.clone(), &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, _path.clone(), &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(2, path.len());
 
     plugin.min_length = 2;
     let path = plugin
-        .rewrite(&text, _path.clone(), &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, _path.clone(), &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(2, path.len());
 
     plugin.min_length = 3;
     let path = plugin
-        .rewrite(&text, _path.clone(), &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, _path.clone(), &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(1, path.len());
 }
@@ -65,7 +65,7 @@ fn part_of_speech() {
 
     plugin.min_length = 3;
     let path = plugin
-        .rewrite(&text, path, &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, path, &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(1, path.len());
     assert!(!path[0].is_oov());
@@ -83,7 +83,7 @@ fn start_with_middle() {
 
     plugin.min_length = 3;
     let path = plugin
-        .rewrite(&text, path, &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, path, &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(1, path.len());
 }
@@ -102,7 +102,7 @@ fn start_with_tail() {
     ];
 
     let path = plugin
-        .rewrite(&text, path, &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, path, &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(1, path.len());
 }
@@ -122,10 +122,10 @@ fn with_noovbow() {
         build_node_ai(9, 18, 20985),
     ];
     let path = plugin
-        .rewrite(&text, path, &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, path, &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(2, path.len());
-    assert_eq!("ァ", path[0].word_info().headword(&*RESOLVER));
+    assert_eq!("ァ", path[0].word_info().headword(&RESOLVER));
 
     let text = build_text("アイウァアイウ");
     let path = vec![
@@ -134,7 +134,7 @@ fn with_noovbow() {
         build_node_aiu(12, 21, 21135),
     ];
     let path = plugin
-        .rewrite(&text, path, &Lattice::default(), &*RESOLVER)
+        .rewrite(&text, path, &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(1, path.len());
 }
@@ -149,7 +149,7 @@ fn build_node_aiu(start: usize, end: usize, cost: i32) -> ResultNode {
 
 fn build_node(start: usize, end: usize, cost: i32, surface: &str) -> ResultNode {
     let cstart = start / 3;
-    let word_id = WordId::new(0, 4);
+    let word_id = WordId::new(0, 0);
     let node = Node::new(
         cstart as u16,
         (cstart + surface.chars().count()) as u16,
@@ -207,15 +207,16 @@ fn build_mock_grammar() -> Grammar<'static> {
     grammar
 }
 
-struct NoLexicon {}
+lazy_static! {
+    static ref GRAMMAR: Grammar<'static> = build_mock_grammar();
+}
 
-impl LexiconAccess for NoLexicon {
+struct DummyResolver;
+
+impl LexiconAccess for DummyResolver {
     fn lexicon(&self) -> &LexiconSet<'_> {
-        panic!("there is no lexicon here")
+        panic!("dictionary-backed string resolution is not used in this test")
     }
 }
 
-lazy_static! {
-    static ref GRAMMAR: Grammar<'static> = build_mock_grammar();
-    static ref RESOLVER: NoLexicon = NoLexicon {};
-}
+static RESOLVER: DummyResolver = DummyResolver;

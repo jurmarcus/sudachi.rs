@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-use crate::dic::LexiconAccess;
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::read::word_info::WordInfoRawData;
 use crate::dic::strings_cache::StringsCache;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::{DictId, WordId, WordRef};
+use crate::dic::LexiconAccess;
 
 /// wrapper type that indicates inner data are not resolved for the specific lexicon set.
 #[derive(Clone, Debug, Default)]
@@ -102,7 +102,13 @@ impl WordInfoData {
     }
 
     pub fn new_oov(pos_id: i16, index_form_length: i16) -> Self {
-        Self { raw: WordInfoRawData { pos_id, index_form_length, ..Default::default() }}
+        Self {
+            raw: WordInfoRawData {
+                pos_id,
+                index_form_length,
+                ..Default::default()
+            },
+        }
     }
 
     pub fn pos_id(&self) -> u16 {
@@ -189,10 +195,7 @@ pub struct WordInfo {
 }
 
 impl WordInfo {
-    pub fn new(
-        data: WordInfoData,
-        word_id: WordId,
-    ) -> Self {
+    pub fn new(data: WordInfoData, word_id: WordId) -> Self {
         WordInfo {
             data,
             word_id,
@@ -200,7 +203,7 @@ impl WordInfo {
         }
     }
 
-    pub fn new_oov(pos_id: u16, index_form_length: i16, word_id:WordId, headword: String) -> Self {
+    pub fn new_oov(pos_id: u16, index_form_length: i16, word_id: WordId, headword: String) -> Self {
         Self {
             data: WordInfoData::new_oov(pos_id as i16, index_form_length),
             word_id,
@@ -220,7 +223,12 @@ impl WordInfo {
         WordInfo {
             data: WordInfoData::new_oov(pos_id, index_form_length),
             word_id,
-            strings: StringsCache::new_with_strings(headword, reading, normalized_form, dictionary_form),
+            strings: StringsCache::new_with_strings(
+                headword,
+                reading,
+                normalized_form,
+                dictionary_form,
+            ),
         }
     }
 
@@ -238,19 +246,21 @@ impl WordInfo {
     }
 
     pub fn headword<T: WordInfoResolver>(&self, resolver: T) -> &str {
-        self.strings.headword(resolver.lexicon(), &self.data, self.word_id)
+        self.strings.headword(&resolver, &self.data, self.word_id)
     }
 
     pub fn reading_form<T: WordInfoResolver>(&self, resolver: T) -> &str {
-        self.strings.reading(resolver.lexicon(), &self.data, self.word_id)
+        self.strings.reading(&resolver, &self.data, self.word_id)
     }
 
     pub fn normalized_form<T: WordInfoResolver>(&self, resolver: T) -> &str {
-        self.strings.normalized_form(resolver.lexicon(), &self.data, self.word_id)
+        self.strings
+            .normalized_form(&resolver, &self.data, self.word_id)
     }
- 
+
     pub fn dictionary_form<T: WordInfoResolver>(&self, resolver: T) -> &str {
-        self.strings.dictionary_form(resolver.lexicon(), &self.data, self.word_id)
+        self.strings
+            .dictionary_form(&resolver, &self.data, self.word_id)
     }
 
     pub fn a_unit_split(&self) -> &[WordId] {

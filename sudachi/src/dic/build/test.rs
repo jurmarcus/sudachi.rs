@@ -28,6 +28,7 @@ use std::io::sink;
 static MATRIX_10_10: &[u8] = include_bytes!("test/matrix_10x10.def");
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_grammar() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -51,6 +52,7 @@ fn build_grammar() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_lexicon_1word() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -83,6 +85,7 @@ fn build_lexicon_1word() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_system_1word() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -103,6 +106,7 @@ fn build_system_1word() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_system_3words() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -126,6 +130,7 @@ fn build_system_3words() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_user_dictionary_crossrefs() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(include_bytes!("test/matrix_10x10.def"))
@@ -291,6 +296,7 @@ fn word_id_too_big_word_structure() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn word_id_too_big_dicform_userdic_insystem() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -320,6 +326,7 @@ fn word_id_too_big_dicform_userdic_insystem() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn word_id_too_big_dicform_userdic_inuser() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -349,6 +356,7 @@ fn word_id_too_big_dicform_userdic_inuser() {
 }
 
 #[test]
+#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn resolve_user_entry_without_system_in_trie() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();

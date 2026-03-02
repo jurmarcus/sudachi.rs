@@ -98,8 +98,7 @@ mod tests {
 
     fn build_mock_connection_bytes() -> Vec<u8> {
         let mut buf = Vec::new();
-        // 0 - pos size, 1x1 connection with 0 element
-        buf.extend(&0_i16.to_le_bytes());
+        // 1x1 connection with 0 element
         buf.extend(&1_i16.to_le_bytes());
         buf.extend(&1_i16.to_le_bytes());
         buf.extend(&0_i16.to_le_bytes());

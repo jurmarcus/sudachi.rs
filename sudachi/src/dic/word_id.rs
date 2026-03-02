@@ -231,7 +231,8 @@ impl WordId {
 
     /// Checks if the WordId corresponds to a special node
     pub fn is_special(&self) -> bool {
-        self >= &Self::EOS && self < &Self::INVALID
+        // only beginning-of-sentence and end-of-sentence are special.
+        self == &Self::BOS || self == &Self::EOS
     }
 
     pub const INVALID: WordId = WordId::from_raw(0xffff_ffff);

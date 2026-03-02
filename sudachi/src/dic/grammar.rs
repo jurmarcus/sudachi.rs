@@ -222,44 +222,44 @@ mod tests {
     }
 
     fn setup_grammar() -> Grammar<'static> {
-        let mut pos_bytes: Vec<u8> = Vec::new();
+        let mut pos_list = PosList::default();
         let mut conn_bytes: Vec<u8> = Vec::new();
-        build_partofspeech(&mut pos_bytes);
         build_connect_table(&mut conn_bytes);
-        let pos_list = PosList::from_bytes(&pos_bytes).expect("failed to create pos");
-        let connection =
-            ConnectionMatrix::from_bytes(Box::leak(conn_bytes.into_boxed_slice())).expect("failed to create conn");
+        build_part_of_speech(&mut pos_list);
+        let connection = ConnectionMatrix::from_bytes(Box::leak(conn_bytes.into_boxed_slice()))
+            .expect("failed to create conn");
         Grammar {
             pos_list,
             connection,
             character_category: CharacterCategory::default(),
         }
     }
-    fn string_to_bytes(s: &str) -> Vec<u8> {
-        s.encode_utf16().flat_map(|c| c.to_le_bytes()).collect()
-    }
-    fn build_partofspeech(storage: &mut Vec<u8>) {
-        // number of part of speech
-        storage.extend(&3_i16.to_le_bytes());
 
-        storage.extend(
-            b"\x07B\x00O\x00S\x00/\x00E\x00O\x00S\x00\x01*\x00\x01*\x00\x01*\x00\x01*\x00\x01*\x00",
-        );
-
-        storage.extend(b"\x02");
-        storage.extend(string_to_bytes("名刺"));
-        storage.extend(b"\x02");
-        storage.extend(string_to_bytes("一般"));
-        storage.extend(b"\x01*\x00\x01*\x00\x01*\x00\x01*\x00");
-
-        storage.extend(b"\x02");
-        storage.extend(string_to_bytes("動詞"));
-        storage.extend(b"\x02");
-        storage.extend(string_to_bytes("一般"));
-        storage.extend(b"\x01*\x00\x01*\x00\x05");
-        storage.extend(string_to_bytes("五段-サ行"));
-        storage.extend(b"\x06");
-        storage.extend(string_to_bytes("終止形-一般"));
+    fn build_part_of_speech(pos_list: &mut PosList) {
+        pos_list.push(vec![
+            "BOS/EOS".to_string(),
+            "*".to_string(),
+            "*".to_string(),
+            "*".to_string(),
+            "*".to_string(),
+            "*".to_string(),
+        ]);
+        pos_list.push(vec![
+            "名詞".to_string(),
+            "一般".to_string(),
+            "*".to_string(),
+            "*".to_string(),
+            "*".to_string(),
+            "*".to_string(),
+        ]);
+        pos_list.push(vec![
+            "動詞".to_string(),
+            "一般".to_string(),
+            "*".to_string(),
+            "*".to_string(),
+            "五段-サ行".to_string(),
+            "終止形-一般".to_string(),
+        ]);
     }
     fn build_connect_table(storage: &mut Vec<u8>) {
         storage.extend(&3_i16.to_le_bytes());
