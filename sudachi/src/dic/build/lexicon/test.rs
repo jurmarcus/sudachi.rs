@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,9 +15,11 @@
  */
 
 use super::*;
+use crate::dic::binary_loader::LoadedDictionary;
 use crate::dic::build::error::DicBuildError;
 use crate::dic::build::DictBuilder;
 use crate::dic::read::word_info::WordInfoParser;
+use crate::dic::word_id::WordId;
 use crate::dic::word_info::WordInfo;
 use crate::error::SudachiError;
 use claim::assert_matches;
@@ -197,14 +199,25 @@ fn word_info_rw() {
         .write_word_info(&mut u16w, &mut data)
         .unwrap();
 
+    // TODO: check WordInfoRawData instead of WordInfo. expected value will depends on how word-info writer work
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(include_bytes!("../test/matrix_10x10.def"))
+        .unwrap();
+    bldr.read_lexicon(include_bytes!("data_kyoto_inline.csv"))
+        .unwrap();
+    bldr.resolve().unwrap();
+    let mut dic_bytes = Vec::new();
+    bldr.compile(&mut dic_bytes).unwrap();
+    let resolver = LoadedDictionary::load_system(&dic_bytes).unwrap();
+
     let wi: WordInfo = WordInfoParser::default().parse(&data).unwrap().into();
-    assert_eq!(wi.surface(), "京都");
-    assert_eq!(wi.dictionary_form(), "京都");
-    assert_eq!(wi.normalized_form(), "京都");
-    assert_eq!(wi.reading_form(), "キョウト");
+    assert_eq!(wi.headword(&resolver), "京都");
+    assert_eq!(wi.dictionary_form(&resolver), "京都");
+    assert_eq!(wi.normalized_form(&resolver), "京都");
+    assert_eq!(wi.reading_form(&resolver), "キョウト");
     assert_eq!(wi.a_unit_split().len(), 0);
     assert_eq!(wi.b_unit_split().len(), 0);
     assert_eq!(wi.word_structure().len(), 0);
     assert_eq!(wi.synonym_group_ids().len(), 0);
-    assert_eq!(wi.dictionary_form_word_id(), -1);
+    assert_eq!(wi.borrow_data().dictionary_form_word_id(), WordId::INVALID);
 }

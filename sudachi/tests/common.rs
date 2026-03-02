@@ -33,6 +33,7 @@ use sudachi::dic::binary_loader::{BinaryGrammar, BinaryLexicon, LoadedDictionary
 use sudachi::dic::build::DictBuilder;
 use sudachi::dic::description::Description;
 use sudachi::dic::dictionary::JapaneseDictionary;
+use sudachi::dic::lexicon_set::LexiconSet;
 use sudachi::dic::storage::{Storage, SudachiDicData};
 use sudachi::dic::subset::InfoSubset;
 use sudachi::dic::{grammar::Grammar, lexicon::Lexicon};
@@ -88,6 +89,11 @@ lazy_static! {
         let mut lexicon = Lexicon::from_binary(binary_lexicon);
         lexicon.set_dic_id(0);
         lexicon
+    };
+    pub static ref LEXICON_SET: LexiconSet<'static> = {
+        let loaded = LoadedDictionary::load_system(&DICTIONARY_BYTES)
+            .expect("Failed to load system dictionary");
+        loaded.lexicon_set
     };
 }
 

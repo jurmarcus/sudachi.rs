@@ -21,8 +21,9 @@ use crate::dic::build::error::{BuildFailure, DicBuildError};
 use crate::dic::build::DictBuilder;
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon::{Lexicon, LexiconEntry};
-use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordId;
+use crate::dic::lexicon_set::LexiconSet;
+use crate::dic::LexiconAccess;
+use crate::dic::word_id::{EntryId, WordId};
 use crate::error::SudachiError;
 use std::io::sink;
 
@@ -72,12 +73,14 @@ fn build_lexicon_1word() {
         })
     );
     assert_eq!(iter.next(), None);
-    assert_eq!((6, 6, 5293), lex.get_word_param(0));
-    let wi = lex.get_word_info(0, InfoSubset::all()).unwrap();
-    assert_eq!(wi.surface(), "京都");
-    assert_eq!(wi.normalized_form(), "京都");
-    assert_eq!(wi.dictionary_form(), "京都");
-    assert_eq!(wi.reading_form(), "キョウト");
+    assert_eq!((6, 6, 5293), lex.get_word_param(EntryId::new(0)));
+    // num_system_pos won't be used here
+    let lexicon_set = LexiconSet::new(lex, 0);
+    let wi = lexicon_set.get_word_info(WordId::new(0, 0)).unwrap();
+    assert_eq!(wi.headword(&lexicon_set), "京都");
+    assert_eq!(wi.normalized_form(&lexicon_set), "京都");
+    assert_eq!(wi.dictionary_form(&lexicon_set), "京都");
+    assert_eq!(wi.reading_form(&lexicon_set), "キョウト");
 }
 
 #[test]
@@ -96,8 +99,8 @@ fn build_system_1word() {
     let entry = dic.lexicon().lookup("京都".as_bytes(), 0).next().unwrap();
     assert_eq!(entry.word_id, WordId::new(0, 0));
     let info = dic.lexicon().get_word_info(entry.word_id).unwrap();
-    assert_eq!(info.surface(), "京都");
-    assert_eq!(info.reading_form(), "キョウト");
+    assert_eq!(info.headword(&dic), "京都");
+    assert_eq!(info.reading_form(&dic), "キョウト");
 }
 
 #[test]
@@ -155,7 +158,7 @@ fn build_user_dictionary_crossrefs() {
     assert_eq!(entry.word_id, WordId::new(1, 0));
     let winfo = dic.lexicon_set.get_word_info(entry.word_id).unwrap();
     assert_eq!(dic.lexicon_set.get_word_param(entry.word_id), (4, 4, 4000));
-    assert_eq!(winfo.surface(), "関");
+    assert_eq!(winfo.headword(&dic), "関");
     assert_eq!(winfo.a_unit_split().len(), 0);
     assert_eq!(
         winfo.word_structure(),
@@ -166,7 +169,7 @@ fn build_user_dictionary_crossrefs() {
     assert_eq!(entry.word_id, WordId::new(1, 1));
     assert_eq!(dic.lexicon_set.get_word_param(entry.word_id), (5, 5, 5000));
     let winfo = dic.lexicon_set.get_word_info(entry.word_id).unwrap();
-    assert_eq!(winfo.surface(), "関東");
+    assert_eq!(winfo.headword(&dic), "関東");
     assert_eq!(winfo.a_unit_split(), [WordId::new(1, 0), WordId::new(0, 1)]);
     assert_eq!(winfo.b_unit_split(), [WordId::new(1, 0), WordId::new(0, 1)]);
     assert_eq!(iter.next(), None);
