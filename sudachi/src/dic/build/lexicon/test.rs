@@ -71,6 +71,24 @@ fn parse_split_inline() {
 }
 
 #[test]
+fn parse_split_inline_pos_id() {
+    let mut rdr = LexiconReader::new();
+    let (splits, rel) = rdr.parse_splits("0/あ,0,あ/2").unwrap();
+    assert_eq!(splits.len(), 3);
+    assert_eq!(rel, 1);
+    assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
+    assert_eq!(
+        splits[1],
+        SplitUnit::Inline {
+            surface: "あ".to_string(),
+            pos: 0,
+            reading: None
+        }
+    );
+    assert_eq!(splits[2], SplitUnit::Ref(WordId::new(0, 2)));
+}
+
+#[test]
 fn parse_kyoto() {
     let mut rdr = LexiconReader::new();
     let data = "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
@@ -95,6 +113,23 @@ fn parse_kyoto() {
     assert_eq!(0, kyoto.splits_a.len());
     assert_eq!(0, kyoto.splits_b.len());
     assert!(kyoto.should_index());
+}
+
+#[test]
+fn parse_header_with_pos_id_only() {
+    let mut rdr = LexiconReader::new();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        "京都,6,6,5293,京都,0,キョウト,京都,*,A,*,*,*,*"
+    );
+    // preload one POS to resolve pos_id=0
+    let old = "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
+    rdr.read_bytes(old.as_bytes()).unwrap();
+    let before = rdr.entries().len();
+    rdr.read_bytes(data.as_bytes()).unwrap();
+    let kyoto = &rdr.entries()[before];
+    assert_eq!(kyoto.surface, "京都");
+    assert_eq!(kyoto.pos, 0);
 }
 
 #[test]

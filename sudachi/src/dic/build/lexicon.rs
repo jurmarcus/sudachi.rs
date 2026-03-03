@@ -35,8 +35,8 @@ use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
 use crate::dic::build::report::{ReportBuilder, Reporter};
 use crate::dic::build::MAX_POS_IDS;
 use crate::dic::grammar::Grammar;
-use crate::dic::word_id::WordId;
 use crate::dic::pos::POS_DEPTH;
+use crate::dic::word_id::WordId;
 use crate::error::SudachiResult;
 
 #[cfg(test)]
@@ -118,6 +118,223 @@ pub(crate) enum SplitUnit {
         pos: u16,
         reading: Option<String>,
     },
+}
+
+#[repr(usize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum Column {
+    IndexForm = 0,
+    LeftId = 1,
+    RightId = 2,
+    Cost = 3,
+    Headword = 4,
+    Pos1 = 5,
+    Pos2 = 6,
+    Pos3 = 7,
+    Pos4 = 8,
+    Pos5 = 9,
+    Pos6 = 10,
+    ReadingForm = 11,
+    NormalizedForm = 12,
+    DictionaryForm = 13,
+    Mode = 14,
+    SplitA = 15,
+    SplitB = 16,
+    WordStructure = 17,
+    SynonymGroups = 18,
+    SplitC = 19,
+    UserData = 20,
+    PosId = 21,
+}
+
+const NUM_COLUMNS: usize = 22;
+
+impl Column {
+    const fn as_usize(self) -> usize {
+        self as usize
+    }
+
+    const fn legacy_index(self) -> usize {
+        self as usize
+    }
+
+    const fn is_required(self) -> bool {
+        matches!(
+            self,
+            Column::IndexForm
+                | Column::LeftId
+                | Column::RightId
+                | Column::Cost
+                | Column::ReadingForm
+                | Column::NormalizedForm
+                | Column::DictionaryForm
+                | Column::SplitA
+                | Column::SplitB
+                | Column::WordStructure
+        )
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Column::IndexForm => "INDEX_FORM",
+            Column::LeftId => "LEFT_ID",
+            Column::RightId => "RIGHT_ID",
+            Column::Cost => "COST",
+            Column::Headword => "HEADWORD",
+            Column::Pos1 => "POS1",
+            Column::Pos2 => "POS2",
+            Column::Pos3 => "POS3",
+            Column::Pos4 => "POS4",
+            Column::Pos5 => "POS5",
+            Column::Pos6 => "POS6",
+            Column::ReadingForm => "READING_FORM",
+            Column::NormalizedForm => "NORMALIZED_FORM",
+            Column::DictionaryForm => "DICTIONARY_FORM",
+            Column::Mode => "MODE",
+            Column::SplitA => "SPLIT_A",
+            Column::SplitB => "SPLIT_B",
+            Column::WordStructure => "WORD_STRUCTURE",
+            Column::SynonymGroups => "SYNONYM_GROUPS",
+            Column::SplitC => "SPLIT_C",
+            Column::UserData => "USER_DATA",
+            Column::PosId => "POS_ID",
+        }
+    }
+
+    fn from_str(data: &str) -> Option<Self> {
+        let mut normalized = String::with_capacity(data.len());
+        for c in data.chars() {
+            if c != '_' {
+                normalized.push(c.to_ascii_lowercase());
+            }
+        }
+
+        match normalized.as_str() {
+            "indexform" => Some(Column::IndexForm),
+            "leftid" => Some(Column::LeftId),
+            "rightid" => Some(Column::RightId),
+            "cost" => Some(Column::Cost),
+            "headword" => Some(Column::Headword),
+            "pos1" => Some(Column::Pos1),
+            "pos2" => Some(Column::Pos2),
+            "pos3" => Some(Column::Pos3),
+            "pos4" => Some(Column::Pos4),
+            "pos5" => Some(Column::Pos5),
+            "pos6" => Some(Column::Pos6),
+            "readingform" => Some(Column::ReadingForm),
+            "normalizedform" => Some(Column::NormalizedForm),
+            "dictionaryform" => Some(Column::DictionaryForm),
+            "mode" => Some(Column::Mode),
+            "splita" => Some(Column::SplitA),
+            "splitb" => Some(Column::SplitB),
+            "wordstructure" => Some(Column::WordStructure),
+            "synonymgroups" => Some(Column::SynonymGroups),
+            "splitc" => Some(Column::SplitC),
+            "userdata" => Some(Column::UserData),
+            "posid" => Some(Column::PosId),
+            _ => None,
+        }
+    }
+}
+
+const POS_PARTS: [Column; POS_DEPTH] = [
+    Column::Pos1,
+    Column::Pos2,
+    Column::Pos3,
+    Column::Pos4,
+    Column::Pos5,
+    Column::Pos6,
+];
+
+const ALL_COLUMNS: [Column; NUM_COLUMNS] = [
+    Column::IndexForm,
+    Column::LeftId,
+    Column::RightId,
+    Column::Cost,
+    Column::Headword,
+    Column::Pos1,
+    Column::Pos2,
+    Column::Pos3,
+    Column::Pos4,
+    Column::Pos5,
+    Column::Pos6,
+    Column::ReadingForm,
+    Column::NormalizedForm,
+    Column::DictionaryForm,
+    Column::Mode,
+    Column::SplitA,
+    Column::SplitB,
+    Column::WordStructure,
+    Column::SynonymGroups,
+    Column::SplitC,
+    Column::UserData,
+    Column::PosId,
+];
+
+#[derive(Copy, Clone)]
+enum ColumnLayout {
+    Legacy,
+    Header([i16; NUM_COLUMNS]),
+}
+
+impl ColumnLayout {
+    fn from_record(record: &StringRecord, ctx: &DicCompilationCtx) -> SudachiResult<(Self, bool)> {
+        if record.len() > 1 {
+            if let Some(left_id) = record.get(Column::LeftId.legacy_index()) {
+                if parse_i16(left_id).is_ok() {
+                    return Ok((ColumnLayout::Legacy, false));
+                }
+            }
+        }
+
+        let mut mapping = [-1_i16; NUM_COLUMNS];
+        for (idx, field) in record.iter().enumerate() {
+            let col = match Column::from_str(field) {
+                Some(c) => c,
+                None => return ctx.err(BuildFailure::NoRawField("INVALID_COLUMN_NAME")),
+            };
+            let prev = &mut mapping[col.as_usize()];
+            if *prev >= 0 {
+                return ctx.err(BuildFailure::NoRawField("DUPLICATED_COLUMN_NAME"));
+            }
+            *prev = idx as i16;
+        }
+
+        for col in ALL_COLUMNS {
+            if col.is_required() && mapping[col.as_usize()] < 0 {
+                return ctx.err(BuildFailure::NoRawField(col.label()));
+            }
+        }
+
+        let pos_parts_found = POS_PARTS
+            .iter()
+            .filter(|col| mapping[col.as_usize()] >= 0)
+            .count();
+        if pos_parts_found != 0 && pos_parts_found != POS_DEPTH {
+            return ctx.err(BuildFailure::NoRawField("POS1_6_SET"));
+        }
+
+        let has_pos_id = mapping[Column::PosId.as_usize()] >= 0;
+        if !has_pos_id && pos_parts_found == 0 {
+            return ctx.err(BuildFailure::NoRawField("POS_OR_POS_ID"));
+        }
+
+        Ok((ColumnLayout::Header(mapping), true))
+    }
+
+    fn index(self, col: Column) -> Option<usize> {
+        match self {
+            ColumnLayout::Legacy => Some(col.legacy_index()),
+            ColumnLayout::Header(mapping) => {
+                let idx = mapping[col.as_usize()];
+                if idx < 0 {
+                    None
+                } else {
+                    Some(idx as usize)
+                }
+            }
+        }
+    }
 }
 
 impl SplitUnit {
@@ -292,18 +509,29 @@ impl LexiconReader {
     }
 
     pub fn read_bytes(&mut self, data: &[u8]) -> SudachiResult<usize> {
+        // check header later to parse both of v0/v1
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(false)
             .trim(Trim::None)
             .flexible(true)
             .from_reader(data);
+        let mut layout = ColumnLayout::Legacy;
+        let mut first_row = true;
         let mut nread = 0;
         for record in reader.records() {
             match record {
                 Ok(r) => {
                     let line = r.position().map_or(0, |p| p.line()) as usize;
                     self.ctx.set_line(line);
-                    self.read_record(&r)?;
+                    if first_row {
+                        first_row = false;
+                        let (resolved, skip_row) = ColumnLayout::from_record(&r, &self.ctx)?;
+                        layout = resolved;
+                        if skip_row {
+                            continue;
+                        }
+                    }
+                    self.read_record(&r, layout)?;
                     nread += 1;
                 }
                 Err(e) => {
@@ -316,37 +544,69 @@ impl LexiconReader {
         Ok(nread)
     }
 
-    fn read_record(&mut self, data: &StringRecord) -> SudachiResult<()> {
-        self.parse_record(data).map(|r| self.entries.push(r))
+    fn read_record(&mut self, data: &StringRecord, layout: ColumnLayout) -> SudachiResult<()> {
+        self.parse_record(data, layout)
+            .map(|r| self.entries.push(r))
     }
 
-    fn parse_record(&mut self, data: &StringRecord) -> SudachiResult<RawLexiconEntry> {
+    fn parse_record(
+        &mut self,
+        data: &StringRecord,
+        layout: ColumnLayout,
+    ) -> SudachiResult<RawLexiconEntry> {
         let ctx = std::mem::take(&mut self.ctx);
         let rec = RecordWrapper { record: data, ctx };
-        let surface = rec.get(0, "(0) surface", unescape)?;
-        let left_id = rec.get(1, "(1) left_id", parse_i16)?;
-        let right_id = rec.get(2, "(2) right_id", parse_i16)?;
-        let cost = rec.get(3, "(3) cost", parse_i16)?;
+        let index_form = rec.get_col(layout, Column::IndexForm, unescape)?;
+        let left_id = rec.get_col(layout, Column::LeftId, parse_i16)?;
+        let right_id = rec.get_col(layout, Column::RightId, parse_i16)?;
+        let cost = rec.get_col(layout, Column::Cost, parse_i16)?;
 
-        let headword = rec.get(4, "(4) headword", unescape_cow)?;
+        let headword = rec.get_col(layout, Column::Headword, unescape_cow)?;
 
-        let p1 = rec.get(5, "(5) pos-1", unescape_cow)?;
-        let p2 = rec.get(6, "(6) pos-2", unescape_cow)?;
-        let p3 = rec.get(7, "(7) pos-3", unescape_cow)?;
-        let p4 = rec.get(8, "(8) pos-4", unescape_cow)?;
-        let p5 = rec.get(9, "(9) pos-conj-1", unescape_cow)?;
-        let p6 = rec.get(10, "(10) pos-conj-2", unescape_cow)?;
+        let p1 = rec.get_col_or_empty(layout, Column::Pos1, unescape_cow)?;
+        let p2 = rec.get_col_or_empty(layout, Column::Pos2, unescape_cow)?;
+        let p3 = rec.get_col_or_empty(layout, Column::Pos3, unescape_cow)?;
+        let p4 = rec.get_col_or_empty(layout, Column::Pos4, unescape_cow)?;
+        let p5 = rec.get_col_or_empty(layout, Column::Pos5, unescape_cow)?;
+        let p6 = rec.get_col_or_empty(layout, Column::Pos6, unescape_cow)?;
 
-        let reading = rec.get(11, "(11) reading", unescape_cow)?;
-        let normalized = rec.get(12, "(12) normalized", unescape_cow)?;
-        let dic_form_id = rec.get(13, "(13) dic-form", parse_dic_form)?;
-        let splitting = rec.get(14, "(14) splitting", parse_mode)?;
-        let (split_a, resolve_a) = rec.get(15, "(15) split-a", |s| self.parse_splits(s))?;
-        let (split_b, resolve_b) = rec.get(16, "(16) split-b", |s| self.parse_splits(s))?;
-        let parts = rec.get(17, "(17) word-structure", parse_wordid_list)?;
-        let synonyms = rec.get_or_default(18, "(18) synonym-group", parse_u32_list)?;
+        let reading = rec.get_col(layout, Column::ReadingForm, unescape_cow)?;
+        let normalized = rec.get_col(layout, Column::NormalizedForm, unescape_cow)?;
+        let dic_form_id = rec.get_col(layout, Column::DictionaryForm, parse_dic_form)?;
+        let splitting = rec.get_col(layout, Column::Mode, parse_mode)?;
+        let (split_a, resolve_a) = rec.get_col(layout, Column::SplitA, |s| self.parse_splits(s))?;
+        let (split_b, resolve_b) = rec.get_col(layout, Column::SplitB, |s| self.parse_splits(s))?;
+        let parts = rec.get_col(layout, Column::WordStructure, parse_wordid_list)?;
+        let synonyms = rec.get_col_or_default(layout, Column::SynonymGroups, parse_u32_list)?;
+        let pos_id = rec.get_col_or(layout, Column::PosId, -1_i16, |s| {
+            if s.is_empty() {
+                Ok(-1)
+            } else {
+                parse_i16(s)
+            }
+        })?;
 
-        let pos = rec.ctx.transform(self.pos_of([p1, p2, p3, p4, p5, p6]))?;
+        let pos = if !p1.is_empty() {
+            let pos = rec.ctx.transform(self.pos_of([p1, p2, p3, p4, p5, p6]))?;
+            if pos_id >= 0 && pos_id as u16 != pos {
+                return rec.ctx.err(BuildFailure::InvalidSplit(
+                    "PosId and Pos1..Pos6 do not match".to_owned(),
+                ));
+            }
+            pos
+        } else if pos_id >= 0 {
+            let pos = pos_id as u16;
+            if pos as usize >= self.pos.len() {
+                return rec.ctx.err(BuildFailure::InvalidSplit(
+                    "POS for id was not present in the table".to_owned(),
+                ));
+            }
+            pos
+        } else {
+            return rec.ctx.err(BuildFailure::InvalidSplit(
+                "Both PosId and Pos1..Pos6 are missing".to_owned(),
+            ));
+        };
 
         if splitting == Mode::A && (!split_a.is_empty() || !split_b.is_empty()) {
             return rec.ctx.err(BuildFailure::InvalidSplit(
@@ -356,7 +616,7 @@ impl LexiconReader {
 
         self.unresolved += resolve_a + resolve_b;
 
-        if surface.is_empty() {
+        if index_form.is_empty() {
             return rec.ctx.err(BuildFailure::EmptySurface);
         }
 
@@ -369,8 +629,8 @@ impl LexiconReader {
             dic_form: dic_form_id,
             norm_form: none_if_equal(&headword, normalized),
             reading: none_if_equal(&headword, reading),
-            headword: none_if_equal(&surface, headword),
-            surface,
+            headword: none_if_equal(&index_form, headword),
+            surface: index_form,
             pos,
             splitting,
             splits_a: split_a,
@@ -498,6 +758,16 @@ impl LexiconReader {
     fn parse_split(&mut self, data: &str) -> DicWriteResult<SplitUnit> {
         if WORD_ID_LITERAL.is_match(data) {
             Ok(SplitUnit::Ref(parse_wordid(data)?))
+        } else if data.matches(',').count() == 2 {
+            let mut iter = data.splitn(3, ',');
+            let surface = it_next(data, &mut iter, "(1) surface", unescape)?;
+            let pos = it_next(data, &mut iter, "(2) pos-id", parse_i16)?;
+            let reading = it_next(data, &mut iter, "(3) reading", unescape_cow)?;
+            Ok(SplitUnit::Inline {
+                pos: pos as u16,
+                reading: none_if_equal(&surface, reading),
+                surface,
+            })
         } else {
             let mut iter = data.splitn(8, ',');
             let surface = it_next(data, &mut iter, "(1) surface", unescape)?;
@@ -593,25 +863,50 @@ struct RecordWrapper<'a> {
 
 impl<'a> RecordWrapper<'a> {
     #[inline(always)]
-    fn get<T, F>(&self, idx: usize, name: &'static str, f: F) -> SudachiResult<T>
+    fn get_col<T, F>(&self, layout: ColumnLayout, col: Column, f: F) -> SudachiResult<T>
     where
         F: FnOnce(&'a str) -> DicWriteResult<T>,
     {
-        match self.record.get(idx) {
+        match layout.index(col).and_then(|idx| self.record.get(idx)) {
             Some(s) => self.ctx.transform(f(s)),
-            None => self.ctx.err(BuildFailure::NoRawField(name)),
+            None => self.ctx.err(BuildFailure::NoRawField(col.label())),
         }
     }
 
     #[inline(always)]
-    fn get_or_default<T, F>(&self, idx: usize, _name: &'static str, f: F) -> SudachiResult<T>
+    fn get_col_or_empty<T, F>(&self, layout: ColumnLayout, col: Column, f: F) -> SudachiResult<T>
+    where
+        F: FnOnce(&'a str) -> DicWriteResult<T>,
+    {
+        match layout.index(col).and_then(|idx| self.record.get(idx)) {
+            Some(s) => self.ctx.transform(f(s)),
+            None => self.ctx.transform(f("")),
+        }
+    }
+
+    #[inline(always)]
+    fn get_col_or_default<T, F>(&self, layout: ColumnLayout, col: Column, f: F) -> SudachiResult<T>
     where
         F: FnOnce(&'a str) -> DicWriteResult<T>,
         T: Default,
     {
-        match self.record.get(idx) {
+        self.get_col_or(layout, col, T::default(), f)
+    }
+
+    #[inline(always)]
+    fn get_col_or<T, F>(
+        &self,
+        layout: ColumnLayout,
+        col: Column,
+        default: T,
+        f: F,
+    ) -> SudachiResult<T>
+    where
+        F: FnOnce(&'a str) -> DicWriteResult<T>,
+    {
+        match layout.index(col).and_then(|idx| self.record.get(idx)) {
             Some(s) => self.ctx.transform(f(s)),
-            None => Ok(<T as Default>::default()),
+            None => Ok(default),
         }
     }
 }

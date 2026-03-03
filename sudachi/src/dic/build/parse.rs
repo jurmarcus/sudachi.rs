@@ -133,6 +133,7 @@ pub(crate) fn parse_u32_list(data: &str) -> DicWriteResult<Vec<u32>> {
 }
 
 lazy_static! {
+    // pattern for an entry reference by line number
     pub(crate) static ref WORD_ID_LITERAL: Regex = Regex::new(r"^U?\d+$").unwrap();
 }
 
