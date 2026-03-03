@@ -85,15 +85,6 @@ pub(crate) fn parse_u32(data: &str) -> DicWriteResult<u32> {
 }
 
 #[inline]
-pub(crate) fn parse_dic_form(data: &str) -> DicWriteResult<WordId> {
-    if data == "*" {
-        Ok(WordId::INVALID)
-    } else {
-        parse_wordid(data)
-    }
-}
-
-#[inline]
 pub(crate) fn parse_wordid(data: &str) -> DicWriteResult<WordId> {
     if let Some(stripped) = data.strip_prefix('U') {
         let wid = parse_wordid_raw(stripped);
@@ -112,15 +103,6 @@ fn parse_wordid_raw(data: &str) -> DicWriteResult<WordId> {
         },
         Err(_) => Err(BuildFailure::InvalidWordId(data.to_owned())),
     }
-}
-
-#[inline]
-pub(crate) fn parse_wordid_list(data: &str) -> DicWriteResult<Vec<WordId>> {
-    if data.is_empty() || data == "*" {
-        return Ok(Vec::new());
-    }
-
-    parse_slash_list(data, parse_wordid)
 }
 
 #[inline]

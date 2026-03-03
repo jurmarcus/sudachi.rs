@@ -26,14 +26,14 @@ use std::fmt::Write;
 #[test]
 fn parse_split_empty() {
     let mut rdr = LexiconReader::new();
-    assert_eq!(rdr.parse_splits("").unwrap().0.len(), 0);
-    assert_eq!(rdr.parse_splits("*").unwrap().0.len(), 0);
+    assert_eq!(rdr.parse_splits("", true).unwrap().0.len(), 0);
+    assert_eq!(rdr.parse_splits("*", true).unwrap().0.len(), 0);
 }
 
 #[test]
 fn parse_split_sys_ids() {
     let mut rdr = LexiconReader::new();
-    let (splits, rel) = rdr.parse_splits("0/1/2").unwrap();
+    let (splits, rel) = rdr.parse_splits("0/1/2", true).unwrap();
     assert_eq!(splits.len(), 3);
     assert_eq!(rel, 0);
     assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
@@ -44,7 +44,7 @@ fn parse_split_sys_ids() {
 #[test]
 fn parse_split_user_ids() {
     let mut rdr = LexiconReader::new();
-    let (splits, rel) = rdr.parse_splits("0/U1/2").unwrap();
+    let (splits, rel) = rdr.parse_splits("0/U1/2", true).unwrap();
     assert_eq!(splits.len(), 3);
     assert_eq!(rel, 0);
     assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
@@ -55,7 +55,7 @@ fn parse_split_user_ids() {
 #[test]
 fn parse_split_inline() {
     let mut rdr = LexiconReader::new();
-    let (splits, rel) = rdr.parse_splits("0/あ,0,1,2,3,4,5,あ/2").unwrap();
+    let (splits, rel) = rdr.parse_splits("0/あ,0,1,2,3,4,5,あ/2", true).unwrap();
     assert_eq!(splits.len(), 3);
     assert_eq!(rel, 1);
     assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
@@ -73,7 +73,7 @@ fn parse_split_inline() {
 #[test]
 fn parse_split_inline_pos_id() {
     let mut rdr = LexiconReader::new();
-    let (splits, rel) = rdr.parse_splits("0/あ,0,あ/2").unwrap();
+    let (splits, rel) = rdr.parse_splits("0/あ,0,あ/2", true).unwrap();
     assert_eq!(splits.len(), 3);
     assert_eq!(rel, 1);
     assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
@@ -86,6 +86,15 @@ fn parse_split_inline_pos_id() {
         }
     );
     assert_eq!(splits[2], SplitUnit::Ref(WordId::new(0, 2)));
+}
+
+#[test]
+fn parse_split_disallow_numeric_ref() {
+    let mut rdr = LexiconReader::new();
+    assert_matches!(
+        rdr.parse_splits("0/1", false),
+        Err(BuildFailure::InvalidSplit(_))
+    );
 }
 
 #[test]
@@ -130,6 +139,21 @@ fn parse_header_with_pos_id_only() {
     let kyoto = &rdr.entries()[before];
     assert_eq!(kyoto.surface, "京都");
     assert_eq!(kyoto.pos, 0);
+}
+
+#[test]
+fn parse_header_word_structure_triple_ref() {
+    let mut rdr = LexiconReader::new();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "東京都,6,8,5320,名詞,固有名詞,地名,一般,*,*,トウキョウト,,,B,\"東京,0,トウキョウ/都,1,ト\",\"東京,0,トウキョウ/都,2,ト\",\"東京,0,トウキョウ/都,3,ト\"\n"
+    );
+    rdr.read_bytes(data.as_bytes()).unwrap();
+    let e = &rdr.entries()[0];
+    assert_eq!(e.splits_a.len(), 2);
+    assert_eq!(e.splits_b.len(), 2);
+    assert_eq!(e.word_structure.len(), 2);
+    assert!(matches!(e.word_structure[0], SplitUnit::Inline { .. }));
 }
 
 #[test]

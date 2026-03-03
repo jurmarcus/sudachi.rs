@@ -28,8 +28,8 @@ use memmap2::Mmap;
 use crate::analysis::Mode;
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx, DicWriteResult};
 use crate::dic::build::parse::{
-    it_next, none_if_equal, parse_dic_form, parse_i16, parse_mode, parse_slash_list,
-    parse_u32_list, parse_wordid, parse_wordid_list, unescape, unescape_cow, WORD_ID_LITERAL,
+    it_next, none_if_equal, parse_i16, parse_mode, parse_slash_list,
+    parse_u32_list, parse_wordid, unescape, unescape_cow, WORD_ID_LITERAL,
 };
 use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
 use crate::dic::build::report::{ReportBuilder, Reporter};
@@ -335,6 +335,10 @@ impl ColumnLayout {
             }
         }
     }
+
+    const fn is_legacy(self) -> bool {
+        matches!(self, ColumnLayout::Legacy)
+    }
 }
 
 impl SplitUnit {
@@ -376,7 +380,7 @@ pub(crate) struct RawLexiconEntry {
     pub cost: i16,
     pub surface: String,
     pub headword: Option<String>,
-    pub dic_form: WordId,
+    pub dic_form: SplitUnit,
     pub norm_form: Option<String>,
     pub pos: u16,
     pub splits_a: Vec<SplitUnit>,
@@ -384,7 +388,7 @@ pub(crate) struct RawLexiconEntry {
     pub reading: Option<String>,
     #[allow(unused)]
     pub splitting: Mode,
-    pub word_structure: Vec<WordId>,
+    pub word_structure: Vec<SplitUnit>,
     pub synonym_groups: Vec<u32>,
 }
 
@@ -428,12 +432,23 @@ impl RawLexiconEntry {
         w.write_all(&self.pos.to_le_bytes())?;
         size += 2;
         size += u16w.write_empty_if_equal(w, self.norm_form(), self.headword())?;
-        w.write_all(&self.dic_form.as_raw().to_le_bytes())?;
+        let dic_form = match self.dic_form {
+            SplitUnit::Ref(wid) => wid,
+            SplitUnit::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
+        };
+        w.write_all(&dic_form.as_raw().to_le_bytes())?;
         size += 4;
         size += u16w.write_empty_if_equal(w, self.reading(), self.headword())?;
         size += write_u32_array(w, &self.splits_a)?;
         size += write_u32_array(w, &self.splits_b)?;
-        size += write_u32_array(w, &self.word_structure)?;
+        let mut ws = Vec::with_capacity(self.word_structure.len());
+        for s in self.word_structure.iter() {
+            match s {
+                SplitUnit::Ref(wid) => ws.push(*wid),
+                _ => panic!("word_structure refs must be resolved before writing"),
+            }
+        }
+        size += write_u32_array(w, &ws)?;
         size += write_u32_array(w, &self.synonym_groups)?;
 
         Ok(size)
@@ -561,7 +576,7 @@ impl LexiconReader {
         let right_id = rec.get_col(layout, Column::RightId, parse_i16)?;
         let cost = rec.get_col(layout, Column::Cost, parse_i16)?;
 
-        let headword = rec.get_col(layout, Column::Headword, unescape_cow)?;
+        let headword = rec.get_col_or_empty(layout, Column::Headword, unescape_cow)?;
 
         let p1 = rec.get_col_or_empty(layout, Column::Pos1, unescape_cow)?;
         let p2 = rec.get_col_or_empty(layout, Column::Pos2, unescape_cow)?;
@@ -572,11 +587,18 @@ impl LexiconReader {
 
         let reading = rec.get_col(layout, Column::ReadingForm, unescape_cow)?;
         let normalized = rec.get_col(layout, Column::NormalizedForm, unescape_cow)?;
-        let dic_form_id = rec.get_col(layout, Column::DictionaryForm, parse_dic_form)?;
+        let dic_form_ref =
+            rec.get_col_or(layout, Column::DictionaryForm, "".to_owned(), |s| Ok(s.to_owned()))?;
         let splitting = rec.get_col(layout, Column::Mode, parse_mode)?;
-        let (split_a, resolve_a) = rec.get_col(layout, Column::SplitA, |s| self.parse_splits(s))?;
-        let (split_b, resolve_b) = rec.get_col(layout, Column::SplitB, |s| self.parse_splits(s))?;
-        let parts = rec.get_col(layout, Column::WordStructure, parse_wordid_list)?;
+        let allow_word_id_ref = layout.is_legacy();
+        let (split_a, resolve_a) = rec.get_col(layout, Column::SplitA, |s| {
+            self.parse_splits(s, allow_word_id_ref)
+        })?;
+        let (split_b, resolve_b) = rec.get_col(layout, Column::SplitB, |s| {
+            self.parse_splits(s, allow_word_id_ref)
+        })?;
+        let (parts, resolve_parts) =
+            rec.get_col(layout, Column::WordStructure, |s| self.parse_splits(s, allow_word_id_ref))?;
         let synonyms = rec.get_col_or_default(layout, Column::SynonymGroups, parse_u32_list)?;
         let pos_id = rec.get_col_or(layout, Column::PosId, -1_i16, |s| {
             if s.is_empty() {
@@ -614,7 +636,14 @@ impl LexiconReader {
             ));
         }
 
-        self.unresolved += resolve_a + resolve_b;
+        let (dic_form, resolve_dic_form) = rec.ctx.transform(self.parse_dic_form(
+            &dic_form_ref,
+            allow_word_id_ref,
+            &headword,
+            pos,
+            reading.as_ref(),
+        ))?;
+        self.unresolved += resolve_a + resolve_b + resolve_parts + resolve_dic_form;
 
         if index_form.is_empty() {
             return rec.ctx.err(BuildFailure::EmptySurface);
@@ -626,7 +655,7 @@ impl LexiconReader {
             left_id,
             right_id,
             cost,
-            dic_form: dic_form_id,
+            dic_form,
             norm_form: none_if_equal(&headword, normalized),
             reading: none_if_equal(&headword, reading),
             headword: none_if_equal(&index_form, headword),
@@ -686,8 +715,13 @@ impl LexiconReader {
                 });
             }
 
-            if e.dic_form != WordId::INVALID {
-                ctx.transform(Self::validate_wid(e.dic_form, max_0, max_1, "dic_form"))?;
+            match e.dic_form {
+                SplitUnit::Ref(wid) => {
+                    if wid != WordId::INVALID {
+                        ctx.transform(Self::validate_wid(wid, max_0, max_1, "dic_form"))?;
+                    }
+                }
+                _ => panic!("at this point dictionary_form must be resolved"),
             }
 
             for s in e.splits_a.iter() {
@@ -709,7 +743,12 @@ impl LexiconReader {
             }
 
             for wid in e.word_structure.iter() {
-                ctx.transform(Self::validate_wid(*wid, max_0, max_1, "word_structure"))?;
+                match wid {
+                    SplitUnit::Ref(wid) => {
+                        ctx.transform(Self::validate_wid(*wid, max_0, max_1, "word_structure"))?;
+                    }
+                    _ => panic!("at this point there must not be unresolved word_structure"),
+                }
             }
 
             ctx.add_line(1);
@@ -738,12 +777,16 @@ impl LexiconReader {
         Ok(())
     }
 
-    fn parse_splits(&mut self, data: &str) -> DicWriteResult<(Vec<SplitUnit>, usize)> {
+    fn parse_splits(
+        &mut self,
+        data: &str,
+        allow_word_id_ref: bool,
+    ) -> DicWriteResult<(Vec<SplitUnit>, usize)> {
         if data.is_empty() || data == "*" {
             return Ok((Vec::new(), 0));
         }
 
-        parse_slash_list(data, |s| self.parse_split(s)).map(|splits| {
+        parse_slash_list(data, |s| self.parse_split(s, allow_word_id_ref)).map(|splits| {
             let unresolved = splits
                 .iter()
                 .map(|s| match s {
@@ -755,8 +798,11 @@ impl LexiconReader {
         })
     }
 
-    fn parse_split(&mut self, data: &str) -> DicWriteResult<SplitUnit> {
+    fn parse_split(&mut self, data: &str, allow_word_id_ref: bool) -> DicWriteResult<SplitUnit> {
         if WORD_ID_LITERAL.is_match(data) {
+            if !allow_word_id_ref {
+                return Err(BuildFailure::InvalidSplit(data.to_owned()));
+            }
             Ok(SplitUnit::Ref(parse_wordid(data)?))
         } else if data.matches(',').count() == 2 {
             let mut iter = data.splitn(3, ',');
@@ -814,6 +860,14 @@ impl LexiconReader {
     ) -> Result<usize, (String, usize)> {
         let mut total = 0;
         for (line, e) in self.entries.iter_mut().enumerate() {
+            match Self::resolve_split(&mut e.dic_form, resolver) {
+                Some(val) => total += val,
+                None => {
+                    let s: &SplitUnit = unsafe { std::mem::transmute(&e.dic_form) };
+                    let split_info = s.format(self);
+                    return Err((split_info, line));
+                }
+            }
             for s in e.splits_a.iter_mut() {
                 match Self::resolve_split(s, resolver) {
                     Some(val) => total += val,
@@ -840,6 +894,16 @@ impl LexiconReader {
                     }
                 }
             }
+            for s in e.word_structure.iter_mut() {
+                match Self::resolve_split(s, resolver) {
+                    Some(val) => total += val,
+                    None => {
+                        let s: &SplitUnit = unsafe { std::mem::transmute(&*s) };
+                        let split_info = s.format(self);
+                        return Err((split_info, line));
+                    }
+                }
+            }
         }
         Ok(total)
     }
@@ -853,6 +917,42 @@ impl LexiconReader {
                 Some(1)
             }
         }
+    }
+
+    fn parse_dic_form(
+        &mut self,
+        data: &str,
+        allow_word_id_ref: bool,
+        headword: &str,
+        pos: u16,
+        reading: &str,
+    ) -> DicWriteResult<(SplitUnit, usize)> {
+        if data.is_empty() || data == "*" {
+            return Ok((SplitUnit::Ref(WordId::INVALID), 0));
+        }
+
+        let parsed = self.parse_split(data, allow_word_id_ref)?;
+        if let SplitUnit::Inline {
+            surface,
+            pos: p,
+            reading: r,
+        } = &parsed
+        {
+            let own_reading = if headword == reading {
+                None
+            } else {
+                Some(reading)
+            };
+            if surface == headword && *p == pos && r.as_deref() == own_reading {
+                return Ok((SplitUnit::Ref(WordId::INVALID), 0));
+            }
+        }
+
+        let unresolved = match parsed {
+            SplitUnit::Ref(_) => 0,
+            SplitUnit::Inline { .. } => 1,
+        };
+        Ok((parsed, unresolved))
     }
 }
 
