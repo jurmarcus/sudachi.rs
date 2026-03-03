@@ -24,7 +24,6 @@ mod pos_matcher;
 mod pretokenizer;
 mod projection;
 mod tokenizer;
-mod word_info;
 
 /// SudachiPy raw module root.
 ///
@@ -36,7 +35,6 @@ fn sudachipy(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<tokenizer::PyTokenizer>()?;
     m.add_class::<morpheme::PyMorphemeListWrapper>()?;
     m.add_class::<morpheme::PyMorpheme>()?;
-    m.add_class::<word_info::PyWordInfo>()?;
     m.add_class::<pos_matcher::PyPosMatcher>()?;
     build::register_functions(m)?;
     Ok(())
