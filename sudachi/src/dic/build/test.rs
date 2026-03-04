@@ -28,6 +28,38 @@ use std::io::sink;
 static MATRIX_10_10: &[u8] = include_bytes!("test/matrix_10x10.def");
 
 #[test]
+fn read_pos_then_read_lexicon_with_pos_id() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    let pos = "0,名詞,固有名詞,地名,一般,*,*\n1,名詞,一般,*,*,*,*";
+    bldr.read_pos(pos.as_bytes()).unwrap();
+
+    let lex = concat!(
+        "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        "京都,6,6,5293,京都,0,キョウト,京都,*,A,*,*,*,*"
+    );
+    assert_eq!(1, bldr.read_lexicon(lex.as_bytes()).unwrap());
+    bldr.resolve().unwrap();
+    let mut out = Vec::new();
+    bldr.compile(&mut out).unwrap();
+}
+
+#[test]
+fn read_pos_after_lexicon_fails() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap();
+    let pos = "0,名詞,固有名詞,地名,一般,*,*";
+    claim::assert_matches!(
+        bldr.read_pos(pos.as_bytes()),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::InvalidSplit(_),
+            ..
+        }))
+    );
+}
+
+#[test]
 #[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_grammar() {
     let mut bldr = DictBuilder::new_system();

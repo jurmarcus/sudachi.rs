@@ -28,9 +28,10 @@ use memmap2::Mmap;
 use crate::analysis::Mode;
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx, DicWriteResult};
 use crate::dic::build::parse::{
-    it_next, none_if_equal, parse_i16, parse_mode, parse_slash_list,
-    parse_u32_list, parse_wordid, unescape, unescape_cow, WORD_ID_LITERAL,
+    it_next, none_if_equal, parse_i16, parse_mode, parse_slash_list, parse_u32_list, parse_wordid,
+    unescape, unescape_cow, WORD_ID_LITERAL,
 };
+use crate::dic::build::pos::read_pos_bytes as read_pos_csv_bytes;
 use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
 use crate::dic::build::report::{ReportBuilder, Reporter};
 use crate::dic::build::MAX_POS_IDS;
@@ -559,6 +560,20 @@ impl LexiconReader {
         Ok(nread)
     }
 
+    pub fn read_pos_file(&mut self, path: &Path) -> SudachiResult<usize> {
+        let file = File::open(path)?;
+        let map = unsafe { Mmap::map(&file) }?;
+        let filename = path.to_str().unwrap_or("<invalid-utf8>").to_owned();
+        let old_name = self.ctx.set_filename(filename);
+        let res = self.read_pos_bytes(&map);
+        self.ctx.set_filename(old_name);
+        res
+    }
+
+    pub fn read_pos_bytes(&mut self, data: &[u8]) -> SudachiResult<usize> {
+        read_pos_csv_bytes(&mut self.pos, !self.entries.is_empty(), data, &mut self.ctx)
+    }
+
     fn read_record(&mut self, data: &StringRecord, layout: ColumnLayout) -> SudachiResult<()> {
         self.parse_record(data, layout)
             .map(|r| self.entries.push(r))
@@ -587,8 +602,9 @@ impl LexiconReader {
 
         let reading = rec.get_col(layout, Column::ReadingForm, unescape_cow)?;
         let normalized = rec.get_col(layout, Column::NormalizedForm, unescape_cow)?;
-        let dic_form_ref =
-            rec.get_col_or(layout, Column::DictionaryForm, "".to_owned(), |s| Ok(s.to_owned()))?;
+        let dic_form_ref = rec.get_col_or(layout, Column::DictionaryForm, "".to_owned(), |s| {
+            Ok(s.to_owned())
+        })?;
         let splitting = rec.get_col(layout, Column::Mode, parse_mode)?;
         let allow_word_id_ref = layout.is_legacy();
         let (split_a, resolve_a) = rec.get_col(layout, Column::SplitA, |s| {
@@ -597,8 +613,9 @@ impl LexiconReader {
         let (split_b, resolve_b) = rec.get_col(layout, Column::SplitB, |s| {
             self.parse_splits(s, allow_word_id_ref)
         })?;
-        let (parts, resolve_parts) =
-            rec.get_col(layout, Column::WordStructure, |s| self.parse_splits(s, allow_word_id_ref))?;
+        let (parts, resolve_parts) = rec.get_col(layout, Column::WordStructure, |s| {
+            self.parse_splits(s, allow_word_id_ref)
+        })?;
         let synonyms = rec.get_col_or_default(layout, Column::SynonymGroups, parse_u32_list)?;
         let pos_id = rec.get_col_or(layout, Column::PosId, -1_i16, |s| {
             if s.is_empty() {
@@ -609,7 +626,9 @@ impl LexiconReader {
         })?;
 
         let pos = if !p1.is_empty() {
-            let pos = rec.ctx.transform(self.pos_of([p1, p2, p3, p4, p5, p6]))?;
+            let pos = rec
+                .ctx
+                .transform(self.pos_id_of([p1, p2, p3, p4, p5, p6]))?;
             if pos_id >= 0 && pos_id as u16 != pos {
                 return rec.ctx.err(BuildFailure::InvalidSplit(
                     "PosId and Pos1..Pos6 do not match".to_owned(),
@@ -671,7 +690,7 @@ impl LexiconReader {
         Ok(entry)
     }
 
-    fn pos_of(&mut self, data: [Cow<str>; POS_DEPTH]) -> DicWriteResult<u16> {
+    fn pos_id_of(&mut self, data: [Cow<str>; POS_DEPTH]) -> DicWriteResult<u16> {
         match self.pos.get(&data) {
             Some(pos) => Ok(*pos),
             None => {
@@ -825,7 +844,7 @@ impl LexiconReader {
             let p6 = it_next(data, &mut iter, "(7) pos-conj-2", unescape_cow)?;
             let reading = it_next(data, &mut iter, "(8) surface", unescape_cow)?;
 
-            let pos = self.pos_of([p1, p2, p3, p4, p5, p6])?;
+            let pos = self.pos_id_of([p1, p2, p3, p4, p5, p6])?;
             Ok(SplitUnit::Inline {
                 pos,
                 reading: none_if_equal(&surface, reading),

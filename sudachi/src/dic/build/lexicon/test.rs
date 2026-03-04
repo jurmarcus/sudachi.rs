@@ -157,6 +157,34 @@ fn parse_header_word_structure_triple_ref() {
 }
 
 #[test]
+fn read_pos_table_and_parse_pos_id_lexicon() {
+    let mut rdr = LexiconReader::new();
+    let pos = "0,名詞,固有名詞,地名,一般,*,*\n1,名詞,一般,*,*,*,*";
+    assert_eq!(rdr.read_pos_bytes(pos.as_bytes()).unwrap(), 2);
+
+    let lex = concat!(
+        "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        "京都,6,6,5293,京都,0,キョウト,京都,*,A,*,*,*,*"
+    );
+    rdr.read_bytes(lex.as_bytes()).unwrap();
+    let e = &rdr.entries()[0];
+    assert_eq!(e.pos, 0);
+}
+
+#[test]
+fn read_pos_table_non_contiguous_id_fails() {
+    let mut rdr = LexiconReader::new();
+    let pos = "2,名詞,固有名詞,地名,一般,*,*";
+    assert_matches!(
+        rdr.read_pos_bytes(pos.as_bytes()),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::InvalidSplit(_),
+            ..
+        }))
+    );
+}
+
+#[test]
 fn parse_kyoto_ignored() {
     let mut rdr = LexiconReader::new();
     let data = "京都,-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";

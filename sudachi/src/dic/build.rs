@@ -37,6 +37,7 @@ pub mod error;
 pub(crate) mod index;
 pub(crate) mod lexicon;
 pub(crate) mod parse;
+pub(crate) mod pos;
 pub(crate) mod primitives;
 pub mod report;
 mod resolve;
@@ -190,6 +191,24 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         let result = match data.convert() {
             DataSource::File(p) => self.lexicon.read_file(p),
             DataSource::Data(d) => self.lexicon.read_bytes(d),
+        };
+        self.reporter.collect_r(result, report)
+    }
+
+    /// Read POS table csv from either a file or an in-memory buffer.
+    ///
+    /// This API is intended for system dictionary builds.
+    pub fn read_pos<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<usize> {
+        if self.user {
+            return self
+                .ctx
+                .err(BuildFailure::InvalidSplit("read_pos is not available for user dictionary".to_owned()));
+        }
+
+        let report = ReportBuilder::new(data.name()).read();
+        let result = match data.convert() {
+            DataSource::File(p) => self.lexicon.read_pos_file(p),
+            DataSource::Data(d) => self.lexicon.read_pos_bytes(d),
         };
         self.reporter.collect_r(result, report)
     }

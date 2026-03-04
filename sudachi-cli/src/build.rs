@@ -63,6 +63,10 @@ pub(crate) enum BuildCli {
         /// Path to matrix definition
         #[arg(short, long)]
         matrix: PathBuf,
+
+        /// Path to POS csv definition
+        #[arg(long)]
+        pos: Option<PathBuf>,
     },
 
     /// Builds user dictionary
@@ -109,7 +113,7 @@ pub(crate) struct BuildCmd {
 
 pub fn build_main(subcommand: BuildCli) {
     match subcommand {
-        BuildCli::System { common, matrix } => build_system(common, matrix),
+        BuildCli::System { common, matrix, pos } => build_system(common, matrix, pos),
         BuildCli::User { common, dictionary } => build_user(common, dictionary),
         BuildCli::Dump {
             dictionary,
@@ -120,12 +124,17 @@ pub fn build_main(subcommand: BuildCli) {
     }
 }
 
-fn build_system(mut cmd: BuildCmd, matrix: PathBuf) {
+fn build_system(mut cmd: BuildCmd, matrix: PathBuf, pos: Option<PathBuf>) {
     let mut builder = DictBuilder::new_system();
     builder.set_description(std::mem::take(&mut cmd.description));
     builder
         .read_conn(matrix.as_path())
         .expect("failed to read matrix");
+    if let Some(pos_file) = pos {
+        builder
+            .read_pos(pos_file.as_path())
+            .unwrap_or_else(|e| panic!("failed to read {:?}\n{:?}", pos_file, e));
+    }
     for d in cmd.inputs.iter() {
         builder
             .read_lexicon(d.as_path())
