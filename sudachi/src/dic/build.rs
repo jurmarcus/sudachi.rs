@@ -16,14 +16,15 @@
 
 use std::io::Write;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::dic::build::error::{BuildFailure, DicBuildError, DicCompilationCtx};
 use crate::dic::build::index::IndexBuilder;
 use crate::dic::build::lexicon::LexiconWriter;
 use crate::dic::build::report::{DictPartReport, ReportBuilder, Reporter};
 use crate::dic::build::resolve::{BinDictResolver, ChainedResolver, RawDictResolver};
+use crate::dic::description::Block;
 use crate::dic::grammar::Grammar;
-use crate::dic::header::{Header, HeaderVersion, SystemDictVersion, UserDictVersion};
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::word_id::WordId;
 use crate::dic::{DictionaryAccess, LexiconAccess};
@@ -47,6 +48,10 @@ mod test;
 const MAX_POS_IDS: usize = i16::MAX as usize;
 const MAX_DIC_STRING_LEN: usize = i16::MAX as usize;
 const MAX_ARRAY_LEN: usize = i8::MAX as usize;
+const DICT_BLOCK_SIZE: usize = 4096;
+const DESCRIPTION_MAGIC_BYTES: &[u8] = b"SudachiBinaryDic";
+const DESCRIPTION_VERSION: u64 = 1;
+const DEFAULT_USER_REFERENCE: &str = "system.dic";
 
 pub enum DataSource<'a> {
     File(&'a Path),
@@ -130,7 +135,10 @@ pub struct DictBuilder<D> {
     lexicon: lexicon::LexiconReader,
     conn: conn::ConnBuffer,
     ctx: DicCompilationCtx,
-    header: Header,
+    compile_time: SystemTime,
+    description: String,
+    signature: String,
+    reference: String,
     resolved: bool,
     prebuilt: Option<D>,
     reporter: Reporter,
@@ -150,7 +158,10 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             lexicon: lexicon::LexiconReader::new(),
             conn: conn::ConnBuffer::new(),
             ctx: DicCompilationCtx::default(),
-            header: Header::new(),
+            compile_time: SystemTime::now(),
+            description: String::new(),
+            signature: String::new(),
+            reference: String::new(),
             resolved: false,
             prebuilt: None,
             reporter: Reporter::new(),
@@ -177,12 +188,12 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         &mut self,
         time: T,
     ) -> std::time::SystemTime {
-        self.header.set_time(time.into())
+        std::mem::replace(&mut self.compile_time, time.into())
     }
 
     /// Set the dictionary description
     pub fn set_description<T: Into<String>>(&mut self, description: T) {
-        self.header.description = description.into()
+        self.description = description.into()
     }
 
     /// Read the csv lexicon from either a file or an in-memory buffer
@@ -235,9 +246,77 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         let report = ReportBuilder::new("validate").read();
         self.lexicon.validate_entries()?;
         self.reporter.collect(self.lexicon.entries().len(), report);
-        let mut written = self.header.write_to(w)?;
-        written += self.write_grammar(w)?;
-        self.write_lexicon(w, written)?;
+
+        let mut buffer = vec![0u8; DICT_BLOCK_SIZE];
+        let mut blocks: Vec<BlockInfo> = Vec::with_capacity(6);
+
+        if !self.user {
+            self.align_to_block(&mut buffer);
+            let start = buffer.len();
+            let report = ReportBuilder::new("conn_matrix");
+            let size = self.conn.write_to(&mut buffer)?;
+            self.reporter.collect(size, report);
+            blocks.push(BlockInfo::new(Block::ConnectionMatrix, start, size));
+        }
+
+        self.align_to_block(&mut buffer);
+        let start = buffer.len();
+        let report = ReportBuilder::new("pos_table");
+        let size = self.lexicon.write_pos_table(&mut buffer)?;
+        self.reporter.collect(size, report);
+        blocks.push(BlockInfo::new(Block::POSTable, start, size));
+
+        let (trie, word_id_table) = self.build_index_data()?;
+
+        self.align_to_block(&mut buffer);
+        let start = buffer.len();
+        let report = ReportBuilder::new("trie");
+        let trie_size = trie.len() / 4;
+        buffer.write_all(&(trie_size as u32).to_le_bytes())?;
+        buffer.write_all(&trie)?;
+        self.reporter.collect(4 + trie.len(), report);
+        blocks.push(BlockInfo::new(Block::TRIEIndex, start, 4 + trie.len()));
+
+        self.align_to_block(&mut buffer);
+        let start = buffer.len();
+        let report = ReportBuilder::new("word_id table");
+        buffer.write_all(&(word_id_table.len() as u32).to_le_bytes())?;
+        buffer.write_all(&word_id_table)?;
+        self.reporter.collect(4 + word_id_table.len(), report);
+        blocks.push(BlockInfo::new(
+            Block::WordPointers,
+            start,
+            4 + word_id_table.len(),
+        ));
+
+        // Strings block will be populated when new lexicon binary layout writer is added.
+        self.align_to_block(&mut buffer);
+        let start = buffer.len();
+        blocks.push(BlockInfo::new(Block::Strings, start, 0));
+
+        self.align_to_block(&mut buffer);
+        let start = buffer.len();
+        let mut writer = LexiconWriter::new(self.lexicon.entries(), start, &mut self.reporter);
+        let size = writer.write(&mut buffer)?;
+        blocks.push(BlockInfo::new(Block::Entries, start, size));
+
+        let runtime_costs = self.lexicon.entries().iter().any(|e| e.cost == i16::MIN);
+        let num_total_entries = self.lexicon.entries().len() as u32;
+        let num_indexed_entries = self
+            .lexicon
+            .entries()
+            .iter()
+            .filter(|e| e.should_index())
+            .count() as u32;
+        let description = self.serialize_description(
+            &blocks,
+            num_indexed_entries,
+            num_total_entries,
+            runtime_costs,
+        )?;
+        buffer[..description.len()].copy_from_slice(&description);
+
+        w.write_all(&buffer)?;
         Ok(())
     }
 
@@ -257,27 +336,23 @@ impl<D: DictionaryAccess> DictBuilder<D> {
 // private functions
 impl<D: DictionaryAccess> DictBuilder<D> {
     fn set_user(&mut self, user: bool) {
-        if user {
-            self.header.version = HeaderVersion::UserDict(UserDictVersion::Version3)
-        } else {
-            self.header.version = HeaderVersion::SystemDict(SystemDictVersion::Version2)
+        if user && self.reference.is_empty() {
+            self.reference = DEFAULT_USER_REFERENCE.to_owned();
+        }
+        if !user {
+            self.reference.clear();
         }
         self.user = user;
     }
 
-    fn write_grammar<W: Write>(&mut self, w: &mut W) -> SudachiResult<usize> {
-        let mut size = 0;
-        let r1 = ReportBuilder::new("pos_table");
-        size += self.lexicon.write_pos_table(w)?;
-        self.reporter.collect(size, r1);
-        let r2 = ReportBuilder::new("conn_matrix");
-        size += self.conn.write_to(w)?;
-        self.reporter.collect(size, r2);
-        Ok(size)
+    fn align_to_block(&self, buffer: &mut Vec<u8>) {
+        let rem = buffer.len() % DICT_BLOCK_SIZE;
+        if rem != 0 {
+            buffer.resize(buffer.len() + (DICT_BLOCK_SIZE - rem), 0);
+        }
     }
 
-    fn write_index<W: Write>(&mut self, w: &mut W) -> SudachiResult<usize> {
-        let mut size = 0;
+    fn build_index_data(&mut self) -> SudachiResult<(Vec<u8>, Vec<u8>)> {
         let mut index = IndexBuilder::new();
         for (i, e) in self.lexicon.entries().iter().enumerate() {
             if e.should_index() {
@@ -286,35 +361,79 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             }
         }
 
-        let report = ReportBuilder::new("trie");
         let word_id_table = index.build_word_id_table()?;
         let trie = index.build_trie()?;
-
-        let trie_size = trie.len() / 4;
-        w.write_all(&(trie_size as u32).to_le_bytes())?;
-        size += 4;
-        w.write_all(&trie)?;
-        size += trie.len();
-        std::mem::drop(trie); //can be big, so drop explicitly
-        self.reporter.collect(size, report);
-        let cur_size = size;
-
-        let report = ReportBuilder::new("word_id table");
-        w.write_all(&(word_id_table.len() as u32).to_le_bytes())?;
-        size += 4;
-        w.write_all(&word_id_table)?;
-        size += word_id_table.len();
-        self.reporter.collect(size - cur_size, report);
-
-        Ok(size)
+        Ok((trie, word_id_table))
     }
 
-    fn write_lexicon<W: Write>(&mut self, w: &mut W, offset: usize) -> SudachiResult<usize> {
-        let mut size = self.write_index(w)?;
-        let mut writer =
-            LexiconWriter::new(self.lexicon.entries(), offset + size, &mut self.reporter);
-        size += writer.write(w)?;
-        Ok(size)
+    fn serialize_description(
+        &self,
+        blocks: &[BlockInfo],
+        num_indexed_entries: u32,
+        num_total_entries: u32,
+        runtime_costs: bool,
+    ) -> SudachiResult<Vec<u8>> {
+        let mut out = Vec::with_capacity(DICT_BLOCK_SIZE);
+        out.extend_from_slice(DESCRIPTION_MAGIC_BYTES);
+        out.extend_from_slice(&DESCRIPTION_VERSION.to_le_bytes());
+
+        let secs = self
+            .compile_time
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| {
+                self.ctx.to_sudachi_err(BuildFailure::InvalidSize {
+                    actual: 0,
+                    expected: 1,
+                })
+            })?
+            .as_secs();
+        out.extend_from_slice(&secs.to_le_bytes());
+        let flags = if runtime_costs { 1u64 } else { 0u64 };
+        out.extend_from_slice(&flags.to_le_bytes());
+        self.put_utf8_string(&mut out, &self.description)?;
+        self.put_utf8_string(&mut out, &self.signature)?;
+        self.put_utf8_string(&mut out, &self.reference)?;
+        Self::put_varint(&mut out, num_indexed_entries as u64);
+        Self::put_varint(&mut out, num_total_entries as u64);
+        Self::put_varint(&mut out, blocks.len() as u64);
+        for block in blocks {
+            self.put_utf8_string(&mut out, &block.name)?;
+            Self::put_varint(&mut out, block.start as u64);
+            Self::put_varint(&mut out, block.size as u64);
+        }
+        if out.len() > DICT_BLOCK_SIZE {
+            return self.ctx.err(BuildFailure::InvalidSize {
+                actual: out.len(),
+                expected: DICT_BLOCK_SIZE,
+            });
+        }
+        Ok(out)
+    }
+
+    fn put_utf8_string(&self, dst: &mut Vec<u8>, data: &str) -> SudachiResult<()> {
+        let length = u32::try_from(data.len()).map_err(|_| {
+            self.ctx.to_sudachi_err(BuildFailure::InvalidSize {
+                actual: data.len(),
+                expected: u32::MAX as usize,
+            })
+        })?;
+        Self::put_varint(dst, length as u64);
+        dst.extend_from_slice(data.as_bytes());
+        Ok(())
+    }
+
+    fn put_varint(dst: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            dst.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
     }
 
     fn check_if_resolved(&self) -> SudachiResult<()> {
@@ -363,6 +482,22 @@ impl<D: DictionaryAccess> DictBuilder<D> {
                 cause: BuildFailure::InvalidSplitWordReference(split_info),
             }
             .into()),
+        }
+    }
+}
+
+struct BlockInfo {
+    name: String,
+    start: usize,
+    size: usize,
+}
+
+impl BlockInfo {
+    fn new(block: Block, start: usize, size: usize) -> Self {
+        Self {
+            name: block.to_string(),
+            start,
+            size,
         }
     }
 }
