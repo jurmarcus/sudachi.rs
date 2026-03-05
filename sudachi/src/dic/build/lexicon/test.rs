@@ -35,10 +35,10 @@ fn parse_split_sys_ids() {
     let mut rdr = LexiconReader::new();
     let (splits, rel) = rdr.parse_splits("0/1/2", true).unwrap();
     assert_eq!(splits.len(), 3);
-    assert_eq!(rel, 0);
-    assert_eq!(splits[0], WordRef::Ref(WordId::new(0, 0)));
-    assert_eq!(splits[1], WordRef::Ref(WordId::new(0, 1)));
-    assert_eq!(splits[2], WordRef::Ref(WordId::new(0, 2)));
+    assert_eq!(rel, 3);
+    assert_eq!(splits[0], WordRef::LineRef(WordId::new(0, 0)));
+    assert_eq!(splits[1], WordRef::LineRef(WordId::new(0, 1)));
+    assert_eq!(splits[2], WordRef::LineRef(WordId::new(0, 2)));
 }
 
 #[test]
@@ -46,10 +46,10 @@ fn parse_split_user_ids() {
     let mut rdr = LexiconReader::new();
     let (splits, rel) = rdr.parse_splits("0/U1/2", true).unwrap();
     assert_eq!(splits.len(), 3);
-    assert_eq!(rel, 0);
-    assert_eq!(splits[0], WordRef::Ref(WordId::new(0, 0)));
-    assert_eq!(splits[1], WordRef::Ref(WordId::new(1, 1)));
-    assert_eq!(splits[2], WordRef::Ref(WordId::new(0, 2)));
+    assert_eq!(rel, 3);
+    assert_eq!(splits[0], WordRef::LineRef(WordId::new(0, 0)));
+    assert_eq!(splits[1], WordRef::LineRef(WordId::new(1, 1)));
+    assert_eq!(splits[2], WordRef::LineRef(WordId::new(0, 2)));
 }
 
 #[test]
@@ -57,8 +57,8 @@ fn parse_split_inline() {
     let mut rdr = LexiconReader::new();
     let (splits, rel) = rdr.parse_splits("0/あ,0,1,2,3,4,5,あ/2", true).unwrap();
     assert_eq!(splits.len(), 3);
-    assert_eq!(rel, 1);
-    assert_eq!(splits[0], WordRef::Ref(WordId::new(0, 0)));
+    assert_eq!(rel, 3);
+    assert_eq!(splits[0], WordRef::LineRef(WordId::new(0, 0)));
     assert_eq!(
         splits[1],
         WordRef::Inline {
@@ -67,7 +67,7 @@ fn parse_split_inline() {
             reading: None
         }
     );
-    assert_eq!(splits[2], WordRef::Ref(WordId::new(0, 2)));
+    assert_eq!(splits[2], WordRef::LineRef(WordId::new(0, 2)));
 }
 
 #[test]
@@ -75,8 +75,8 @@ fn parse_split_inline_pos_id() {
     let mut rdr = LexiconReader::new();
     let (splits, rel) = rdr.parse_splits("0/あ,0,あ/2", true).unwrap();
     assert_eq!(splits.len(), 3);
-    assert_eq!(rel, 1);
-    assert_eq!(splits[0], WordRef::Ref(WordId::new(0, 0)));
+    assert_eq!(rel, 3);
+    assert_eq!(splits[0], WordRef::LineRef(WordId::new(0, 0)));
     assert_eq!(
         splits[1],
         WordRef::Inline {
@@ -85,7 +85,7 @@ fn parse_split_inline_pos_id() {
             reading: None
         }
     );
-    assert_eq!(splits[2], WordRef::Ref(WordId::new(0, 2)));
+    assert_eq!(splits[2], WordRef::LineRef(WordId::new(0, 2)));
 }
 
 #[test]
@@ -355,8 +355,8 @@ fn resolve_inline_same_dict() {
     let nresolved = rdr.resolve().unwrap();
     assert_eq!(nresolved, 2);
     let e2 = &rdr.lexicon.entries()[2];
-    assert_eq!(e2.splits_a[0], WordRef::Ref(WordId::new(0, 1))); //　東
-    assert_eq!(e2.splits_a[1], WordRef::Ref(WordId::new(0, 0))); // 京都
+    assert_eq!(e2.splits_a[0], WordRef::Ref(WordId::new(0, 8))); // 東
+    assert_eq!(e2.splits_a[1], WordRef::Ref(WordId::new(0, 4))); // 京都
 }
 
 #[test]

@@ -77,6 +77,12 @@ impl<'a> Lexicon<'a> {
         self.num_total_entries
     }
 
+    pub fn entry_ids_in_order(&self) -> Vec<EntryId> {
+        let mut result: Vec<EntryId> = self.word_id_table.all_entries().collect();
+        result.sort_unstable();
+        result
+    }
+
     /// Assign lexicon id to the current Lexicon
     pub fn set_dic_id(&mut self, id: u8) {
         assert!(id < MAX_DICTIONARIES as u8);

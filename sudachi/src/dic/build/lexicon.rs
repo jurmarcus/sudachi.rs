@@ -36,6 +36,7 @@ use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
 use crate::dic::build::report::{ReportBuilder, Reporter};
 use crate::dic::build::MAX_POS_IDS;
 use crate::dic::grammar::Grammar;
+use crate::dic::lexicon::word_infos::WordInfos;
 use crate::dic::pos::POS_DEPTH;
 use crate::dic::word_id::WordId;
 use crate::error::SudachiResult;
@@ -114,6 +115,8 @@ impl Debug for StrPosEntry {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum WordRef {
     Ref(WordId),
+    // we use WordId to store system/user flag with line number.
+    LineRef(WordId),
     Headword(String),
     Inline {
         surface: String,
@@ -353,6 +356,7 @@ impl WordRef {
     pub fn format(&self, lexicon: &LexiconReader) -> String {
         match self {
             WordRef::Ref(id) => id.as_raw().to_string(),
+            WordRef::LineRef(id) => id.as_raw().to_string(),
             WordRef::Headword(h) => h.clone(),
             WordRef::Inline {
                 surface,
@@ -372,6 +376,7 @@ pub(crate) trait WordRefResolver {
     fn resolve(&self, unit: &WordRef) -> Option<WordId> {
         match unit {
             WordRef::Ref(wid) => Some(*wid),
+            WordRef::LineRef(line_ref) => self.resolve_by_line_ref(*line_ref),
             WordRef::Headword(headword) => self.resolve_by_headword(headword),
             WordRef::Inline {
                 surface,
@@ -380,6 +385,8 @@ pub(crate) trait WordRefResolver {
             } => self.resolve_inline(surface, *pos, reading.as_deref()),
         }
     }
+
+    fn resolve_by_line_ref(&self, line_ref: WordId) -> Option<WordId>;
 
     fn resolve_by_headword(&self, headword: &str) -> Option<WordId>;
 
@@ -413,6 +420,8 @@ pub(crate) struct RawLexiconEntry {
 }
 
 impl RawLexiconEntry {
+    const MIN_ENTRY_SIZE: usize = 32;
+
     fn make_phantom(base: &RawLexiconEntry, headword: String) -> Self {
         Self {
             // keep surface empty so this entry is not indexable and only used for reference resolution.
@@ -461,6 +470,28 @@ impl RawLexiconEntry {
         self.left_id >= 0
     }
 
+    pub fn expected_entry_size(&self) -> usize {
+        let mut size = Self::MIN_ENTRY_SIZE;
+        size += self.splits_c.len() * 4;
+        if self.splits_b != self.splits_c {
+            size += self.splits_b.len() * 4;
+        }
+        if self.splits_a != self.splits_b {
+            size += self.splits_a.len() * 4;
+        }
+        if self.word_structure != self.splits_a {
+            size += self.word_structure.len() * 4;
+        }
+        size += self.synonym_groups.len() * 4;
+        if !self.user_data.is_empty() {
+            size += 2 + self.user_data.encode_utf16().count() * 2;
+        }
+
+        // ceiling based on WORD_INFO_OFFSET_ALIGNMENT
+        (size + (WordInfos::WORD_INFO_OFFSET_ALIGNMENT - 1))
+            & !(WordInfos::WORD_INFO_OFFSET_ALIGNMENT - 1)
+    }
+
     pub fn write_params<W: Write>(&self, w: &mut W) -> DicWriteResult<usize> {
         w.write_all(&self.left_id.to_le_bytes())?;
         w.write_all(&self.right_id.to_le_bytes())?;
@@ -482,6 +513,7 @@ impl RawLexiconEntry {
         size += u16w.write_empty_if_equal(w, self.norm_form(), self.headword())?;
         let dic_form = match self.dic_form {
             WordRef::Ref(wid) => wid,
+            WordRef::LineRef(_) => panic!("dictionary_form must be resolved before writing"),
             WordRef::Headword(_) => panic!("dictionary_form must be resolved before writing"),
             WordRef::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
         };
@@ -516,6 +548,8 @@ pub struct LexiconReader {
 }
 
 impl LexiconReader {
+    const ENTRY_INITIAL_OFFSET: usize = 32;
+
     pub fn new() -> Self {
         Self {
             pos: IndexMap::new(),
@@ -723,8 +757,12 @@ impl LexiconReader {
         let (norm_form, resolve_norm_form) = rec
             .ctx
             .transform(self.parse_norm_form(&normalized, effective_headword.as_ref()))?;
-        self.unresolved +=
-            resolve_a + resolve_b + resolve_c + resolve_parts + resolve_dic_form + resolve_norm_form;
+        self.unresolved += resolve_a
+            + resolve_b
+            + resolve_c
+            + resolve_parts
+            + resolve_dic_form
+            + resolve_norm_form;
 
         if index_form.is_empty() {
             return rec.ctx.err(BuildFailure::EmptySurface);
@@ -775,11 +813,12 @@ impl LexiconReader {
         let mut ctx = DicCompilationCtx::default();
         ctx.set_filename("<entry id>".to_owned());
         ctx.set_line(0);
+        let max_current = self.max_entry_id_plus_one() as usize;
         let (max_0, max_1) = match self.num_system {
             // means that we compile system dictionary, there must not be user words
-            usize::MAX => (self.entries.len(), 0),
+            usize::MAX => (max_current, 0),
             // compiling user dictionary
-            x => (x, self.entries.len()),
+            x => (x, max_current),
         };
         for e in self.entries.iter() {
             if e.left_id >= self.max_left {
@@ -885,6 +924,8 @@ impl LexiconReader {
             let unresolved = splits
                 .iter()
                 .map(|s| match s {
+                    WordRef::LineRef(_) => 1,
+                    WordRef::Headword(_) => 1,
                     WordRef::Inline { .. } => 1,
                     _ => 0,
                 })
@@ -898,7 +939,7 @@ impl LexiconReader {
             if !allow_word_id_ref {
                 return Err(BuildFailure::InvalidSplit(data.to_owned()));
             }
-            Ok(WordRef::Ref(parse_wordid(data)?))
+            Ok(WordRef::LineRef(parse_wordid(data)?))
         } else if data.matches(',').count() == 2 {
             let mut iter = data.splitn(3, ',');
             let surface = it_next(data, &mut iter, "(1) surface", unescape)?;
@@ -967,8 +1008,10 @@ impl LexiconReader {
                             && !self.has_headword(headword)
                             && !phantoms.iter().any(|p| p.headword() == headword)
                         {
-                            let phantom =
-                                RawLexiconEntry::make_phantom(&self.entries[line], headword.clone());
+                            let phantom = RawLexiconEntry::make_phantom(
+                                &self.entries[line],
+                                headword.clone(),
+                            );
                             phantoms.push(phantom);
                         }
                         self.entries[line].norm_form = Some(NormFormValue::Value(headword.clone()));
@@ -988,11 +1031,12 @@ impl LexiconReader {
                                     return Err((split_info, line));
                                 }
                             };
-                            self.entries[line].norm_form = if headword == self.entries[line].headword() {
-                                None
-                            } else {
-                                Some(NormFormValue::Value(headword))
-                            };
+                            self.entries[line].norm_form =
+                                if headword == self.entries[line].headword() {
+                                    None
+                                } else {
+                                    Some(NormFormValue::Value(headword))
+                                };
                         }
                         None => {
                             let split_info = norm_ref.format(self);
@@ -1078,6 +1122,25 @@ impl LexiconReader {
         }
     }
 
+    pub(crate) fn row_word_ids(&self, dic_id: u8) -> Vec<WordId> {
+        let mut result = Vec::with_capacity(self.entries.len());
+        let mut offset = Self::ENTRY_INITIAL_OFFSET;
+        for e in &self.entries {
+            let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
+            result.push(WordId::new(dic_id, entry_id));
+            offset += e.expected_entry_size();
+        }
+        result
+    }
+
+    pub(crate) fn max_entry_id_plus_one(&self) -> u32 {
+        let mut offset = Self::ENTRY_INITIAL_OFFSET;
+        for e in &self.entries {
+            offset += e.expected_entry_size();
+        }
+        (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32
+    }
+
     fn parse_dic_form(
         &mut self,
         data: &str,
@@ -1112,6 +1175,7 @@ impl LexiconReader {
 
         let unresolved = match parsed {
             WordRef::Ref(_) => 0,
+            WordRef::LineRef(_) => 1,
             WordRef::Headword(_) => 1,
             WordRef::Inline { .. } => 1,
         };

@@ -31,16 +31,16 @@ type ResolutionCandidateMap<T> = HashMap<T, Vec<(u16, Option<T>, WordId)>, FxBui
 pub struct BinDictResolver {
     index: ResolutionCandidateMap<String>,
     headwords: HashMap<WordId, String, FxBuildHasher>,
+    line_to_wid: Vec<WordId>,
 }
 
 impl BinDictResolver {
     pub fn new<D: DictionaryAccess>(dict: D) -> SudachiResult<Self> {
         let lex = dict.lexicon();
-        let size = lex.size();
+        let line_to_wid = lex.system_word_ids_in_order();
         let mut index: ResolutionCandidateMap<String> = HashMap::default();
         let mut headwords: HashMap<WordId, String, FxBuildHasher> = HashMap::default();
-        for id in 0..size {
-            let wid = WordId::new(0, id);
+        for wid in line_to_wid.iter().copied() {
             let winfo: WordInfo = lex.get_word_info_subset(
                 wid,
                 InfoSubset::HEADWORD | InfoSubset::READING_FORM | InfoSubset::POS_ID,
@@ -62,11 +62,24 @@ impl BinDictResolver {
             headwords.insert(wid, headword);
         }
 
-        Ok(Self { index, headwords })
+        Ok(Self {
+            index,
+            headwords,
+            line_to_wid,
+        })
     }
 }
 
 impl WordRefResolver for BinDictResolver {
+    fn resolve_by_line_ref(&self, line_ref: WordId) -> Option<WordId> {
+        if line_ref.dict().as_raw() != 0 {
+            return None;
+        }
+        self.line_to_wid
+            .get(line_ref.entry().as_raw() as usize)
+            .copied()
+    }
+
     fn resolve_by_headword(&self, headword: &str) -> Option<WordId> {
         self.index
             .get(headword)
@@ -92,11 +105,12 @@ impl WordRefResolver for BinDictResolver {
 pub struct RawDictResolver<'a> {
     data: ResolutionCandidateMap<&'a str>,
     entries: &'a [RawLexiconEntry],
+    line_to_wid: Vec<WordId>,
     dic_id: u8,
 }
 
 impl<'a> RawDictResolver<'a> {
-    pub(crate) fn new(entries: &'a [RawLexiconEntry], user: bool) -> Self {
+    pub(crate) fn new(entries: &'a [RawLexiconEntry], line_to_wid: Vec<WordId>, user: bool) -> Self {
         let mut data: ResolutionCandidateMap<&'a str> = HashMap::default();
 
         let dic_id = if user { 1 } else { 0 };
@@ -104,7 +118,7 @@ impl<'a> RawDictResolver<'a> {
         for (i, e) in entries.iter().enumerate() {
             let surface: &'a str = e.headword();
             let reading: &'a str = e.reading();
-            let wid = WordId::new(dic_id, i as u32);
+            let wid = line_to_wid[i];
 
             let read_opt = if e.headword() == reading {
                 None
@@ -120,12 +134,22 @@ impl<'a> RawDictResolver<'a> {
         Self {
             data,
             entries,
+            line_to_wid,
             dic_id,
         }
     }
 }
 
 impl WordRefResolver for RawDictResolver<'_> {
+    fn resolve_by_line_ref(&self, line_ref: WordId) -> Option<WordId> {
+        if line_ref.dict().as_raw() != self.dic_id {
+            return None;
+        }
+        self.line_to_wid
+            .get(line_ref.entry().as_raw() as usize)
+            .copied()
+    }
+
     fn resolve_by_headword(&self, headword: &str) -> Option<WordId> {
         self.data
             .get(headword)
@@ -147,8 +171,11 @@ impl WordRefResolver for RawDictResolver<'_> {
         if wid.dict().as_raw() != self.dic_id {
             return None;
         }
-        let idx = wid.entry().as_raw() as usize;
-        self.entries.get(idx).map(|e| e.headword().to_string())
+        self.line_to_wid
+            .iter()
+            .position(|candidate| candidate == &wid)
+            .and_then(|idx| self.entries.get(idx))
+            .map(|e| e.headword().to_string())
     }
 }
 
@@ -164,6 +191,12 @@ impl<A: WordRefResolver, B: WordRefResolver> ChainedResolver<A, B> {
 }
 
 impl<A: WordRefResolver, B: WordRefResolver> WordRefResolver for ChainedResolver<A, B> {
+    fn resolve_by_line_ref(&self, line_ref: WordId) -> Option<WordId> {
+        self.a
+            .resolve_by_line_ref(line_ref)
+            .or_else(|| self.b.resolve_by_line_ref(line_ref))
+    }
+
     fn resolve_by_headword(&self, headword: &str) -> Option<WordId> {
         self.a
             .resolve_by_headword(headword)
@@ -189,11 +222,16 @@ mod tests {
     use crate::dic::build::lexicon::WordRef;
 
     struct StubResolver {
+        by_line_ref: Option<WordId>,
         by_headword: Option<WordId>,
         by_inline: Option<WordId>,
     }
 
     impl WordRefResolver for StubResolver {
+        fn resolve_by_line_ref(&self, _line_ref: WordId) -> Option<WordId> {
+            self.by_line_ref
+        }
+
         fn resolve_by_headword(&self, _headword: &str) -> Option<WordId> {
             self.by_headword
         }
@@ -206,14 +244,20 @@ mod tests {
     #[test]
     fn chained_resolver_prioritizes_first_resolver() {
         let a = StubResolver {
+            by_line_ref: Some(WordId::new(0, 3)),
             by_headword: Some(WordId::new(0, 1)),
             by_inline: Some(WordId::new(0, 2)),
         };
         let b = StubResolver {
+            by_line_ref: Some(WordId::new(1, 3)),
             by_headword: Some(WordId::new(1, 1)),
             by_inline: Some(WordId::new(1, 2)),
         };
         let chained = ChainedResolver::new(a, b);
+        assert_eq!(
+            chained.resolve(&WordRef::LineRef(WordId::new(0, 0))),
+            Some(WordId::new(0, 3))
+        );
         assert_eq!(
             chained.resolve(&WordRef::Headword("京都".to_string())),
             Some(WordId::new(0, 1))

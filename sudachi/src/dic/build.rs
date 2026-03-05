@@ -17,7 +17,6 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::dic::{DictionaryAccess, LexiconAccess};
 use crate::dic::build::error::{BuildFailure, DicBuildError, DicCompilationCtx};
 use crate::dic::build::index::IndexBuilder;
 use crate::dic::build::lexicon::LexiconWriter;
@@ -27,6 +26,7 @@ use crate::dic::grammar::Grammar;
 use crate::dic::header::{Header, HeaderVersion, SystemDictVersion, UserDictVersion};
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::word_id::WordId;
+use crate::dic::{DictionaryAccess, LexiconAccess};
 use crate::error::SudachiResult;
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
@@ -200,9 +200,9 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     /// This API is intended for system dictionary builds.
     pub fn read_pos<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<usize> {
         if self.user {
-            return self
-                .ctx
-                .err(BuildFailure::InvalidSplit("read_pos is not available for user dictionary".to_owned()));
+            return self.ctx.err(BuildFailure::InvalidSplit(
+                "read_pos is not available for user dictionary".to_owned(),
+            ));
         }
 
         let report = ReportBuilder::new(data.name()).read();
@@ -327,7 +327,8 @@ impl<D: DictionaryAccess> DictBuilder<D> {
 
     /// this function must only be used in resolve_impl
     fn unsafe_make_resolver<'a>(&self) -> RawDictResolver<'a> {
-        let resolver = RawDictResolver::new(self.lexicon.entries(), self.user);
+        let line_to_wid = self.lexicon.row_word_ids(if self.user { 1 } else { 0 });
+        let resolver = RawDictResolver::new(self.lexicon.entries(), line_to_wid, self.user);
         // resolver borrows parts of entries, but it does not touch splits
         // resolve function only modifies splits
         unsafe { std::mem::transmute(resolver) }

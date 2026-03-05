@@ -16,13 +16,13 @@
 
 use thiserror::Error;
 
-use crate::dic::LexiconAccess;
 use crate::dic::binary_loader::BinaryLexicon;
-use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
 use crate::dic::lexicon::strings::StringPointer;
+use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::{DictId, WordId};
 use crate::dic::word_info::WordInfo;
+use crate::dic::LexiconAccess;
 use crate::prelude::*;
 
 /// Sudachi error
@@ -59,7 +59,10 @@ impl LexiconAccess for LexiconSet<'_> {
 
 impl<'a> LexiconSet<'a> {
     /// Creates a LexiconSet from a system lexicon
-    pub fn from_system_binary(system_lexicon: BinaryLexicon<'a>, num_system_pos: usize) -> LexiconSet<'a> {
+    pub fn from_system_binary(
+        system_lexicon: BinaryLexicon<'a>,
+        num_system_pos: usize,
+    ) -> LexiconSet<'a> {
         let mut lexicon = Lexicon::from_binary(system_lexicon);
         lexicon.set_dic_id(0);
         LexiconSet {
@@ -147,8 +150,18 @@ impl LexiconSet<'_> {
         self.lexicons[word_id.dict().as_raw() as usize].get_string(strptr)
     }
 
-
     pub fn size(&self) -> u32 {
         self.lexicons.iter().fold(0, |acc, lex| acc + lex.size())
+    }
+
+    pub fn system_word_ids_in_order(&self) -> Vec<WordId> {
+        if self.lexicons.is_empty() {
+            return Vec::new();
+        }
+        self.lexicons[0]
+            .entry_ids_in_order()
+            .into_iter()
+            .map(|entry| WordId::from_parts(DictId::SYSTEM, entry))
+            .collect()
     }
 }

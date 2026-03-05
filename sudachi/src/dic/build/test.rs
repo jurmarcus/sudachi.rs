@@ -243,16 +243,10 @@ fn word_id_too_big_dicform() {
         "京都,5,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,5,A,*,*,*,*".as_bytes(),
     )
     .unwrap();
-    let mut sink = sink();
-
     claim::assert_matches!(
-        bldr.compile(&mut sink),
+        bldr.resolve(),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::InvalidFieldSize {
-                field: "dic_form",
-                actual: 5,
-                ..
-            },
+            cause: BuildFailure::InvalidSplitWordReference(_),
             ..
         }))
     );
@@ -266,16 +260,10 @@ fn word_id_too_big_split_a() {
         "京都,5,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,C,0/5,*,*,*".as_bytes(),
     )
     .unwrap();
-    let mut sink = sink();
-
     claim::assert_matches!(
-        bldr.compile(&mut sink),
+        bldr.resolve(),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::InvalidFieldSize {
-                field: "splits_a",
-                actual: 5,
-                ..
-            },
+            cause: BuildFailure::InvalidSplitWordReference(_),
             ..
         }))
     );
@@ -289,16 +277,10 @@ fn word_id_too_big_split_b() {
         "京都,5,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,C,*,0/5,*,*".as_bytes(),
     )
     .unwrap();
-    let mut sink = sink();
-
     claim::assert_matches!(
-        bldr.compile(&mut sink),
+        bldr.resolve(),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::InvalidFieldSize {
-                field: "splits_b",
-                actual: 5,
-                ..
-            },
+            cause: BuildFailure::InvalidSplitWordReference(_),
             ..
         }))
     );
@@ -312,16 +294,10 @@ fn word_id_too_big_word_structure() {
         "京都,5,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,C,*,*,0/5,*".as_bytes(),
     )
     .unwrap();
-    let mut sink = sink();
-
     claim::assert_matches!(
-        bldr.compile(&mut sink),
+        bldr.resolve(),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::InvalidFieldSize {
-                field: "word_structure",
-                actual: 5,
-                ..
-            },
+            cause: BuildFailure::InvalidSplitWordReference(_),
             ..
         }))
     );
