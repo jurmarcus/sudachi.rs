@@ -45,7 +45,7 @@ mod resolve;
 mod test;
 
 const MAX_POS_IDS: usize = i16::MAX as usize;
-const MAX_DIC_STRING_LEN: usize = MAX_POS_IDS;
+const MAX_DIC_STRING_LEN: usize = i16::MAX as usize;
 const MAX_ARRAY_LEN: usize = i8::MAX as usize;
 
 pub enum DataSource<'a> {

@@ -147,10 +147,11 @@ lazy_static! {
 }
 
 fn check_str_len(data: &str) -> DicWriteResult<()> {
-    if data.len() > MAX_DIC_STRING_LEN {
+    let char_len = data.encode_utf16().count();
+    if char_len > MAX_DIC_STRING_LEN {
         Err(BuildFailure::InvalidSize {
             expected: MAX_DIC_STRING_LEN,
-            actual: data.len(),
+            actual: char_len,
         })
     } else {
         Ok(())

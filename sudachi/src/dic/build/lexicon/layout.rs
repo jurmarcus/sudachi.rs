@@ -15,13 +15,17 @@
  */
 
 use csv::StringRecord;
+use lazy_static::lazy_static;
+use regex::Regex;
 
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx, DicWriteResult};
-use crate::dic::build::parse::parse_i16;
 use crate::dic::pos::POS_DEPTH;
 use crate::error::SudachiResult;
 
 const NUM_COLUMNS: usize = 22;
+lazy_static! {
+    static ref INTEGER_LITERAL: Regex = Regex::new(r"^-?\d+$").unwrap();
+}
 
 #[repr(usize)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -185,7 +189,7 @@ impl ColumnLayout {
     ) -> SudachiResult<(Self, bool)> {
         if record.len() > 1 {
             if let Some(left_id) = record.get(Column::LeftId.legacy_index()) {
-                if parse_i16(left_id).is_ok() {
+                if INTEGER_LITERAL.is_match(left_id) {
                     return Ok((ColumnLayout::Legacy, false));
                 }
             }

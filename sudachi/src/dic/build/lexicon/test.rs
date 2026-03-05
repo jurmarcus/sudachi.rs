@@ -125,6 +125,20 @@ fn parse_kyoto() {
 }
 
 #[test]
+fn parse_legacy_detection_by_integer_literal() {
+    let mut rdr = LexiconReader::new();
+    let data = "京都,40000,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
+    assert_matches!(
+        rdr.read_bytes(data.as_bytes()),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::InvalidI16Literal(v),
+            line: 1,
+            ..
+        })) if v == "40000"
+    );
+}
+
+#[test]
 fn parse_header_with_pos_id_only() {
     let mut rdr = LexiconReader::new();
     let data = concat!(
@@ -239,6 +253,21 @@ fn parse_header_reads_split_c_and_user_data() {
     let e = &rdr.entries()[0];
     assert_eq!(e.splits_c.len(), 2);
     assert_eq!(e.user_data, "meta");
+}
+
+#[test]
+fn parse_header_user_data_multibyte_within_char_limit() {
+    let mut rdr = LexiconReader::new();
+    let user_data = "あ".repeat(11_000);
+    let data = format!(
+        concat!(
+            "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,user_data\n",
+            "京都,6,6,5293,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,*,*,*,{}"
+        ),
+        user_data
+    );
+    rdr.read_bytes(data.as_bytes()).unwrap();
+    assert_eq!(rdr.entries()[0].user_data, user_data);
 }
 
 #[test]
