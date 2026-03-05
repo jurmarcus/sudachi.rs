@@ -401,11 +401,15 @@ pub(crate) struct RawLexiconEntry {
     pub pos: u16,
     pub splits_a: Vec<WordRef>,
     pub splits_b: Vec<WordRef>,
+    #[allow(unused)]
+    pub splits_c: Vec<WordRef>,
     pub reading: Option<String>,
     #[allow(unused)]
     pub splitting: Mode,
     pub word_structure: Vec<WordRef>,
     pub synonym_groups: Vec<u32>,
+    #[allow(unused)]
+    pub user_data: String,
 }
 
 impl RawLexiconEntry {
@@ -635,10 +639,14 @@ impl LexiconReader {
         let (split_b, resolve_b) = rec.get_col(layout, Column::SplitB, |s| {
             self.parse_splits(s, allow_word_id_ref)
         })?;
+        let (split_c, resolve_c) = rec.get_col_or_default(layout, Column::SplitC, |s| {
+            self.parse_splits(s, allow_word_id_ref)
+        })?;
         let (parts, resolve_parts) = rec.get_col(layout, Column::WordStructure, |s| {
             self.parse_splits(s, allow_word_id_ref)
         })?;
         let synonyms = rec.get_col_or_default(layout, Column::SynonymGroups, parse_u32_list)?;
+        let user_data = rec.get_col_or_default(layout, Column::UserData, unescape)?;
         let pos_id = rec.get_col_or(layout, Column::PosId, -1_i16, |s| {
             if s.is_empty() {
                 Ok(-1)
@@ -693,7 +701,8 @@ impl LexiconReader {
         let (norm_form, resolve_norm_form) = rec
             .ctx
             .transform(self.parse_norm_form(&normalized, effective_headword.as_ref()))?;
-        self.unresolved += resolve_a + resolve_b + resolve_parts + resolve_dic_form + resolve_norm_form;
+        self.unresolved +=
+            resolve_a + resolve_b + resolve_c + resolve_parts + resolve_dic_form + resolve_norm_form;
 
         if index_form.is_empty() {
             return rec.ctx.err(BuildFailure::EmptySurface);
@@ -714,8 +723,10 @@ impl LexiconReader {
             splitting,
             splits_a: split_a,
             splits_b: split_b,
+            splits_c: split_c,
             word_structure: parts,
             synonym_groups: synonyms,
+            user_data,
         };
 
         Ok(entry)
@@ -790,6 +801,15 @@ impl LexiconReader {
                 match s {
                     WordRef::Ref(wid) => {
                         ctx.transform(Self::validate_wid(*wid, max_0, max_1, "splits_b"))?;
+                    }
+                    _ => panic!("at this point there must not be unresolved splits"),
+                }
+            }
+
+            for s in e.splits_c.iter() {
+                match s {
+                    WordRef::Ref(wid) => {
+                        ctx.transform(Self::validate_wid(*wid, max_0, max_1, "splits_c"))?;
                     }
                     _ => panic!("at this point there must not be unresolved splits"),
                 }
@@ -971,6 +991,16 @@ impl LexiconReader {
                         // at this point s is a read only borrow,
                         // but borrow checker does not allow to do this cleanly
                         // self conflicts with splits_b borrow
+                        let s: &WordRef = unsafe { std::mem::transmute(&*s) };
+                        let split_info = s.format(self);
+                        return Err((split_info, line));
+                    }
+                }
+            }
+            for s in e.splits_c.iter_mut() {
+                match Self::resolve_split(s, resolver) {
+                    Some(val) => total += val,
+                    None => {
                         let s: &WordRef = unsafe { std::mem::transmute(&*s) };
                         let split_info = s.format(self);
                         return Err((split_info, line));

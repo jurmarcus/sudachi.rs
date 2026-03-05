@@ -229,6 +229,19 @@ fn read_pos_table_non_contiguous_id_fails() {
 }
 
 #[test]
+fn parse_header_reads_split_c_and_user_data() {
+    let mut rdr = LexiconReader::new();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,split_c,user_data\n",
+        "東京都,6,8,5320,名詞,固有名詞,地名,一般,*,*,トウキョウト,,,C,\"東京,0,トウキョウ/都,1,ト\",\"東京,0,トウキョウ/都,2,ト\",\"東京,0,トウキョウ/都,3,ト\",\"東京,0,トウキョウ/都,4,ト\",meta"
+    );
+    rdr.read_bytes(data.as_bytes()).unwrap();
+    let e = &rdr.entries()[0];
+    assert_eq!(e.splits_c.len(), 2);
+    assert_eq!(e.user_data, "meta");
+}
+
+#[test]
 fn parse_kyoto_ignored() {
     let mut rdr = LexiconReader::new();
     let data = "京都,-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
