@@ -114,11 +114,18 @@ impl Debug for StrPosEntry {
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) enum WordRef {
     Ref(WordId),
+    Headword(String),
     Inline {
         surface: String,
         pos: u16,
         reading: Option<String>,
     },
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub(crate) enum NormFormValue {
+    Value(String),
+    Ref(WordRef),
 }
 
 #[repr(usize)]
@@ -346,6 +353,7 @@ impl WordRef {
     pub fn format(&self, lexicon: &LexiconReader) -> String {
         match self {
             WordRef::Ref(id) => id.as_raw().to_string(),
+            WordRef::Headword(h) => h.clone(),
             WordRef::Inline {
                 surface,
                 pos,
@@ -364,6 +372,7 @@ pub(crate) trait WordRefResolver {
     fn resolve(&self, unit: &WordRef) -> Option<WordId> {
         match unit {
             WordRef::Ref(wid) => Some(*wid),
+            WordRef::Headword(headword) => self.resolve_by_headword(headword),
             WordRef::Inline {
                 surface,
                 pos,
@@ -371,6 +380,8 @@ pub(crate) trait WordRefResolver {
             } => self.resolve_inline(surface, *pos, reading.as_deref()),
         }
     }
+
+    fn resolve_by_headword(&self, headword: &str) -> Option<WordId>;
 
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId>;
 
@@ -386,8 +397,7 @@ pub(crate) struct RawLexiconEntry {
     pub surface: String,
     pub headword: Option<String>,
     pub dic_form: WordRef,
-    pub norm_form: Option<String>,
-    pub norm_form_ref: Option<WordRef>,
+    pub norm_form: Option<NormFormValue>,
     pub pos: u16,
     pub splits_a: Vec<WordRef>,
     pub splits_b: Vec<WordRef>,
@@ -408,7 +418,13 @@ impl RawLexiconEntry {
     }
 
     pub fn norm_form(&self) -> &str {
-        self.norm_form.as_deref().unwrap_or_else(|| self.headword())
+        match self.norm_form.as_ref() {
+            None => self.headword(),
+            Some(NormFormValue::Value(s)) => s,
+            Some(NormFormValue::Ref(_)) => {
+                panic!("normalized_form must be resolved before writing")
+            }
+        }
     }
 
     pub fn reading(&self) -> &str {
@@ -440,6 +456,7 @@ impl RawLexiconEntry {
         size += u16w.write_empty_if_equal(w, self.norm_form(), self.headword())?;
         let dic_form = match self.dic_form {
             WordRef::Ref(wid) => wid,
+            WordRef::Headword(_) => panic!("dictionary_form must be resolved before writing"),
             WordRef::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
         };
         w.write_all(&dic_form.as_raw().to_le_bytes())?;
@@ -673,7 +690,7 @@ impl LexiconReader {
             pos,
             reading.as_ref(),
         ))?;
-        let (norm_form, norm_form_ref, resolve_norm_form) = rec
+        let (norm_form, resolve_norm_form) = rec
             .ctx
             .transform(self.parse_norm_form(&normalized, effective_headword.as_ref()))?;
         self.unresolved += resolve_a + resolve_b + resolve_parts + resolve_dic_form + resolve_norm_form;
@@ -690,7 +707,6 @@ impl LexiconReader {
             cost,
             dic_form,
             norm_form,
-            norm_form_ref,
             reading: none_if_equal(effective_headword.as_ref(), reading),
             headword: none_if_equal(&index_form, effective_headword),
             surface: index_form,
@@ -757,7 +773,7 @@ impl LexiconReader {
                 }
                 _ => panic!("at this point dictionary_form must be resolved"),
             }
-            if e.norm_form_ref.is_some() {
+            if matches!(e.norm_form, Some(NormFormValue::Ref(_))) {
                 panic!("at this point normalized_form must be resolved");
             }
 
@@ -897,7 +913,8 @@ impl LexiconReader {
     ) -> Result<usize, (String, usize)> {
         let mut total = 0;
         for (line, e) in self.entries.iter_mut().enumerate() {
-            if let Some(mut norm_ref) = e.norm_form_ref.take() {
+            let current = std::mem::take(&mut e.norm_form);
+            if let Some(NormFormValue::Ref(mut norm_ref)) = current {
                 match Self::resolve_split(&mut norm_ref, resolver) {
                     Some(val) => {
                         total += val;
@@ -915,7 +932,7 @@ impl LexiconReader {
                         e.norm_form = if headword == e.headword() {
                             None
                         } else {
-                            Some(headword)
+                            Some(NormFormValue::Value(headword))
                         };
                     }
                     None => {
@@ -923,6 +940,8 @@ impl LexiconReader {
                         return Err((split_info, line));
                     }
                 }
+            } else {
+                e.norm_form = current;
             }
             match Self::resolve_split(&mut e.dic_form, resolver) {
                 Some(val) => total += val,
@@ -1017,6 +1036,7 @@ impl LexiconReader {
 
         let unresolved = match parsed {
             WordRef::Ref(_) => 0,
+            WordRef::Headword(_) => 1,
             WordRef::Inline { .. } => 1,
         };
         Ok((parsed, unresolved))
@@ -1026,18 +1046,22 @@ impl LexiconReader {
         &mut self,
         data: &str,
         headword: &str,
-    ) -> DicWriteResult<(Option<String>, Option<WordRef>, usize)> {
-        if data.is_empty() {
-            return Ok((None, None, 0));
+    ) -> DicWriteResult<(Option<NormFormValue>, usize)> {
+        if data.is_empty() || data == "*" {
+            return Ok((None, 0));
         }
 
         if data.matches(',').count() == 2 || data.matches(',').count() == 7 {
             let parsed = self.parse_split(data, false)?;
-            return Ok((None, Some(parsed), 1));
+            return Ok((Some(NormFormValue::Ref(parsed)), 1));
         }
 
-        let normalized = unescape_cow(data)?;
-        Ok((none_if_equal(headword, normalized), None, 0))
+        let normalized = unescape(data)?;
+        if normalized == headword {
+            Ok((None, 0))
+        } else {
+            Ok((Some(NormFormValue::Ref(WordRef::Headword(normalized))), 1))
+        }
     }
 }
 

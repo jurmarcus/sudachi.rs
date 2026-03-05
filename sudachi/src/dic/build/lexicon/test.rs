@@ -187,6 +187,20 @@ fn resolve_header_normalized_form_ref() {
 }
 
 #[test]
+fn resolve_header_normalized_form_headword_ref() {
+    let mut bldr = DictBuilder::new_system();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "東京,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,,,A,*,*,*\n",
+        "トーキョー,1,1,2816,名詞,固有名詞,地名,一般,*,*,トーキョー,東京,,A,*,*,*\n"
+    );
+    bldr.read_lexicon(data.as_bytes()).unwrap();
+    bldr.resolve().unwrap();
+    let e = &bldr.lexicon.entries()[1];
+    assert_eq!(e.norm_form(), "東京");
+}
+
+#[test]
 fn read_pos_table_and_parse_pos_id_lexicon() {
     let mut rdr = LexiconReader::new();
     let pos = "0,名詞,固有名詞,地名,一般,*,*\n1,名詞,一般,*,*,*,*";

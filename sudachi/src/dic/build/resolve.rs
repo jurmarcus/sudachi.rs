@@ -67,6 +67,12 @@ impl BinDictResolver {
 }
 
 impl WordRefResolver for BinDictResolver {
+    fn resolve_by_headword(&self, headword: &str) -> Option<WordId> {
+        self.index
+            .get(headword)
+            .and_then(|v| v.first().map(|(_, _, wid)| *wid))
+    }
+
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
         self.index.get(surface).and_then(|v| {
             for (p, rd, wid) in v {
@@ -96,11 +102,11 @@ impl<'a> RawDictResolver<'a> {
         let dic_id = if user { 1 } else { 0 };
 
         for (i, e) in entries.iter().enumerate() {
-            let surface: &'a str = e.surface();
+            let surface: &'a str = e.headword();
             let reading: &'a str = e.reading();
             let wid = WordId::new(dic_id, i as u32);
 
-            let read_opt = if surface == reading {
+            let read_opt = if e.headword() == reading {
                 None
             } else {
                 Some(reading)
@@ -120,6 +126,12 @@ impl<'a> RawDictResolver<'a> {
 }
 
 impl WordRefResolver for RawDictResolver<'_> {
+    fn resolve_by_headword(&self, headword: &str) -> Option<WordId> {
+        self.data
+            .get(headword)
+            .and_then(|v| v.first().map(|(_, _, wid)| *wid))
+    }
+
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
         self.data.get(surface).and_then(|data| {
             for (p, rd, wid) in data {
@@ -152,6 +164,12 @@ impl<A: WordRefResolver, B: WordRefResolver> ChainedResolver<A, B> {
 }
 
 impl<A: WordRefResolver, B: WordRefResolver> WordRefResolver for ChainedResolver<A, B> {
+    fn resolve_by_headword(&self, headword: &str) -> Option<WordId> {
+        self.a
+            .resolve_by_headword(headword)
+            .or_else(|| self.b.resolve_by_headword(headword))
+    }
+
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
         self.a
             .resolve_inline(surface, pos, reading)
