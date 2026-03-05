@@ -112,7 +112,7 @@ impl Debug for StrPosEntry {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) enum SplitUnit {
+pub(crate) enum WordRef {
     Ref(WordId),
     Inline {
         surface: String,
@@ -342,11 +342,11 @@ impl ColumnLayout {
     }
 }
 
-impl SplitUnit {
+impl WordRef {
     pub fn format(&self, lexicon: &LexiconReader) -> String {
         match self {
-            SplitUnit::Ref(id) => id.as_raw().to_string(),
-            SplitUnit::Inline {
+            WordRef::Ref(id) => id.as_raw().to_string(),
+            WordRef::Inline {
                 surface,
                 pos,
                 reading,
@@ -360,11 +360,11 @@ impl SplitUnit {
     }
 }
 
-pub(crate) trait SplitUnitResolver {
-    fn resolve(&self, unit: &SplitUnit) -> Option<WordId> {
+pub(crate) trait WordRefResolver {
+    fn resolve(&self, unit: &WordRef) -> Option<WordId> {
         match unit {
-            SplitUnit::Ref(wid) => Some(*wid),
-            SplitUnit::Inline {
+            WordRef::Ref(wid) => Some(*wid),
+            WordRef::Inline {
                 surface,
                 pos,
                 reading,
@@ -373,6 +373,10 @@ pub(crate) trait SplitUnitResolver {
     }
 
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId>;
+
+    fn resolve_headword(&self, _wid: WordId) -> Option<String> {
+        None
+    }
 }
 
 pub(crate) struct RawLexiconEntry {
@@ -381,15 +385,16 @@ pub(crate) struct RawLexiconEntry {
     pub cost: i16,
     pub surface: String,
     pub headword: Option<String>,
-    pub dic_form: SplitUnit,
+    pub dic_form: WordRef,
     pub norm_form: Option<String>,
+    pub norm_form_ref: Option<WordRef>,
     pub pos: u16,
-    pub splits_a: Vec<SplitUnit>,
-    pub splits_b: Vec<SplitUnit>,
+    pub splits_a: Vec<WordRef>,
+    pub splits_b: Vec<WordRef>,
     pub reading: Option<String>,
     #[allow(unused)]
     pub splitting: Mode,
-    pub word_structure: Vec<SplitUnit>,
+    pub word_structure: Vec<WordRef>,
     pub synonym_groups: Vec<u32>,
 }
 
@@ -434,8 +439,8 @@ impl RawLexiconEntry {
         size += 2;
         size += u16w.write_empty_if_equal(w, self.norm_form(), self.headword())?;
         let dic_form = match self.dic_form {
-            SplitUnit::Ref(wid) => wid,
-            SplitUnit::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
+            WordRef::Ref(wid) => wid,
+            WordRef::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
         };
         w.write_all(&dic_form.as_raw().to_le_bytes())?;
         size += 4;
@@ -445,7 +450,7 @@ impl RawLexiconEntry {
         let mut ws = Vec::with_capacity(self.word_structure.len());
         for s in self.word_structure.iter() {
             match s {
-                SplitUnit::Ref(wid) => ws.push(*wid),
+                WordRef::Ref(wid) => ws.push(*wid),
                 _ => panic!("word_structure refs must be resolved before writing"),
             }
         }
@@ -601,7 +606,7 @@ impl LexiconReader {
         let p6 = rec.get_col_or_empty(layout, Column::Pos6, unescape_cow)?;
 
         let reading = rec.get_col(layout, Column::ReadingForm, unescape_cow)?;
-        let normalized = rec.get_col(layout, Column::NormalizedForm, unescape_cow)?;
+        let normalized = rec.get_col(layout, Column::NormalizedForm, |s| Ok(s.to_owned()))?;
         let dic_form_ref = rec.get_col_or(layout, Column::DictionaryForm, "".to_owned(), |s| {
             Ok(s.to_owned())
         })?;
@@ -655,14 +660,23 @@ impl LexiconReader {
             ));
         }
 
+        let effective_headword: Cow<str> = if headword.is_empty() {
+            Cow::Borrowed(index_form.as_str())
+        } else {
+            headword
+        };
+
         let (dic_form, resolve_dic_form) = rec.ctx.transform(self.parse_dic_form(
             &dic_form_ref,
             allow_word_id_ref,
-            &headword,
+            effective_headword.as_ref(),
             pos,
             reading.as_ref(),
         ))?;
-        self.unresolved += resolve_a + resolve_b + resolve_parts + resolve_dic_form;
+        let (norm_form, norm_form_ref, resolve_norm_form) = rec
+            .ctx
+            .transform(self.parse_norm_form(&normalized, effective_headword.as_ref()))?;
+        self.unresolved += resolve_a + resolve_b + resolve_parts + resolve_dic_form + resolve_norm_form;
 
         if index_form.is_empty() {
             return rec.ctx.err(BuildFailure::EmptySurface);
@@ -675,9 +689,10 @@ impl LexiconReader {
             right_id,
             cost,
             dic_form,
-            norm_form: none_if_equal(&headword, normalized),
-            reading: none_if_equal(&headword, reading),
-            headword: none_if_equal(&index_form, headword),
+            norm_form,
+            norm_form_ref,
+            reading: none_if_equal(effective_headword.as_ref(), reading),
+            headword: none_if_equal(&index_form, effective_headword),
             surface: index_form,
             pos,
             splitting,
@@ -735,17 +750,20 @@ impl LexiconReader {
             }
 
             match e.dic_form {
-                SplitUnit::Ref(wid) => {
+                WordRef::Ref(wid) => {
                     if wid != WordId::INVALID {
                         ctx.transform(Self::validate_wid(wid, max_0, max_1, "dic_form"))?;
                     }
                 }
                 _ => panic!("at this point dictionary_form must be resolved"),
             }
+            if e.norm_form_ref.is_some() {
+                panic!("at this point normalized_form must be resolved");
+            }
 
             for s in e.splits_a.iter() {
                 match s {
-                    SplitUnit::Ref(wid) => {
+                    WordRef::Ref(wid) => {
                         ctx.transform(Self::validate_wid(*wid, max_0, max_1, "splits_a"))?;
                     }
                     _ => panic!("at this point there must not be unresolved splits"),
@@ -754,7 +772,7 @@ impl LexiconReader {
 
             for s in e.splits_b.iter() {
                 match s {
-                    SplitUnit::Ref(wid) => {
+                    WordRef::Ref(wid) => {
                         ctx.transform(Self::validate_wid(*wid, max_0, max_1, "splits_b"))?;
                     }
                     _ => panic!("at this point there must not be unresolved splits"),
@@ -763,7 +781,7 @@ impl LexiconReader {
 
             for wid in e.word_structure.iter() {
                 match wid {
-                    SplitUnit::Ref(wid) => {
+                    WordRef::Ref(wid) => {
                         ctx.transform(Self::validate_wid(*wid, max_0, max_1, "word_structure"))?;
                     }
                     _ => panic!("at this point there must not be unresolved word_structure"),
@@ -800,7 +818,7 @@ impl LexiconReader {
         &mut self,
         data: &str,
         allow_word_id_ref: bool,
-    ) -> DicWriteResult<(Vec<SplitUnit>, usize)> {
+    ) -> DicWriteResult<(Vec<WordRef>, usize)> {
         if data.is_empty() || data == "*" {
             return Ok((Vec::new(), 0));
         }
@@ -809,7 +827,7 @@ impl LexiconReader {
             let unresolved = splits
                 .iter()
                 .map(|s| match s {
-                    SplitUnit::Inline { .. } => 1,
+                    WordRef::Inline { .. } => 1,
                     _ => 0,
                 })
                 .sum();
@@ -817,18 +835,18 @@ impl LexiconReader {
         })
     }
 
-    fn parse_split(&mut self, data: &str, allow_word_id_ref: bool) -> DicWriteResult<SplitUnit> {
+    fn parse_split(&mut self, data: &str, allow_word_id_ref: bool) -> DicWriteResult<WordRef> {
         if WORD_ID_LITERAL.is_match(data) {
             if !allow_word_id_ref {
                 return Err(BuildFailure::InvalidSplit(data.to_owned()));
             }
-            Ok(SplitUnit::Ref(parse_wordid(data)?))
+            Ok(WordRef::Ref(parse_wordid(data)?))
         } else if data.matches(',').count() == 2 {
             let mut iter = data.splitn(3, ',');
             let surface = it_next(data, &mut iter, "(1) surface", unescape)?;
             let pos = it_next(data, &mut iter, "(2) pos-id", parse_i16)?;
             let reading = it_next(data, &mut iter, "(3) reading", unescape_cow)?;
-            Ok(SplitUnit::Inline {
+            Ok(WordRef::Inline {
                 pos: pos as u16,
                 reading: none_if_equal(&surface, reading),
                 surface,
@@ -845,7 +863,7 @@ impl LexiconReader {
             let reading = it_next(data, &mut iter, "(8) surface", unescape_cow)?;
 
             let pos = self.pos_id_of([p1, p2, p3, p4, p5, p6])?;
-            Ok(SplitUnit::Inline {
+            Ok(WordRef::Inline {
                 pos,
                 reading: none_if_equal(&surface, reading),
                 surface,
@@ -873,16 +891,43 @@ impl LexiconReader {
     }
 
     //noinspection DuplicatedCode
-    pub(crate) fn resolve_splits<R: SplitUnitResolver>(
+    pub(crate) fn resolve_splits<R: WordRefResolver>(
         &mut self,
         resolver: &R,
     ) -> Result<usize, (String, usize)> {
         let mut total = 0;
         for (line, e) in self.entries.iter_mut().enumerate() {
+            if let Some(mut norm_ref) = e.norm_form_ref.take() {
+                match Self::resolve_split(&mut norm_ref, resolver) {
+                    Some(val) => {
+                        total += val;
+                        let wid = match norm_ref {
+                            WordRef::Ref(wid) => wid,
+                            _ => panic!("normalized_form must be resolved to word id"),
+                        };
+                        let headword = match resolver.resolve_headword(wid) {
+                            Some(s) => s,
+                            None => {
+                                let split_info = norm_ref.format(self);
+                                return Err((split_info, line));
+                            }
+                        };
+                        e.norm_form = if headword == e.headword() {
+                            None
+                        } else {
+                            Some(headword)
+                        };
+                    }
+                    None => {
+                        let split_info = norm_ref.format(self);
+                        return Err((split_info, line));
+                    }
+                }
+            }
             match Self::resolve_split(&mut e.dic_form, resolver) {
                 Some(val) => total += val,
                 None => {
-                    let s: &SplitUnit = unsafe { std::mem::transmute(&e.dic_form) };
+                    let s: &WordRef = unsafe { std::mem::transmute(&e.dic_form) };
                     let split_info = s.format(self);
                     return Err((split_info, line));
                 }
@@ -894,7 +939,7 @@ impl LexiconReader {
                         // at this point s is a read only borrow,
                         // but borrow checker does not allow to do this cleanly
                         // self conflicts with splits_a borrow
-                        let s: &SplitUnit = unsafe { std::mem::transmute(&*s) };
+                        let s: &WordRef = unsafe { std::mem::transmute(&*s) };
                         let split_info = s.format(self);
                         return Err((split_info, line));
                     }
@@ -907,7 +952,7 @@ impl LexiconReader {
                         // at this point s is a read only borrow,
                         // but borrow checker does not allow to do this cleanly
                         // self conflicts with splits_b borrow
-                        let s: &SplitUnit = unsafe { std::mem::transmute(&*s) };
+                        let s: &WordRef = unsafe { std::mem::transmute(&*s) };
                         let split_info = s.format(self);
                         return Err((split_info, line));
                     }
@@ -917,7 +962,7 @@ impl LexiconReader {
                 match Self::resolve_split(s, resolver) {
                     Some(val) => total += val,
                     None => {
-                        let s: &SplitUnit = unsafe { std::mem::transmute(&*s) };
+                        let s: &WordRef = unsafe { std::mem::transmute(&*s) };
                         let split_info = s.format(self);
                         return Err((split_info, line));
                     }
@@ -927,12 +972,12 @@ impl LexiconReader {
         Ok(total)
     }
 
-    fn resolve_split<R: SplitUnitResolver>(unit: &mut SplitUnit, resolver: &R) -> Option<usize> {
+    fn resolve_split<R: WordRefResolver>(unit: &mut WordRef, resolver: &R) -> Option<usize> {
         match unit {
-            SplitUnit::Ref(_) => Some(0),
+            WordRef::Ref(_) => Some(0),
             _ => {
                 let wid = resolver.resolve(&*unit)?;
-                *unit = SplitUnit::Ref(wid);
+                *unit = WordRef::Ref(wid);
                 Some(1)
             }
         }
@@ -945,13 +990,16 @@ impl LexiconReader {
         headword: &str,
         pos: u16,
         reading: &str,
-    ) -> DicWriteResult<(SplitUnit, usize)> {
-        if data.is_empty() || data == "*" {
-            return Ok((SplitUnit::Ref(WordId::INVALID), 0));
+    ) -> DicWriteResult<(WordRef, usize)> {
+        if data.is_empty() || (allow_word_id_ref && data == "*") {
+            return Ok((WordRef::Ref(WordId::INVALID), 0));
+        }
+        if data == "*" {
+            return Err(BuildFailure::InvalidSplit(data.to_owned()));
         }
 
         let parsed = self.parse_split(data, allow_word_id_ref)?;
-        if let SplitUnit::Inline {
+        if let WordRef::Inline {
             surface,
             pos: p,
             reading: r,
@@ -963,15 +1011,33 @@ impl LexiconReader {
                 Some(reading)
             };
             if surface == headword && *p == pos && r.as_deref() == own_reading {
-                return Ok((SplitUnit::Ref(WordId::INVALID), 0));
+                return Ok((WordRef::Ref(WordId::INVALID), 0));
             }
         }
 
         let unresolved = match parsed {
-            SplitUnit::Ref(_) => 0,
-            SplitUnit::Inline { .. } => 1,
+            WordRef::Ref(_) => 0,
+            WordRef::Inline { .. } => 1,
         };
         Ok((parsed, unresolved))
+    }
+
+    fn parse_norm_form(
+        &mut self,
+        data: &str,
+        headword: &str,
+    ) -> DicWriteResult<(Option<String>, Option<WordRef>, usize)> {
+        if data.is_empty() {
+            return Ok((None, None, 0));
+        }
+
+        if data.matches(',').count() == 2 || data.matches(',').count() == 7 {
+            let parsed = self.parse_split(data, false)?;
+            return Ok((None, Some(parsed), 1));
+        }
+
+        let normalized = unescape_cow(data)?;
+        Ok((none_if_equal(headword, normalized), None, 0))
     }
 }
 

@@ -36,9 +36,9 @@ fn parse_split_sys_ids() {
     let (splits, rel) = rdr.parse_splits("0/1/2", true).unwrap();
     assert_eq!(splits.len(), 3);
     assert_eq!(rel, 0);
-    assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
-    assert_eq!(splits[1], SplitUnit::Ref(WordId::new(0, 1)));
-    assert_eq!(splits[2], SplitUnit::Ref(WordId::new(0, 2)));
+    assert_eq!(splits[0], WordRef::Ref(WordId::new(0, 0)));
+    assert_eq!(splits[1], WordRef::Ref(WordId::new(0, 1)));
+    assert_eq!(splits[2], WordRef::Ref(WordId::new(0, 2)));
 }
 
 #[test]
@@ -47,9 +47,9 @@ fn parse_split_user_ids() {
     let (splits, rel) = rdr.parse_splits("0/U1/2", true).unwrap();
     assert_eq!(splits.len(), 3);
     assert_eq!(rel, 0);
-    assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
-    assert_eq!(splits[1], SplitUnit::Ref(WordId::new(1, 1)));
-    assert_eq!(splits[2], SplitUnit::Ref(WordId::new(0, 2)));
+    assert_eq!(splits[0], WordRef::Ref(WordId::new(0, 0)));
+    assert_eq!(splits[1], WordRef::Ref(WordId::new(1, 1)));
+    assert_eq!(splits[2], WordRef::Ref(WordId::new(0, 2)));
 }
 
 #[test]
@@ -58,16 +58,16 @@ fn parse_split_inline() {
     let (splits, rel) = rdr.parse_splits("0/あ,0,1,2,3,4,5,あ/2", true).unwrap();
     assert_eq!(splits.len(), 3);
     assert_eq!(rel, 1);
-    assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
+    assert_eq!(splits[0], WordRef::Ref(WordId::new(0, 0)));
     assert_eq!(
         splits[1],
-        SplitUnit::Inline {
+        WordRef::Inline {
             surface: "あ".to_string(),
             pos: 0,
             reading: None
         }
     );
-    assert_eq!(splits[2], SplitUnit::Ref(WordId::new(0, 2)));
+    assert_eq!(splits[2], WordRef::Ref(WordId::new(0, 2)));
 }
 
 #[test]
@@ -76,16 +76,16 @@ fn parse_split_inline_pos_id() {
     let (splits, rel) = rdr.parse_splits("0/あ,0,あ/2", true).unwrap();
     assert_eq!(splits.len(), 3);
     assert_eq!(rel, 1);
-    assert_eq!(splits[0], SplitUnit::Ref(WordId::new(0, 0)));
+    assert_eq!(splits[0], WordRef::Ref(WordId::new(0, 0)));
     assert_eq!(
         splits[1],
-        SplitUnit::Inline {
+        WordRef::Inline {
             surface: "あ".to_string(),
             pos: 0,
             reading: None
         }
     );
-    assert_eq!(splits[2], SplitUnit::Ref(WordId::new(0, 2)));
+    assert_eq!(splits[2], WordRef::Ref(WordId::new(0, 2)));
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn parse_header_with_pos_id_only() {
     let mut rdr = LexiconReader::new();
     let data = concat!(
         "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
-        "京都,6,6,5293,京都,0,キョウト,京都,*,A,*,*,*,*"
+        "京都,6,6,5293,京都,0,キョウト,京都,,A,*,*,*,*"
     );
     // preload one POS to resolve pos_id=0
     let old = "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
@@ -153,7 +153,37 @@ fn parse_header_word_structure_triple_ref() {
     assert_eq!(e.splits_a.len(), 2);
     assert_eq!(e.splits_b.len(), 2);
     assert_eq!(e.word_structure.len(), 2);
-    assert!(matches!(e.word_structure[0], SplitUnit::Inline { .. }));
+    assert!(matches!(e.word_structure[0], WordRef::Inline { .. }));
+}
+
+#[test]
+fn parse_header_dictionary_form_asterisk_fails() {
+    let mut rdr = LexiconReader::new();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "東京都,6,8,5320,名詞,固有名詞,地名,一般,*,*,トウキョウト,,*,B,*,*,*\n"
+    );
+    assert_matches!(
+        rdr.read_bytes(data.as_bytes()),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::InvalidSplit(_),
+            ..
+        }))
+    );
+}
+
+#[test]
+fn resolve_header_normalized_form_ref() {
+    let mut bldr = DictBuilder::new_system();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "東京,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,,,A,*,*,*\n",
+        "トウキョウ,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,\"東京,0,トウキョウ\",,A,*,*,*\n"
+    );
+    bldr.read_lexicon(data.as_bytes()).unwrap();
+    bldr.resolve().unwrap();
+    let e = &bldr.lexicon.entries()[1];
+    assert_eq!(e.norm_form(), "東京");
 }
 
 #[test]
@@ -164,7 +194,7 @@ fn read_pos_table_and_parse_pos_id_lexicon() {
 
     let lex = concat!(
         "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
-        "京都,6,6,5293,京都,0,キョウト,京都,*,A,*,*,*,*"
+        "京都,6,6,5293,京都,0,キョウト,京都,,A,*,*,*,*"
     );
     rdr.read_bytes(lex.as_bytes()).unwrap();
     let e = &rdr.entries()[0];
@@ -269,8 +299,8 @@ fn resolve_inline_same_dict() {
     let nresolved = rdr.resolve().unwrap();
     assert_eq!(nresolved, 2);
     let e2 = &rdr.lexicon.entries()[2];
-    assert_eq!(e2.splits_a[0], SplitUnit::Ref(WordId::new(0, 1))); //　東
-    assert_eq!(e2.splits_a[1], SplitUnit::Ref(WordId::new(0, 0))); // 京都
+    assert_eq!(e2.splits_a[0], WordRef::Ref(WordId::new(0, 1))); //　東
+    assert_eq!(e2.splits_a[1], WordRef::Ref(WordId::new(0, 0))); // 京都
 }
 
 #[test]

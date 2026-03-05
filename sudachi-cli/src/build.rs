@@ -113,7 +113,11 @@ pub(crate) struct BuildCmd {
 
 pub fn build_main(subcommand: BuildCli) {
     match subcommand {
-        BuildCli::System { common, matrix, pos } => build_system(common, matrix, pos),
+        BuildCli::System {
+            common,
+            matrix,
+            pos,
+        } => build_system(common, matrix, pos),
         BuildCli::User { common, dictionary } => build_user(common, dictionary),
         BuildCli::Dump {
             dictionary,
@@ -295,13 +299,17 @@ fn dump_word_info<W: Write>(
         let wid = WordId::checked(did, i)?;
         let (left, right, cost) = lex.get_word_param(wid);
         let winfo = lex.get_word_info(wid)?;
-        write!(w, "{},", unicode_escape(winfo.surface()))?;
+        write!(w, "{},", unicode_escape(winfo.headword(&lex)))?;
         write!(w, "{},{},{},", left, right, cost)?;
-        write!(w, "{},", unicode_escape(winfo.surface()))?; // writing
+        write!(w, "{},", unicode_escape(winfo.headword(&lex)))?; // writing
         write!(w, "{},", pos_string(&grammar, winfo.pos_id()))?;
-        write!(w, "{},", unicode_escape(winfo.reading_form()))?;
-        write!(w, "{},", unicode_escape(winfo.normalized_form()))?;
-        let dict_form = dictionary_form_string(&grammar, &lex, winfo.dictionary_form_word_id());
+        write!(w, "{},", unicode_escape(winfo.reading_form(&lex)))?;
+        write!(w, "{},", unicode_escape(winfo.normalized_form(&lex)))?;
+        let dict_form = dictionary_form_string(
+            &grammar,
+            &lex,
+            winfo.borrow_data().dictionary_form_word_id(),
+        );
         write!(w, "{},", dict_form)?;
         write!(w, "{},", split_mode(&winfo))?;
         dump_wids(w, &grammar, &lex, winfo.a_unit_split())?;
@@ -340,21 +348,20 @@ fn pos_string(grammar: &Grammar, posid: u16) -> String {
     pos_parts.join(",")
 }
 
-fn dictionary_form_string(grammar: &Grammar, lex: &LexiconSet, wid: i32) -> String {
-    if wid < 0 {
+fn dictionary_form_string(grammar: &Grammar, lex: &LexiconSet, wid: WordId) -> String {
+    if wid == WordId::INVALID {
         return "*".to_string();
     }
-    let wid_with_dic = WordId::checked(0, wid as u32).expect("invalid wordid");
-    format!("\"{}\"", wordref_string(grammar, lex, &wid_with_dic))
+    format!("\"{}\"", wordref_string(grammar, lex, &wid))
 }
 
 fn wordref_string(grammar: &Grammar, lex: &LexiconSet, wid: &WordId) -> String {
     let winfo = lex.get_word_info(*wid).expect("failed to get wordinfo");
     format!(
         "{},{},{}",
-        unicode_escape(winfo.surface()),
+        unicode_escape(winfo.headword(lex)),
         pos_string(grammar, winfo.pos_id()),
-        unicode_escape(winfo.reading_form()),
+        unicode_escape(winfo.reading_form(lex)),
     )
 }
 
@@ -379,7 +386,7 @@ fn dump_wids<W: Write>(
     Ok(())
 }
 
-fn dump_gids<W: Write>(w: &mut W, data: &[u32]) -> SudachiResult<()> {
+fn dump_gids<W: Write>(w: &mut W, data: &[i32]) -> SudachiResult<()> {
     if data.is_empty() {
         write!(w, "*")?;
         return Ok(());

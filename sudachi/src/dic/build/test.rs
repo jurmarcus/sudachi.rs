@@ -36,7 +36,7 @@ fn read_pos_then_read_lexicon_with_pos_id() {
 
     let lex = concat!(
         "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
-        "京都,6,6,5293,京都,0,キョウト,京都,*,A,*,*,*,*"
+        "京都,6,6,5293,京都,0,キョウト,京都,,A,*,*,*,*"
     );
     assert_eq!(1, bldr.read_lexicon(lex.as_bytes()).unwrap());
     bldr.resolve().unwrap();

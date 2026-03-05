@@ -16,7 +16,7 @@
 
 use crate::dic::build::error::BuildFailure::InvalidSize;
 use crate::dic::build::error::DicWriteResult;
-use crate::dic::build::lexicon::SplitUnit;
+use crate::dic::build::lexicon::WordRef;
 use crate::dic::word_id::WordId;
 use std::io::Write;
 
@@ -119,11 +119,11 @@ impl ToU32 for WordId {
     }
 }
 
-impl ToU32 for SplitUnit {
+impl ToU32 for WordRef {
     fn to_u32(&self) -> u32 {
         match self {
-            SplitUnit::Ref(w) => w.to_u32(),
-            SplitUnit::Inline { .. } => panic!("splits must be resolved before writing"),
+            WordRef::Ref(w) => w.to_u32(),
+            WordRef::Inline { .. } => panic!("splits must be resolved before writing"),
         }
     }
 }

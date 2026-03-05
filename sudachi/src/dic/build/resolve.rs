@@ -14,11 +14,11 @@
  *  limitations under the License.
  */
 
-use crate::dic::DictionaryAccess;
-use crate::dic::build::lexicon::{RawLexiconEntry, SplitUnitResolver};
-use crate::dic::word_info::WordInfo;
+use crate::dic::build::lexicon::{RawLexiconEntry, WordRefResolver};
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
+use crate::dic::word_info::WordInfo;
+use crate::dic::DictionaryAccess;
 use crate::error::SudachiResult;
 use crate::util::fxhash::FxBuildHasher;
 use std::collections::HashMap;
@@ -30,6 +30,7 @@ type ResolutionCandidateMap<T> = HashMap<T, Vec<(u16, Option<T>, WordId)>, FxBui
 /// This resolver has to be owning because the dictionary content is lazily loaded and transient
 pub struct BinDictResolver {
     index: ResolutionCandidateMap<String>,
+    headwords: HashMap<WordId, String, FxBuildHasher>,
 }
 
 impl BinDictResolver {
@@ -37,13 +38,13 @@ impl BinDictResolver {
         let lex = dict.lexicon();
         let size = lex.size();
         let mut index: ResolutionCandidateMap<String> = HashMap::default();
+        let mut headwords: HashMap<WordId, String, FxBuildHasher> = HashMap::default();
         for id in 0..size {
             let wid = WordId::new(0, id);
-            let winfo: WordInfo = lex
-                .get_word_info_subset(
-                    wid,
-                    InfoSubset::HEADWORD | InfoSubset::READING_FORM | InfoSubset::POS_ID,
-                )?;
+            let winfo: WordInfo = lex.get_word_info_subset(
+                wid,
+                InfoSubset::HEADWORD | InfoSubset::READING_FORM | InfoSubset::POS_ID,
+            )?;
             let headword = winfo.headword(&dict).to_string();
             let reading = winfo.reading_form(&dict).to_string();
             let pos_id = winfo.pos_id();
@@ -55,16 +56,17 @@ impl BinDictResolver {
             };
 
             index
-                .entry(headword)
+                .entry(headword.clone())
                 .or_default()
                 .push((pos_id, rdfield, wid));
+            headwords.insert(wid, headword);
         }
 
-        Ok(Self { index })
+        Ok(Self { index, headwords })
     }
 }
 
-impl SplitUnitResolver for BinDictResolver {
+impl WordRefResolver for BinDictResolver {
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
         self.index.get(surface).and_then(|v| {
             for (p, rd, wid) in v {
@@ -75,10 +77,16 @@ impl SplitUnitResolver for BinDictResolver {
             None
         })
     }
+
+    fn resolve_headword(&self, wid: WordId) -> Option<String> {
+        self.headwords.get(&wid).cloned()
+    }
 }
 
 pub struct RawDictResolver<'a> {
     data: ResolutionCandidateMap<&'a str>,
+    entries: &'a [RawLexiconEntry],
+    dic_id: u8,
 }
 
 impl<'a> RawDictResolver<'a> {
@@ -103,11 +111,15 @@ impl<'a> RawDictResolver<'a> {
                 .push((e.pos, read_opt, wid));
         }
 
-        Self { data }
+        Self {
+            data,
+            entries,
+            dic_id,
+        }
     }
 }
 
-impl SplitUnitResolver for RawDictResolver<'_> {
+impl WordRefResolver for RawDictResolver<'_> {
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
         self.data.get(surface).and_then(|data| {
             for (p, rd, wid) in data {
@@ -118,6 +130,14 @@ impl SplitUnitResolver for RawDictResolver<'_> {
             None
         })
     }
+
+    fn resolve_headword(&self, wid: WordId) -> Option<String> {
+        if wid.dict().as_raw() != self.dic_id {
+            return None;
+        }
+        let idx = wid.entry().as_raw() as usize;
+        self.entries.get(idx).map(|e| e.headword().to_string())
+    }
 }
 
 pub(crate) struct ChainedResolver<A, B> {
@@ -125,16 +145,22 @@ pub(crate) struct ChainedResolver<A, B> {
     b: B,
 }
 
-impl<A: SplitUnitResolver, B: SplitUnitResolver> ChainedResolver<A, B> {
+impl<A: WordRefResolver, B: WordRefResolver> ChainedResolver<A, B> {
     pub(crate) fn new(a: A, b: B) -> Self {
         Self { a, b }
     }
 }
 
-impl<A: SplitUnitResolver, B: SplitUnitResolver> SplitUnitResolver for ChainedResolver<A, B> {
+impl<A: WordRefResolver, B: WordRefResolver> WordRefResolver for ChainedResolver<A, B> {
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
         self.a
             .resolve_inline(surface, pos, reading)
             .or_else(|| self.b.resolve_inline(surface, pos, reading))
+    }
+
+    fn resolve_headword(&self, wid: WordId) -> Option<String> {
+        self.a
+            .resolve_headword(wid)
+            .or_else(|| self.b.resolve_headword(wid))
     }
 }
