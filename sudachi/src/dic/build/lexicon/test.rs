@@ -230,6 +230,55 @@ fn read_pos_table_and_parse_pos_id_lexicon() {
 }
 
 #[test]
+fn read_pos_table_header_without_pos_id() {
+    let mut rdr = LexiconReader::new();
+    let pos = "pos1,pos2,pos3,pos4,pos5,pos6\n名詞,固有名詞,地名,一般,*,*";
+    assert_eq!(rdr.read_pos_bytes(pos.as_bytes()).unwrap(), 1);
+    assert_eq!(
+        format!("{:?}", rdr.pos_obj(0).unwrap()),
+        "名詞,固有名詞,地名,一般,*,*"
+    );
+}
+
+#[test]
+fn read_pos_table_unordered_columns_without_pos_id() {
+    let mut rdr = LexiconReader::new();
+    let pos = "pos5,pos6,pos1,pos2,pos3,pos4\n*,*,名詞,固有名詞,地名,一般";
+    assert_eq!(rdr.read_pos_bytes(pos.as_bytes()).unwrap(), 1);
+    assert_eq!(
+        format!("{:?}", rdr.pos_obj(0).unwrap()),
+        "名詞,固有名詞,地名,一般,*,*"
+    );
+}
+
+#[test]
+fn read_pos_table_unordered_pos_ids() {
+    let mut rdr = LexiconReader::new();
+    let pos = concat!(
+        "pos_id,pos1,pos2,pos3,pos4,pos5,pos6\n",
+        "1,名詞,普通名詞,一般,*,*,*\n",
+        "0,助詞,接続助詞,*,*,*,*"
+    );
+    assert_eq!(rdr.read_pos_bytes(pos.as_bytes()).unwrap(), 2);
+    assert_eq!(format!("{:?}", rdr.pos_obj(0).unwrap()), "助詞,接続助詞,*,*,*,*");
+    assert_eq!(format!("{:?}", rdr.pos_obj(1).unwrap()), "名詞,普通名詞,一般,*,*,*");
+}
+
+#[test]
+fn read_pos_table_non_header_invalid_pos_id_literal() {
+    let mut rdr = LexiconReader::new();
+    let pos = "40000,名詞,固有名詞,地名,一般,*,*";
+    assert_matches!(
+        rdr.read_pos_bytes(pos.as_bytes()),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::InvalidI16Literal(v),
+            line: 1,
+            ..
+        })) if v == "40000"
+    );
+}
+
+#[test]
 fn read_pos_table_non_contiguous_id_fails() {
     let mut rdr = LexiconReader::new();
     let pos = "2,名詞,固有名詞,地名,一般,*,*";

@@ -84,14 +84,12 @@ enum PosColumnLayout {
 
 impl PosColumnLayout {
     fn from_record(record: &StringRecord, ctx: &DicCompilationCtx) -> SudachiResult<(Self, bool)> {
-        if record.len() >= 6 {
-            let first = record.get(0).unwrap_or_default();
-            if parse_i16(first).is_ok() {
-                return Ok((PosColumnLayout::LegacyWithId, false));
-            }
+        let first = record.get(0).unwrap_or_default();
+        if PosCsvColumn::from_str(first).is_none() {
             if record.len() == 6 {
                 return Ok((PosColumnLayout::LegacyNoId, false));
             }
+            return Ok((PosColumnLayout::LegacyWithId, false));
         }
 
         let mut mapping = [-1_i16; 7];
@@ -121,6 +119,14 @@ impl PosColumnLayout {
         }
 
         Ok((PosColumnLayout::Header(mapping), true))
+    }
+
+    const fn has_pos_id(self) -> bool {
+        match self {
+            PosColumnLayout::LegacyNoId => false,
+            PosColumnLayout::LegacyWithId => true,
+            PosColumnLayout::Header(mapping) => mapping[PosCsvColumn::PosId as usize] >= 0,
+        }
     }
 
     fn index(self, col: PosCsvColumn) -> Option<usize> {
@@ -174,6 +180,7 @@ pub(crate) fn read_pos_bytes(
         .from_reader(data);
     let mut nread = 0usize;
     let mut layout = PosColumnLayout::LegacyNoId;
+    let mut staged_by_id: Vec<Option<StrPosEntry>> = Vec::new();
     let mut first = true;
     for row in reader.records() {
         match row {
@@ -188,7 +195,7 @@ pub(crate) fn read_pos_bytes(
                         continue;
                     }
                 }
-                read_pos_record(pos, &r, layout, ctx)?;
+                read_pos_record(pos, &mut staged_by_id, &r, layout, ctx)?;
                 nread += 1;
             }
             Err(e) => {
@@ -198,11 +205,27 @@ pub(crate) fn read_pos_bytes(
             }
         }
     }
+
+    if layout.has_pos_id() {
+        for (pos_id, item) in staged_by_id.into_iter().enumerate() {
+            let key = match item {
+                Some(k) => k,
+                None => {
+                    return ctx.err(BuildFailure::InvalidSplit(
+                        "POS_ID must be contiguous".to_owned(),
+                    ))
+                }
+            };
+            pos.insert(key, pos_id as u16);
+        }
+    }
+
     Ok(nread)
 }
 
 fn read_pos_record(
     pos: &mut IndexMap<StrPosEntry, u16>,
+    staged_by_id: &mut Vec<Option<StrPosEntry>>,
     data: &StringRecord,
     layout: PosColumnLayout,
     ctx: &DicCompilationCtx,
@@ -222,38 +245,45 @@ fn read_pos_record(
         Cow::Owned(p6),
     ]);
 
-    if pos.contains_key(&key) {
-        return ctx.err(BuildFailure::InvalidSplit("POS already exists".to_owned()));
-    }
-
-    let expected = pos.len();
-    if expected > MAX_POS_IDS {
-        return ctx.err(BuildFailure::PosLimitExceeded(format!("{:?}", key)));
-    }
-    let expected = expected as u16;
-
-    let from_id = match layout.index(PosCsvColumn::PosId) {
-        Some(idx) => match data.get(idx) {
-            Some(raw) if raw.is_empty() => None,
-            Some(raw) => Some(ctx.transform(parse_i16(raw))?),
-            None => None,
-        },
-        None => None,
-    };
-
-    if let Some(raw_id) = from_id {
+    if layout.has_pos_id() {
+        let idx = layout.index(PosCsvColumn::PosId).unwrap();
+        let raw = match data.get(idx) {
+            Some(v) => v,
+            None => return ctx.err(BuildFailure::NoRawField(PosCsvColumn::PosId.label())),
+        };
+        if raw.is_empty() {
+            return ctx.err(BuildFailure::InvalidSplit(
+                "POS_ID is required when POS_ID column exists".to_owned(),
+            ));
+        }
+        let raw_id = ctx.transform(parse_i16(raw))?;
         if raw_id < 0 {
             return ctx.err(BuildFailure::InvalidSplit("POS_ID must be >= 0".to_owned()));
         }
         let pos_id = raw_id as u16;
-        if pos_id != expected {
+        let pos_id_usize = pos_id as usize;
+        if pos_id_usize > MAX_POS_IDS {
+            return ctx.err(BuildFailure::PosLimitExceeded(format!("{:?}", key)));
+        }
+        if staged_by_id.len() <= pos_id_usize {
+            staged_by_id.resize_with(pos_id_usize + 1, || None);
+        }
+        if staged_by_id[pos_id_usize].is_some() {
             return ctx.err(BuildFailure::InvalidSplit(
-                "POS_ID must be contiguous and ordered".to_owned(),
+                "POS_ID already exists".to_owned(),
             ));
         }
+        staged_by_id[pos_id_usize] = Some(key);
+    } else {
+        if pos.contains_key(&key) {
+            return ctx.err(BuildFailure::InvalidSplit("POS already exists".to_owned()));
+        }
+        let expected = pos.len();
+        if expected > MAX_POS_IDS {
+            return ctx.err(BuildFailure::PosLimitExceeded(format!("{:?}", key)));
+        }
+        pos.insert(key, expected as u16);
     }
-
-    pos.insert(key, expected);
     Ok(())
 }
 
