@@ -111,7 +111,7 @@ impl Debug for StrPosEntry {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum WordRef {
     Ref(WordId),
     Headword(String),
@@ -122,7 +122,7 @@ pub(crate) enum WordRef {
     },
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum NormFormValue {
     Value(String),
     Ref(WordRef),
@@ -413,6 +413,28 @@ pub(crate) struct RawLexiconEntry {
 }
 
 impl RawLexiconEntry {
+    fn make_phantom(base: &RawLexiconEntry, headword: String) -> Self {
+        Self {
+            // keep surface empty so this entry is not indexable and only used for reference resolution.
+            surface: String::new(),
+            headword: Some(headword),
+            left_id: -1,
+            right_id: -1,
+            cost: i16::MAX,
+            pos: base.pos,
+            reading: base.reading.clone(),
+            dic_form: base.dic_form.clone(),
+            norm_form: None,
+            splitting: base.splitting,
+            splits_a: base.splits_a.clone(),
+            splits_b: base.splits_b.clone(),
+            splits_c: base.splits_c.clone(),
+            word_structure: base.word_structure.clone(),
+            synonym_groups: base.synonym_groups.clone(),
+            user_data: base.user_data.clone(),
+        }
+    }
+
     pub fn surface(&self) -> &str {
         &self.surface
     }
@@ -631,7 +653,7 @@ impl LexiconReader {
         let dic_form_ref = rec.get_col_or(layout, Column::DictionaryForm, "".to_owned(), |s| {
             Ok(s.to_owned())
         })?;
-        let splitting = rec.get_col(layout, Column::Mode, parse_mode)?;
+        let splitting = rec.get_col_or(layout, Column::Mode, Mode::C, parse_mode)?;
         let allow_word_id_ref = layout.is_legacy();
         let (split_a, resolve_a) = rec.get_col(layout, Column::SplitA, |s| {
             self.parse_splits(s, allow_word_id_ref)
@@ -932,37 +954,56 @@ impl LexiconReader {
         resolver: &R,
     ) -> Result<usize, (String, usize)> {
         let mut total = 0;
-        for (line, e) in self.entries.iter_mut().enumerate() {
-            let current = std::mem::take(&mut e.norm_form);
+        let mut phantoms: Vec<RawLexiconEntry> = Vec::new();
+        for line in 0..self.entries.len() {
+            let current = {
+                let e = &mut self.entries[line];
+                std::mem::take(&mut e.norm_form)
+            };
             if let Some(NormFormValue::Ref(mut norm_ref)) = current {
-                match Self::resolve_split(&mut norm_ref, resolver) {
-                    Some(val) => {
-                        total += val;
-                        let wid = match norm_ref {
-                            WordRef::Ref(wid) => wid,
-                            _ => panic!("normalized_form must be resolved to word id"),
-                        };
-                        let headword = match resolver.resolve_headword(wid) {
-                            Some(s) => s,
-                            None => {
-                                let split_info = norm_ref.format(self);
-                                return Err((split_info, line));
-                            }
-                        };
-                        e.norm_form = if headword == e.headword() {
-                            None
-                        } else {
-                            Some(NormFormValue::Value(headword))
-                        };
+                match &norm_ref {
+                    WordRef::Headword(headword) => {
+                        if resolver.resolve(&norm_ref).is_none()
+                            && !self.has_headword(headword)
+                            && !phantoms.iter().any(|p| p.headword() == headword)
+                        {
+                            let phantom =
+                                RawLexiconEntry::make_phantom(&self.entries[line], headword.clone());
+                            phantoms.push(phantom);
+                        }
+                        self.entries[line].norm_form = Some(NormFormValue::Value(headword.clone()));
+                        total += 1;
                     }
-                    None => {
-                        let split_info = norm_ref.format(self);
-                        return Err((split_info, line));
-                    }
-                }
+                    _ => match Self::resolve_split(&mut norm_ref, resolver) {
+                        Some(val) => {
+                            total += val;
+                            let wid = match norm_ref {
+                                WordRef::Ref(wid) => wid,
+                                _ => panic!("normalized_form must be resolved to word id"),
+                            };
+                            let headword = match resolver.resolve_headword(wid) {
+                                Some(s) => s,
+                                None => {
+                                    let split_info = norm_ref.format(self);
+                                    return Err((split_info, line));
+                                }
+                            };
+                            self.entries[line].norm_form = if headword == self.entries[line].headword() {
+                                None
+                            } else {
+                                Some(NormFormValue::Value(headword))
+                            };
+                        }
+                        None => {
+                            let split_info = norm_ref.format(self);
+                            return Err((split_info, line));
+                        }
+                    },
+                };
             } else {
-                e.norm_form = current;
+                self.entries[line].norm_form = current;
             }
+            let e = &mut self.entries[line];
             match Self::resolve_split(&mut e.dic_form, resolver) {
                 Some(val) => total += val,
                 None => {
@@ -1018,7 +1059,12 @@ impl LexiconReader {
                 }
             }
         }
+        self.entries.extend(phantoms);
         Ok(total)
+    }
+
+    fn has_headword(&self, headword: &str) -> bool {
+        self.entries.iter().any(|e| e.headword() == headword)
     }
 
     fn resolve_split<R: WordRefResolver>(unit: &mut WordRef, resolver: &R) -> Option<usize> {

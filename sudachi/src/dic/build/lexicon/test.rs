@@ -242,6 +242,35 @@ fn parse_header_reads_split_c_and_user_data() {
 }
 
 #[test]
+fn parse_header_mode_optional() {
+    let mut rdr = LexiconReader::new();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,word_structure\n",
+        "京都,6,6,5293,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,*,*,*"
+    );
+    rdr.read_bytes(data.as_bytes()).unwrap();
+    let e = &rdr.entries()[0];
+    assert_eq!(e.splitting, Mode::C);
+}
+
+#[test]
+fn resolve_header_normalized_form_literal_without_target() {
+    let mut bldr = DictBuilder::new_system();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "舞台藝術,1,1,2816,名詞,普通名詞,一般,*,*,*,ブタイゲイジュツ,舞台芸術,,A,*,*,*"
+    );
+    bldr.read_lexicon(data.as_bytes()).unwrap();
+    bldr.resolve().unwrap();
+    assert_eq!(bldr.lexicon.entries().len(), 2);
+    let e = &bldr.lexicon.entries()[0];
+    assert_eq!(e.norm_form(), "舞台芸術");
+    let phantom = &bldr.lexicon.entries()[1];
+    assert_eq!(phantom.headword(), "舞台芸術");
+    assert!(!phantom.should_index());
+}
+
+#[test]
 fn parse_kyoto_ignored() {
     let mut rdr = LexiconReader::new();
     let data = "京都,-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";

@@ -60,6 +60,7 @@ pub(crate) fn none_if_equal(surface: &str, data: Cow<str>) -> Option<String> {
 #[inline]
 pub(crate) fn parse_mode(data: &str) -> DicWriteResult<Mode> {
     match data.trim() {
+        "" => Ok(Mode::C),
         "a" | "A" => Ok(Mode::A),
         "b" | "B" => Ok(Mode::B),
         "c" | "C" | "*" => Ok(Mode::C),

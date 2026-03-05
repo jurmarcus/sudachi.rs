@@ -182,3 +182,49 @@ impl<A: WordRefResolver, B: WordRefResolver> WordRefResolver for ChainedResolver
             .or_else(|| self.b.resolve_headword(wid))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dic::build::lexicon::WordRef;
+
+    struct StubResolver {
+        by_headword: Option<WordId>,
+        by_inline: Option<WordId>,
+    }
+
+    impl WordRefResolver for StubResolver {
+        fn resolve_by_headword(&self, _headword: &str) -> Option<WordId> {
+            self.by_headword
+        }
+
+        fn resolve_inline(&self, _surface: &str, _pos: u16, _reading: Option<&str>) -> Option<WordId> {
+            self.by_inline
+        }
+    }
+
+    #[test]
+    fn chained_resolver_prioritizes_first_resolver() {
+        let a = StubResolver {
+            by_headword: Some(WordId::new(0, 1)),
+            by_inline: Some(WordId::new(0, 2)),
+        };
+        let b = StubResolver {
+            by_headword: Some(WordId::new(1, 1)),
+            by_inline: Some(WordId::new(1, 2)),
+        };
+        let chained = ChainedResolver::new(a, b);
+        assert_eq!(
+            chained.resolve(&WordRef::Headword("京都".to_string())),
+            Some(WordId::new(0, 1))
+        );
+        assert_eq!(
+            chained.resolve(&WordRef::Inline {
+                surface: "京都".to_string(),
+                pos: 0,
+                reading: None,
+            }),
+            Some(WordId::new(0, 2))
+        );
+    }
+}

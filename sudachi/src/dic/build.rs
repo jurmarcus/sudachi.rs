@@ -345,7 +345,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         let cnt = match self.prebuilt.as_ref() {
             Some(d) => {
                 let built_resolver = BinDictResolver::new(d)?;
-                let chained = ChainedResolver::new(this_resolver, built_resolver);
+                let chained = ChainedResolver::new(built_resolver, this_resolver);
                 self.lexicon.resolve_splits(&chained)
             }
             None => self.lexicon.resolve_splits(&this_resolver),
