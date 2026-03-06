@@ -17,9 +17,12 @@
 use std::io::Write;
 
 use crate::analysis::Mode;
-use crate::dic::build::error::DicWriteResult;
+use crate::dic::build::error::{BuildFailure, DicWriteResult};
+#[cfg(test)]
 use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
+use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::lexicon::word_infos::WordInfos;
+use crate::dic::word_id::WordId;
 
 use super::refs::{NormFormValue, WordRef};
 
@@ -125,23 +128,143 @@ impl RawLexiconEntry {
         Ok(6)
     }
 
+    pub fn write_rest<W: Write>(
+        &self,
+        w: &mut W,
+        self_word_id: WordId,
+        norm_form_word_id: WordId,
+        headword_strptr: StringPointer,
+        reading_strptr: StringPointer,
+    ) -> DicWriteResult<usize> {
+        let mut size = 0;
+
+        // first 2 bytes in the fixed 32-byte section
+        w.write_all(&self.pos.to_le_bytes())?;
+        size += 2;
+
+        w.write_all(&headword_strptr.encode().to_le_bytes())?;
+        w.write_all(&reading_strptr.encode().to_le_bytes())?;
+        w.write_all(&norm_form_word_id.as_raw().to_le_bytes())?;
+
+        let dic_form_word_id = match self.dic_form {
+            WordRef::Ref(wid) if wid == WordId::INVALID => self_word_id,
+            WordRef::Ref(wid) => wid,
+            WordRef::LineRef(_) => panic!("dictionary_form must be resolved before writing"),
+            WordRef::Headword(_) => panic!("dictionary_form must be resolved before writing"),
+            WordRef::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
+        };
+        w.write_all(&dic_form_word_id.as_raw().to_le_bytes())?;
+        size += 16;
+
+        if self.surface.len() > i16::MAX as usize {
+            return Err(BuildFailure::InvalidFieldSize {
+                actual: self.surface.len(),
+                expected: i16::MAX as usize,
+                field: "index_form_length",
+            });
+        }
+        w.write_all(&(self.surface.len() as i16).to_le_bytes())?;
+        size += 2;
+
+        let c_len = self.len_as_i8(self.splits_c.len(), "splits_c")?;
+        let b_len = if self.splits_b == self.splits_c {
+            -1
+        } else {
+            self.len_as_i8(self.splits_b.len(), "splits_b")?
+        };
+        let a_len = if self.splits_a == self.splits_b {
+            -1
+        } else {
+            self.len_as_i8(self.splits_a.len(), "splits_a")?
+        };
+        let ws_len = if self.word_structure == self.splits_a {
+            -1
+        } else {
+            self.len_as_i8(self.word_structure.len(), "word_structure")?
+        };
+        let syn_len = self.len_as_i8(self.synonym_groups.len(), "synonym_groups")?;
+        let user_data_units = self.user_data.encode_utf16().count();
+        if user_data_units > i16::MAX as usize {
+            return Err(BuildFailure::InvalidFieldSize {
+                actual: user_data_units,
+                expected: i16::MAX as usize,
+                field: "user_data",
+            });
+        }
+        let user_data_flag = if user_data_units == 0 { 0i8 } else { 1i8 };
+
+        w.write_all(&c_len.to_le_bytes())?;
+        w.write_all(&b_len.to_le_bytes())?;
+        w.write_all(&a_len.to_le_bytes())?;
+        w.write_all(&ws_len.to_le_bytes())?;
+        w.write_all(&syn_len.to_le_bytes())?;
+        w.write_all(&user_data_flag.to_le_bytes())?;
+        size += 6;
+
+        size += self.write_word_refs(w, &self.splits_c)?;
+        if b_len > 0 {
+            size += self.write_word_refs(w, &self.splits_b)?;
+        }
+        if a_len > 0 {
+            size += self.write_word_refs(w, &self.splits_a)?;
+        }
+        if ws_len > 0 {
+            size += self.write_word_refs(w, &self.word_structure)?;
+        }
+        for sg in &self.synonym_groups {
+            w.write_all(&(*sg as i32).to_le_bytes())?;
+            size += 4;
+        }
+        if user_data_flag == 1 {
+            w.write_all(&(user_data_units as i16).to_le_bytes())?;
+            size += 2;
+            for c in self.user_data.encode_utf16() {
+                w.write_all(&c.to_le_bytes())?;
+                size += 2;
+            }
+        }
+
+        Ok(size)
+    }
+
+    fn write_word_refs<W: Write>(&self, w: &mut W, refs: &[WordRef]) -> DicWriteResult<usize> {
+        let mut size = 0;
+        for s in refs {
+            match s {
+                WordRef::Ref(wid) => {
+                    w.write_all(&wid.as_raw().to_le_bytes())?;
+                    size += 4;
+                }
+                _ => panic!("word refs must be resolved before writing"),
+            }
+        }
+        Ok(size)
+    }
+
+    fn len_as_i8(&self, len: usize, field: &'static str) -> DicWriteResult<i8> {
+        i8::try_from(len).map_err(|_| BuildFailure::InvalidFieldSize {
+            actual: len,
+            expected: i8::MAX as usize,
+            field,
+        })
+    }
+
+    #[cfg(test)]
     pub fn write_word_info<W: Write>(
         &self,
         u16w: &mut Utf16Writer,
         w: &mut W,
     ) -> DicWriteResult<usize> {
+        // Keep legacy helper for test fixtures that directly parse raw word_info blobs.
         let mut size = 0;
-
-        size += u16w.write(w, self.headword())?; // surface of WordInfo
-        size += u16w.write_len(w, self.surface.len())?; // surface for trie
+        size += u16w.write(w, self.headword())?;
+        size += u16w.write_len(w, self.surface.len())?;
         w.write_all(&self.pos.to_le_bytes())?;
         size += 2;
         size += u16w.write_empty_if_equal(w, self.norm_form(), self.headword())?;
         let dic_form = match self.dic_form {
             WordRef::Ref(wid) => wid,
-            WordRef::LineRef(_) => panic!("dictionary_form must be resolved before writing"),
-            WordRef::Headword(_) => panic!("dictionary_form must be resolved before writing"),
-            WordRef::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
+            _ => panic!("dictionary_form must be resolved before writing"),
         };
         w.write_all(&dic_form.as_raw().to_le_bytes())?;
         size += 4;
@@ -157,7 +280,6 @@ impl RawLexiconEntry {
         }
         size += write_u32_array(w, &ws)?;
         size += write_u32_array(w, &self.synonym_groups)?;
-
         Ok(size)
     }
 }

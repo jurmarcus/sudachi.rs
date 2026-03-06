@@ -119,7 +119,7 @@ impl StringPointer {
         let variable_part =
             non_fixed_length << (32 - Self::BASE_LENGTH_BITS - additional_length_bits);
 
-        let offset_part = self.offset >> std::cmp::max(0, additional_length_bits - 1);
+        let offset_part = self.offset >> additional_length_bits.saturating_sub(1);
 
         debug_assert!(base_part & variable_part == 0);
         debug_assert!(base_part & offset_part == 0);
@@ -138,7 +138,7 @@ impl StringPointer {
         let implicit_bit = (1 << Self::MAX_VARIABLE_LENGTH_BITS) >> (13 - additional_length_bits);
         let length = (base_value - additional_length_bits) + (non_fixed_length | implicit_bit);
         // offset are aligned based on the additional length bits
-        let alignment = std::cmp::max(0, additional_length_bits - 1);
+        let alignment = additional_length_bits.saturating_sub(1);
         let offset = (encoded & (0x07ff_ffff >> alignment)) << alignment;
 
         StringPointer { length, offset }

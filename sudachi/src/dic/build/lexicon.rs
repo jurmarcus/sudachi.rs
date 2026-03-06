@@ -15,6 +15,7 @@
  */
 
 use std::borrow::{Borrow, Cow};
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::Write;
@@ -50,9 +51,11 @@ mod wordinfo_test;
 mod entry;
 mod layout;
 mod refs;
+mod string_store;
 pub(crate) use entry::RawLexiconEntry;
 use layout::{Column, ColumnLayout, RecordWrapper};
 pub(crate) use refs::{NormFormValue, WordRef, WordRefResolver};
+pub use string_store::StringStore;
 
 #[derive(Hash, Eq, PartialEq)]
 pub struct StrPosEntry {
@@ -810,23 +813,22 @@ impl LexiconReader {
 
 pub struct LexiconWriter<'a> {
     entries: &'a [RawLexiconEntry],
-    u16: Utf16Writer,
-    buffer: Vec<u8>,
-    offset: usize,
+    strings: &'a StringStore,
+    user: bool,
     reporter: &'a mut Reporter,
 }
 
 impl<'a> LexiconWriter<'a> {
     pub(crate) fn new(
         entries: &'a [RawLexiconEntry],
-        offset: usize,
+        strings: &'a StringStore,
+        user: bool,
         reporter: &'a mut Reporter,
     ) -> Self {
         Self {
-            buffer: Vec::with_capacity(entries.len() * 32),
             entries,
-            u16: Utf16Writer::new(),
-            offset,
+            strings,
+            user,
             reporter,
         }
     }
@@ -834,39 +836,62 @@ impl<'a> LexiconWriter<'a> {
     pub fn write<W: Write>(&mut self, w: &mut W) -> SudachiResult<usize> {
         let mut ctx = DicCompilationCtx::memory();
         ctx.set_filename("<write entries>".to_owned());
-        let mut total = 4;
+        let mut total = LexiconReader::ENTRY_INITIAL_OFFSET;
+        w.write_all(&[0u8; LexiconReader::ENTRY_INITIAL_OFFSET])?;
 
-        let num_entries = self.entries.len() as u32;
-        w.write_all(&num_entries.to_le_bytes())?;
-
-        let rep = ReportBuilder::new("word_params");
-        ctx.set_line(0);
+        let rep = ReportBuilder::new("entries");
+        let mut offset = LexiconReader::ENTRY_INITIAL_OFFSET;
+        let self_dic_id = if self.user { 1 } else { 0 };
+        let mut headword_to_id = HashMap::with_capacity(self.entries.len());
         for e in self.entries {
+            let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
+            let wid = WordId::new(self_dic_id, entry_id);
+            headword_to_id.insert(e.headword().to_owned(), wid);
+            offset += e.expected_entry_size();
+        }
+
+        ctx.set_line(0);
+        let mut offset = LexiconReader::ENTRY_INITIAL_OFFSET;
+        for e in self.entries {
+            let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
+            let self_word_id = WordId::new(self_dic_id, entry_id);
+            let norm_form_word_id = match e.norm_form.as_ref() {
+                None => self_word_id,
+                Some(NormFormValue::Value(headword)) => {
+                    if headword == e.headword() {
+                        self_word_id
+                    } else if let Some(wid) = headword_to_id.get(headword) {
+                        *wid
+                    } else {
+                        return ctx.err(BuildFailure::InvalidSplitWordReference(format!(
+                            "normalized_form headword not found: {}",
+                            headword
+                        )));
+                    }
+                }
+                Some(NormFormValue::Ref(_)) => {
+                    panic!("normalized_form must be resolved before writing");
+                }
+            };
+            let headword_strptr = self.strings.resolve(e.headword());
+            let reading_strptr = self.strings.resolve(e.reading());
             total += ctx.transform(e.write_params(w))?;
+            total += ctx.transform(e.write_rest(
+                w,
+                self_word_id,
+                norm_form_word_id,
+                headword_strptr,
+                reading_strptr,
+            ))?;
+            let expected_end = offset + e.expected_entry_size();
+            while total < expected_end {
+                w.write_all(&[0])?;
+                total += 1;
+            }
+            offset = expected_end;
             ctx.add_line(1);
         }
         self.reporter.collect(total, rep);
-        let start = total;
-
-        let rep = ReportBuilder::new("wordinfo_offsets");
-        ctx.set_line(0);
-        let offset_base = self.offset + (6 + 4) * self.entries.len() + 4;
-        let mut word_offset = 0;
-        for e in self.entries {
-            let u32_offset = (offset_base + word_offset) as u32;
-            w.write_all(&u32_offset.to_le_bytes())?;
-            let size = ctx.transform(e.write_word_info(&mut self.u16, &mut self.buffer))?;
-            word_offset += size;
-            total += 4;
-            ctx.add_line(1);
-        }
-        self.reporter.collect(total - start, rep);
-
-        let rep = ReportBuilder::new("wordinfos (copy only)");
-        let info_size = self.buffer.len();
-        w.write_all(&self.buffer)?;
-        self.reporter.collect(info_size, rep);
-
-        Ok(total + info_size)
+        Ok(total)
     }
 }

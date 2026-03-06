@@ -20,13 +20,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::dic::build::error::{BuildFailure, DicBuildError, DicCompilationCtx};
 use crate::dic::build::index::IndexBuilder;
-use crate::dic::build::lexicon::LexiconWriter;
+use crate::dic::build::lexicon::{LexiconWriter, StringStore};
 use crate::dic::build::report::{DictPartReport, ReportBuilder, Reporter};
 use crate::dic::build::resolve::{BinDictResolver, ChainedResolver, RawDictResolver};
 use crate::dic::description::Block;
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon_set::LexiconSet;
-use crate::dic::word_id::WordId;
 use crate::dic::{DictionaryAccess, LexiconAccess};
 use crate::error::SudachiResult;
 use crate::plugin::input_text::InputTextPlugin;
@@ -267,6 +266,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         blocks.push(BlockInfo::new(Block::POSTable, start, size));
 
         let (trie, word_id_table) = self.build_index_data()?;
+        let strings = StringStore::from_entries(self.lexicon.entries())?;
 
         self.align_to_block(&mut buffer);
         let start = buffer.len();
@@ -289,14 +289,21 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             4 + word_id_table.len(),
         ));
 
-        // Strings block will be populated when new lexicon binary layout writer is added.
         self.align_to_block(&mut buffer);
         let start = buffer.len();
-        blocks.push(BlockInfo::new(Block::Strings, start, 0));
+        let report = ReportBuilder::new("strings");
+        let size = strings.write(&mut buffer)?;
+        self.reporter.collect(size, report);
+        blocks.push(BlockInfo::new(Block::Strings, start, size));
 
         self.align_to_block(&mut buffer);
         let start = buffer.len();
-        let mut writer = LexiconWriter::new(self.lexicon.entries(), start, &mut self.reporter);
+        let mut writer = LexiconWriter::new(
+            self.lexicon.entries(),
+            &strings,
+            self.user,
+            &mut self.reporter,
+        );
         let size = writer.write(&mut buffer)?;
         blocks.push(BlockInfo::new(Block::Entries, start, size));
 
@@ -354,9 +361,9 @@ impl<D: DictionaryAccess> DictBuilder<D> {
 
     fn build_index_data(&mut self) -> SudachiResult<(Vec<u8>, Vec<u8>)> {
         let mut index = IndexBuilder::new();
-        for (i, e) in self.lexicon.entries().iter().enumerate() {
+        let entry_ids = self.lexicon.row_word_ids(0);
+        for (e, wid) in self.lexicon.entries().iter().zip(entry_ids.into_iter()) {
             if e.should_index() {
-                let wid = WordId::checked(0, i as u32)?;
                 index.add(e.surface(), wid);
             }
         }
