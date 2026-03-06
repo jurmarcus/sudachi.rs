@@ -26,6 +26,8 @@ use crate::error::SudachiError;
 use claim::assert_matches;
 use std::fmt::Write;
 
+mod legacy;
+
 #[test]
 fn parse_split_empty() {
     let mut rdr = LexiconReader::new();
@@ -128,20 +130,6 @@ fn parse_kyoto() {
     assert_eq!(0, kyoto.splits_a.len());
     assert_eq!(0, kyoto.splits_b.len());
     assert!(kyoto.should_index());
-}
-
-#[test]
-fn parse_legacy_detection_by_integer_literal_in_legacy_format() {
-    let mut rdr = LexiconReader::new();
-    let data = "京都,40000,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
-    assert_matches!(
-        rdr.read_bytes(data.as_bytes()),
-        Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::InvalidI16Literal(v),
-            line: 1,
-            ..
-        })) if v == "40000"
-    );
 }
 
 #[test]
