@@ -107,8 +107,14 @@ fn parse_wordid_raw(data: &str) -> DicWriteResult<WordId> {
 }
 
 #[inline]
-pub(crate) fn parse_u32_list(data: &str) -> DicWriteResult<Vec<u32>> {
+pub(crate) fn parse_u32_list_with_asterisk(
+    data: &str,
+    allow_asterisk: bool,
+) -> DicWriteResult<Vec<u32>> {
     if data.is_empty() || data == "*" {
+        if data == "*" && !allow_asterisk {
+            return Err(BuildFailure::InvalidSplit(data.to_owned()));
+        }
         return Ok(Vec::new());
     }
 

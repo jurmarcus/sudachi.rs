@@ -36,7 +36,7 @@ fn read_pos_then_read_lexicon_with_pos_id() {
 
     let lex = concat!(
         "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
-        "京都,6,6,5293,京都,0,キョウト,京都,,A,*,*,*,*"
+        "京都,6,6,5293,京都,0,キョウト,京都,,A,,,,"
     );
     assert_eq!(1, bldr.read_lexicon(lex.as_bytes()).unwrap());
     bldr.resolve().unwrap();
@@ -212,7 +212,11 @@ fn fail_matrix_size_validation() {
     bldr.read_conn(MATRIX_10_10).unwrap();
 
     bldr.read_lexicon(
-        "京都,10,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*".as_bytes(),
+        concat!(
+            "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+            "京都,10,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
+        )
+        .as_bytes(),
     )
     .unwrap();
     let mut sink1 = sink();
@@ -221,7 +225,11 @@ fn fail_matrix_size_validation() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(
-        "京都,5,10,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*".as_bytes(),
+        concat!(
+            "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+            "京都,5,10,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
+        )
+        .as_bytes(),
     )
     .unwrap();
     let mut sink2 = sink();
@@ -263,7 +271,7 @@ fn various_word_references_user() {
 }
 
 #[test]
-fn split_user_ref() {
+fn split_user_ref_in_legacy_format() {
     let mut sys = DictBuilder::new_system();
     sys.read_conn(MATRIX_10_10).unwrap();
     sys.read_lexicon(
@@ -319,7 +327,7 @@ fn split_user_ref() {
 }
 
 #[test]
-fn word_id_too_big_dicform() {
+fn word_id_too_big_dicform_in_legacy_format() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(
@@ -336,7 +344,7 @@ fn word_id_too_big_dicform() {
 }
 
 #[test]
-fn word_id_too_big_split_a() {
+fn word_id_too_big_split_a_in_legacy_format() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(
@@ -353,7 +361,7 @@ fn word_id_too_big_split_a() {
 }
 
 #[test]
-fn word_id_too_big_split_b() {
+fn word_id_too_big_split_b_in_legacy_format() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(
@@ -370,7 +378,7 @@ fn word_id_too_big_split_b() {
 }
 
 #[test]
-fn word_id_too_big_word_structure() {
+fn word_id_too_big_word_structure_in_legacy_format() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(
@@ -387,7 +395,7 @@ fn word_id_too_big_word_structure() {
 }
 
 #[test]
-fn word_id_too_big_dicform_userdic_insystem() {
+fn word_id_too_big_dicform_userdic_insystem_in_legacy_format() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(
@@ -412,7 +420,7 @@ fn word_id_too_big_dicform_userdic_insystem() {
 }
 
 #[test]
-fn word_id_too_big_dicform_userdic_inuser() {
+fn word_id_too_big_dicform_userdic_inuser_in_legacy_format() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(

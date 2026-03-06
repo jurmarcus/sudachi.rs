@@ -103,7 +103,10 @@ fn parse_split_disallow_numeric_ref() {
 #[test]
 fn parse_kyoto() {
     let mut rdr = LexiconReader::new();
-    let data = "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
+    let data = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
+    );
     rdr.read_bytes(data.as_bytes()).unwrap();
     let entries = rdr.entries();
     assert_eq!(entries.len(), 1);
@@ -128,7 +131,7 @@ fn parse_kyoto() {
 }
 
 #[test]
-fn parse_legacy_detection_by_integer_literal() {
+fn parse_legacy_detection_by_integer_literal_in_legacy_format() {
     let mut rdr = LexiconReader::new();
     let data = "京都,40000,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
     assert_matches!(
@@ -146,7 +149,7 @@ fn parse_header_with_pos_id_only() {
     let mut rdr = LexiconReader::new();
     let data = concat!(
         "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
-        "京都,6,6,5293,京都,0,キョウト,京都,,A,*,*,*,*"
+        "京都,6,6,5293,京都,0,キョウト,京都,,A,,,,"
     );
     // preload one POS to resolve pos_id=0
     let old = "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
@@ -178,8 +181,43 @@ fn parse_header_dictionary_form_asterisk_fails() {
     let mut rdr = LexiconReader::new();
     let data = concat!(
         "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
-        "東京都,6,8,5320,名詞,固有名詞,地名,一般,*,*,トウキョウト,,*,B,*,*,*\n"
+        "東京都,6,8,5320,名詞,固有名詞,地名,一般,*,*,トウキョウト,,*,B,,,\n"
     );
+    assert_matches!(
+        rdr.read_bytes(data.as_bytes()),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::InvalidSplit(_),
+            ..
+        }))
+    );
+}
+
+#[test]
+fn parse_header_split_asterisk_fails() {
+    let mut rdr = LexiconReader::new();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "東京都,6,8,5320,名詞,固有名詞,地名,一般,*,*,トウキョウト,,,B,*,,\n"
+    );
+    assert_matches!(
+        rdr.read_bytes(data.as_bytes()),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::InvalidSplit(_),
+            ..
+        }))
+    );
+}
+
+#[test]
+fn parse_header_synonym_groups_asterisk_fails() {
+    let mut rdr = LexiconReader::new();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        "京都,6,6,5293,京都,0,キョウト,京都,,A,,,,*"
+    );
+    // preload one POS to resolve pos_id=0
+    let old = "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
+    rdr.read_bytes(old.as_bytes()).unwrap();
     assert_matches!(
         rdr.read_bytes(data.as_bytes()),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
@@ -194,8 +232,8 @@ fn resolve_header_normalized_form_ref() {
     let mut bldr = DictBuilder::new_system();
     let data = concat!(
         "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
-        "東京,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,,,A,*,*,*\n",
-        "トウキョウ,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,\"東京,0,トウキョウ\",,A,*,*,*\n"
+        "東京,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,,,A,,,\n",
+        "トウキョウ,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,\"東京,0,トウキョウ\",,A,,,\n"
     );
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
@@ -208,8 +246,8 @@ fn resolve_header_normalized_form_headword_ref() {
     let mut bldr = DictBuilder::new_system();
     let data = concat!(
         "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
-        "東京,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,,,A,*,*,*\n",
-        "トーキョー,1,1,2816,名詞,固有名詞,地名,一般,*,*,トーキョー,東京,,A,*,*,*\n"
+        "東京,1,1,2816,名詞,固有名詞,地名,一般,*,*,トウキョウ,,,A,,,\n",
+        "トーキョー,1,1,2816,名詞,固有名詞,地名,一般,*,*,トーキョー,東京,,A,,,\n"
     );
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
@@ -225,7 +263,7 @@ fn read_pos_table_and_parse_pos_id_lexicon() {
 
     let lex = concat!(
         "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
-        "京都,6,6,5293,京都,0,キョウト,京都,,A,*,*,*,*"
+        "京都,6,6,5293,京都,0,キョウト,京都,,A,,,,"
     );
     rdr.read_bytes(lex.as_bytes()).unwrap();
     let e = &rdr.entries()[0];
@@ -314,7 +352,7 @@ fn parse_header_user_data_multibyte_within_char_limit() {
     let data = format!(
         concat!(
             "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,user_data\n",
-            "京都,6,6,5293,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,*,*,*,{}"
+            "京都,6,6,5293,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,{}"
         ),
         user_data
     );
@@ -327,7 +365,7 @@ fn parse_header_mode_optional() {
     let mut rdr = LexiconReader::new();
     let data = concat!(
         "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,word_structure\n",
-        "京都,6,6,5293,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,*,*,*"
+        "京都,6,6,5293,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,,,"
     );
     rdr.read_bytes(data.as_bytes()).unwrap();
     let e = &rdr.entries()[0];
@@ -339,7 +377,7 @@ fn resolve_header_normalized_form_literal_without_target() {
     let mut bldr = DictBuilder::new_system();
     let data = concat!(
         "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
-        "舞台藝術,1,1,2816,名詞,普通名詞,一般,*,*,*,ブタイゲイジュツ,舞台芸術,,A,*,*,*"
+        "舞台藝術,1,1,2816,名詞,普通名詞,一般,*,*,*,ブタイゲイジュツ,舞台芸術,,A,,,"
     );
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
@@ -354,7 +392,10 @@ fn resolve_header_normalized_form_literal_without_target() {
 #[test]
 fn parse_kyoto_ignored() {
     let mut rdr = LexiconReader::new();
-    let data = "京都,-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
+    let data = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        "京都,-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
+    );
     rdr.read_bytes(data.as_bytes()).unwrap();
     let entries = rdr.entries();
     assert_eq!(entries.len(), 1);
@@ -365,8 +406,11 @@ fn parse_kyoto_ignored() {
 #[test]
 fn parse_kyoto_synonym_opt() {
     let mut rdr = LexiconReader::new();
-    // last field is omitted
-    let data = "京都,1,1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*";
+    // synonym_groups column itself is omitted
+    let data = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "京都,1,1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,"
+    );
     rdr.read_bytes(data.as_bytes()).unwrap();
     let entries = rdr.entries();
     assert_eq!(entries.len(), 1);
@@ -377,14 +421,17 @@ fn parse_kyoto_synonym_opt() {
 #[test]
 fn parse_kyoto_not_enough_fields() {
     let mut rdr = LexiconReader::new();
-    // last field is omitted
-    let data = "京都,1,1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*";
+    // word_structure and synonym_groups are missing
+    let data = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        "京都,1,1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,"
+    );
 
     assert_matches!(
         rdr.read_bytes(data.as_bytes()),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
             cause: BuildFailure::NoRawField(_),
-            line: 1,
+            line: 2,
             ..
         }))
     );
@@ -393,12 +440,15 @@ fn parse_kyoto_not_enough_fields() {
 #[test]
 fn parse_kyoto_ignored_empty_surface() {
     let mut rdr = LexiconReader::new();
-    let data = ",-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*";
+    let data = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        ",-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
+    );
     assert_matches!(
         rdr.read_bytes(data.as_bytes()),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
             cause: BuildFailure::EmptySurface,
-            line: 1,
+            line: 2,
             ..
         }))
     );
@@ -407,11 +457,13 @@ fn parse_kyoto_ignored_empty_surface() {
 #[test]
 fn parse_pos_exhausted() {
     let mut rdr = LexiconReader::new();
-    let mut data = String::new();
+    let mut data = String::from(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+    );
     for i in 0..=MAX_POS_IDS + 1 {
         writeln!(
             data,
-            "x,-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,{},キョウト,京都,*,A,*,*,*,*",
+            "x,-1,-1,5293,京都,名詞,固有名詞,地名,一般,*,{},キョウト,京都,,A,,,,",
             i
         )
         .unwrap()

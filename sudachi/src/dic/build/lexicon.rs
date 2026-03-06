@@ -29,8 +29,8 @@ use memmap2::Mmap;
 use crate::analysis::Mode;
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx, DicWriteResult};
 use crate::dic::build::parse::{
-    it_next, none_if_equal, parse_i16, parse_mode, parse_slash_list, parse_u32_list, parse_wordid,
-    unescape, unescape_cow, WORD_ID_LITERAL,
+    it_next, none_if_equal, parse_i16, parse_mode, parse_slash_list, parse_u32_list_with_asterisk,
+    parse_wordid, unescape, unescape_cow, WORD_ID_LITERAL,
 };
 #[cfg(test)]
 use crate::dic::build::primitives::Utf16Writer;
@@ -296,19 +296,22 @@ impl LexiconReader {
         })?;
         let splitting = rec.get_col_or(layout, Column::Mode, Mode::C, parse_mode)?;
         let allow_word_id_ref = layout.is_legacy();
+        let allow_asterisk = layout.is_legacy();
         let (split_a, resolve_a) = rec.get_col(layout, Column::SplitA, |s| {
-            self.parse_splits(s, allow_word_id_ref)
+            self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
         let (split_b, resolve_b) = rec.get_col(layout, Column::SplitB, |s| {
-            self.parse_splits(s, allow_word_id_ref)
+            self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
         let (split_c, resolve_c) = rec.get_col_or_default(layout, Column::SplitC, |s| {
-            self.parse_splits(s, allow_word_id_ref)
+            self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
         let (parts, resolve_parts) = rec.get_col(layout, Column::WordStructure, |s| {
-            self.parse_splits(s, allow_word_id_ref)
+            self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
-        let synonyms = rec.get_col_or_default(layout, Column::SynonymGroups, parse_u32_list)?;
+        let synonyms = rec.get_col_or_default(layout, Column::SynonymGroups, |s| {
+            parse_u32_list_with_asterisk(s, allow_asterisk)
+        })?;
         let user_data = rec.get_col_or_default(layout, Column::UserData, unescape)?;
         let pos_id = rec.get_col_or(layout, Column::PosId, -1_i16, |s| {
             if s.is_empty() {
@@ -518,12 +521,25 @@ impl LexiconReader {
         Ok(())
     }
 
+    #[cfg(test)]
     fn parse_splits(
         &mut self,
         data: &str,
         allow_word_id_ref: bool,
     ) -> DicWriteResult<(Vec<WordRef>, usize)> {
+        self.parse_splits_with_asterisk(data, allow_word_id_ref, true)
+    }
+
+    fn parse_splits_with_asterisk(
+        &mut self,
+        data: &str,
+        allow_word_id_ref: bool,
+        allow_asterisk: bool,
+    ) -> DicWriteResult<(Vec<WordRef>, usize)> {
         if data.is_empty() || data == "*" {
+            if data == "*" && !allow_asterisk {
+                return Err(BuildFailure::InvalidSplit(data.to_owned()));
+            }
             return Ok((Vec::new(), 0));
         }
 
