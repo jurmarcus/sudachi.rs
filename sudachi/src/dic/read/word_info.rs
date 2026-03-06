@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ use nom::number::complete::{le_i16, le_i32, le_i8, le_u32};
 
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::read::error::SudachiNomResult;
-use crate::dic::read::utf16_string::{skip_utf16_string, utf16_string};
+use crate::dic::read::utf16_string::utf16_string;
 use crate::dic::subset::InfoSubset;
 use crate::error::SudachiResult;
 
@@ -28,7 +28,7 @@ pub fn le_u32_string_pointer(input: &[u8]) -> SudachiNomResult<&[u8], StringPoin
 
 /// Parsed raw binary representation of a word info entry.
 ///
-/// word id/ref fields are typed as u32 to avoid type conversion. 
+/// word id/ref fields are typed as u32 to avoid type conversion.
 /// crate::dic::word_info::{WordInfoData, WordInfoRefData} will handle those types.
 #[derive(Clone, Debug, Default)]
 pub struct WordInfoRawData {
@@ -125,7 +125,7 @@ impl WordInfoParser {
 
     #[inline]
     pub fn embedded_b_unit_split_length(&self) -> usize {
-        // length of b/a unit split and word structure is -1 when it is same as the larger unit split
+        // when b/a unit split or word structure shares same array to the upper split, it is skipped and unit_split_length is set to -1.
         std::cmp::max(0, self.info.b_unit_split_length) as usize
     }
 
@@ -192,77 +192,51 @@ impl WordInfoParser {
             InfoSubset::INDEX_FORM_LENGTH,
             le_i16
         );
-        parse_field!(self, data, c_unit_split_length, InfoSubset::SPLIT_C, le_i8);
-        parse_field!(self, data, b_unit_split_length, InfoSubset::SPLIT_B, le_i8);
-        parse_field!(self, data, a_unit_split_length, InfoSubset::SPLIT_A, le_i8);
-        parse_field!(
-            self,
-            data,
-            word_structure_length,
-            InfoSubset::WORD_STRUCTURE,
-            le_i8
-        );
-        parse_field!(
-            self,
-            data,
-            synonym_group_ids_length,
-            InfoSubset::SYNONYM_GROUP_IDS,
-            le_i8
-        );
-        parse_field!(self, data, user_data_flag, InfoSubset::USER_DATA, le_i8);
+        // Split/synonym lengths and user-data presence are metadata needed to advance the
+        // parser, so read them unconditionally and apply subset filtering later.
+        let (data, c_unit_split_length) = le_i8(data)?;
+        self.info.c_unit_split_length = c_unit_split_length;
+        let (data, b_unit_split_length) = le_i8(data)?;
+        self.info.b_unit_split_length = b_unit_split_length;
+        let (data, a_unit_split_length) = le_i8(data)?;
+        self.info.a_unit_split_length = a_unit_split_length;
+        let (data, word_structure_length) = le_i8(data)?;
+        self.info.word_structure_length = word_structure_length;
+        let (data, synonym_group_ids_length) = le_i8(data)?;
+        self.info.synonym_group_ids_length = synonym_group_ids_length;
+        let (data, user_data_flag) = le_i8(data)?;
+        self.info.user_data_flag = user_data_flag;
 
-        parse_field!(
-            self,
-            data,
-            c_unit_split,
-            InfoSubset::SPLIT_C,
-            nom::multi::count(le_u32, self.embedded_c_unit_split_length()),
-            nom::bytes::complete::take(4 * self.embedded_c_unit_split_length())
-        );
-        parse_field!(
-            self,
-            data,
-            b_unit_split,
-            InfoSubset::SPLIT_B,
-            nom::multi::count(le_u32, self.embedded_b_unit_split_length()),
-            nom::bytes::complete::take(4 * self.embedded_b_unit_split_length())
-        );
-        parse_field!(
-            self,
-            data,
-            a_unit_split,
-            InfoSubset::SPLIT_A,
-            nom::multi::count(le_u32, self.embedded_a_unit_split_length()),
-            nom::bytes::complete::take(4 * self.embedded_a_unit_split_length())
-        );
-        parse_field!(
-            self,
-            data,
-            word_structure,
-            InfoSubset::WORD_STRUCTURE,
-            nom::multi::count(le_u32, self.embedded_word_structure_length()),
-            nom::bytes::complete::take(4 * self.embedded_word_structure_length())
-        );
+        let (data, c_unit_split) =
+            nom::multi::count(le_u32, self.embedded_c_unit_split_length())(data)?;
+        self.info.c_unit_split = c_unit_split;
+        let (data, b_unit_split) =
+            nom::multi::count(le_u32, self.embedded_b_unit_split_length())(data)?;
+        self.info.b_unit_split = b_unit_split;
+        let (data, a_unit_split) =
+            nom::multi::count(le_u32, self.embedded_a_unit_split_length())(data)?;
+        self.info.a_unit_split = a_unit_split;
+        let (data, word_structure) =
+            nom::multi::count(le_u32, self.embedded_word_structure_length())(data)?;
+        self.info.word_structure = word_structure;
+        let (data, synonym_group_ids) =
+            nom::multi::count(le_i32, self.embedded_synonym_group_ids_length())(data)?;
+        self.info.synonym_group_ids = synonym_group_ids;
 
-        parse_field!(
-            self,
-            data,
-            synonym_group_ids,
-            InfoSubset::SYNONYM_GROUP_IDS,
-            nom::multi::count(le_i32, self.embedded_synonym_group_ids_length()),
-            nom::bytes::complete::take(4 * self.embedded_synonym_group_ids_length())
-        );
-
-        // parse user data only if the flag is set
         if self.has_user_data() {
-            parse_field!(
-                self,
-                data,
-                user_data,
-                InfoSubset::USER_DATA,
-                utf16_string,
-                skip_utf16_string
-            );
+            let (data, user_data) = utf16_string(data)?;
+            self.info.user_data = user_data;
+            let _ = data;
+        }
+
+        if self.info.b_unit_split_length < 0 {
+            self.info.b_unit_split = self.info.c_unit_split.clone();
+        }
+        if self.info.a_unit_split_length < 0 {
+            self.info.a_unit_split = self.info.b_unit_split.clone();
+        }
+        if self.info.word_structure_length < 0 {
+            self.info.word_structure = self.info.a_unit_split.clone();
         }
 
         Ok(self.info)
