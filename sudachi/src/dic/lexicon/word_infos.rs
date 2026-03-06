@@ -25,6 +25,8 @@ pub struct WordInfos<'a> {
 }
 
 impl<'a> WordInfos<'a> {
+    /// Entries block starts with 32 bytes reserved area.
+    const ENTRIES_INITIAL_OFFSET: usize = 32;
     /// The byte size of Word entries in the Entries block are aligned to 8 bytes.
     /// WordId is a offset of the entry in the Entries block, w/o last 3 bits.
     pub const WORD_ID_ALIGNMENT_BITS: usize = 3;
@@ -44,7 +46,7 @@ impl<'a> WordInfos<'a> {
     /// trie/word-pointer tables because non-indexed entries do not appear there.
     pub fn entry_ids_in_order(&self, num_total_entries: u32) -> Option<Vec<EntryId>> {
         let mut result = Vec::with_capacity(num_total_entries as usize);
-        let mut offset = 0usize;
+        let mut offset = Self::ENTRIES_INITIAL_OFFSET;
 
         while result.len() < num_total_entries as usize {
             if offset % Self::WORD_INFO_OFFSET_ALIGNMENT != 0 {

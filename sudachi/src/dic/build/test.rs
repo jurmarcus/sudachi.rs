@@ -24,6 +24,8 @@ use crate::error::SudachiError;
 use std::io::sink;
 
 static MATRIX_10_10: &[u8] = include_bytes!("test/matrix_10x10.def");
+static WORDREF_SYSTEM: &[u8] = include_bytes!("test/wordref.csv");
+static WORDREF_USER: &[u8] = include_bytes!("test/wordref-user.csv");
 
 #[test]
 fn read_pos_then_read_lexicon_with_pos_id() {
@@ -205,27 +207,115 @@ fn build_user_dictionary_crossrefs() {
 }
 
 #[test]
-fn conn_id_too_big_left() {
+fn fail_matrix_size_validation() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
+
     bldr.read_lexicon(
         "京都,10,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*".as_bytes(),
     )
     .unwrap();
-    let mut sink = sink();
-    claim::assert_matches!(bldr.compile(&mut sink), Err(_));
-}
+    let mut sink1 = sink();
+    claim::assert_matches!(bldr.compile(&mut sink1), Err(_));
 
-#[test]
-fn conn_id_too_big_right() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(
         "京都,5,10,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*".as_bytes(),
     )
     .unwrap();
-    let mut sink = sink();
-    claim::assert_matches!(bldr.compile(&mut sink), Err(_));
+    let mut sink2 = sink();
+    claim::assert_matches!(bldr.compile(&mut sink2), Err(_));
+}
+
+#[test]
+fn various_word_references_system() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    assert_eq!(8, bldr.read_lexicon(WORDREF_SYSTEM).unwrap());
+    bldr.resolve().unwrap();
+    let mut data = Vec::new();
+    bldr.compile(&mut data).unwrap();
+    let dic = LoadedDictionary::load_system(&data).unwrap();
+    assert_eq!(8, dic.lexicon().size());
+}
+
+#[test]
+fn various_word_references_user() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    assert_eq!(8, bldr.read_lexicon(WORDREF_SYSTEM).unwrap());
+    bldr.resolve().unwrap();
+    let mut data = Vec::new();
+    bldr.compile(&mut data).unwrap();
+    let sys = LoadedDictionary::load_system(&data).unwrap();
+
+    let mut user = DictBuilder::new_user(&sys);
+    assert_eq!(2, user.read_lexicon(WORDREF_USER).unwrap());
+    user.resolve().unwrap();
+    let mut user_data = Vec::new();
+    user.compile(&mut user_data).unwrap();
+
+    let user_bin = BinaryDictionary::load_user(&user_data).unwrap();
+    let merged = sys.merge_dictionary(user_bin).unwrap();
+    let entry = merged.lexicon_set.lookup("東京府".as_bytes(), 0).next().unwrap();
+    assert_eq!(entry.word_id.dict().as_raw(), 1);
+}
+
+#[test]
+fn split_user_ref() {
+    let mut sys = DictBuilder::new_system();
+    sys.read_conn(MATRIX_10_10).unwrap();
+    sys.read_lexicon(
+        concat!(
+            "東京,1,1,2816,東京,名詞,普通名詞,一般,*,*,*,トウキョウ,東京,*,A,*,*,*,*\n"
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    sys.resolve().unwrap();
+    let mut sys_data = Vec::new();
+    sys.compile(&mut sys_data).unwrap();
+    let sys_dic = LoadedDictionary::load_system(&sys_data).unwrap();
+
+    let mut user = DictBuilder::new_user(&sys_dic);
+    user.read_lexicon(
+        concat!(
+            "東京都,2,2,5320,東京都,名詞,固有名詞,地名,一般,*,*,トウキョウト,東京都,*,B,0/U1,0/U1,0/U1,*\n",
+            "都,2,2,2914,都,名詞,普通名詞,一般,*,*,*,ト,都,*,A,*,*,*,*\n"
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    user.resolve().unwrap();
+    let mut user_data = Vec::new();
+    user.compile(&mut user_data).unwrap();
+    let merged = sys_dic
+        .merge_dictionary(BinaryDictionary::load_user(&user_data).unwrap())
+        .unwrap();
+
+    let tokyo = merged
+        .lexicon_set
+        .lookup("東京".as_bytes(), 0)
+        .find(|e| e.word_id.dict().as_raw() == 0)
+        .unwrap()
+        .word_id;
+    let to = merged
+        .lexicon_set
+        .lookup("都".as_bytes(), 0)
+        .find(|e| e.word_id.dict().as_raw() == 1)
+        .unwrap()
+        .word_id;
+    let tokyoto = merged
+        .lexicon_set
+        .lookup("東京都".as_bytes(), 0)
+        .find(|e| e.word_id.dict().as_raw() == 1)
+        .unwrap()
+        .word_id;
+    let wi = merged.lexicon_set.get_word_info(tokyoto).unwrap();
+    assert_eq!(wi.a_unit_split(), [tokyo, to]);
+    assert_eq!(wi.b_unit_split(), [tokyo, to]);
+    assert_eq!(wi.word_structure(), [tokyo, to]);
 }
 
 #[test]
