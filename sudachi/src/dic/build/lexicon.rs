@@ -32,8 +32,9 @@ use crate::dic::build::parse::{
     it_next, none_if_equal, parse_i16, parse_mode, parse_slash_list, parse_u32_list, parse_wordid,
     unescape, unescape_cow, WORD_ID_LITERAL,
 };
-use crate::dic::build::pos::read_pos_bytes as read_pos_csv_bytes;
+#[cfg(test)]
 use crate::dic::build::primitives::Utf16Writer;
+use crate::dic::build::pos::read_pos_bytes as read_pos_csv_bytes;
 use crate::dic::build::report::{ReportBuilder, Reporter};
 use crate::dic::build::MAX_POS_IDS;
 use crate::dic::grammar::Grammar;
@@ -577,7 +578,6 @@ impl LexiconReader {
     }
 
     pub fn write_pos_table<W: Write>(&self, w: &mut W) -> SudachiResult<usize> {
-        let mut u16w = Utf16Writer::new();
         let real_count = self.pos.len() - self.start_pos;
         w.write_all(&u16::to_le_bytes(real_count as u16))?;
         let mut written_bytes = 2;
@@ -588,7 +588,7 @@ impl LexiconReader {
                 continue;
             }
             for field in row.fields() {
-                ctx.apply(|| u16w.write(w, field).map(|written| written_bytes += written))?;
+                ctx.apply(|| write_short_utf16(w, field).map(|written| written_bytes += written))?;
             }
             ctx.add_line(1);
         }
@@ -811,6 +811,24 @@ impl LexiconReader {
     }
 }
 
+fn write_short_utf16<W: Write>(w: &mut W, data: &str) -> DicWriteResult<usize> {
+    let utf16: Vec<u16> = data.encode_utf16().collect();
+    if utf16.len() > i16::MAX as usize {
+        return Err(BuildFailure::InvalidSize {
+            actual: utf16.len(),
+            expected: i16::MAX as usize,
+        });
+    }
+    let len = utf16.len() as i16;
+    w.write_all(&len.to_le_bytes())?;
+    let mut written = 2;
+    for c in utf16 {
+        w.write_all(&c.to_le_bytes())?;
+        written += 2;
+    }
+    Ok(written)
+}
+
 pub struct LexiconWriter<'a> {
     entries: &'a [RawLexiconEntry],
     strings: &'a StringStore,
@@ -884,6 +902,12 @@ impl<'a> LexiconWriter<'a> {
                 reading_strptr,
             ))?;
             let expected_end = offset + e.expected_entry_size();
+            if total > expected_end {
+                return ctx.err(BuildFailure::InvalidSize {
+                    actual: total,
+                    expected: expected_end,
+                });
+            }
             while total < expected_end {
                 w.write_all(&[0])?;
                 total += 1;

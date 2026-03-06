@@ -15,8 +15,11 @@
  */
 
 use super::*;
+use crate::dic::binary_loader::LoadedDictionary;
 use crate::dic::build::error::DicBuildError;
 use crate::dic::build::DictBuilder;
+use crate::dic::description::{Block, Description};
+use crate::dic::lexicon::word_infos::WordInfos;
 use crate::dic::read::word_info::WordInfoParser;
 use crate::dic::word_id::WordId;
 use crate::error::SudachiError;
@@ -438,24 +441,25 @@ fn resolve_inline_same_dict() {
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn word_info_rw() {
-    let mut rdr = LexiconReader::new();
-    let data: &[u8] = include_bytes!("data_kyoto_inline.csv");
-    rdr.read_bytes(data).unwrap();
-    let mut u16w = Utf16Writer::new();
-    let mut data: Vec<u8> = Vec::new();
-    rdr.entries[0]
-        .write_word_info(&mut u16w, &mut data)
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(include_bytes!("../test/matrix_10x10.def")).unwrap();
+    bldr.read_lexicon(include_bytes!("data_kyoto_inline.csv"))
         .unwrap();
-    // `WordInfoParser` reads the final binary entry layout (params + word-info body).
-    // prepend 6-byte word params to reuse the parser for this writer test.
-    data.splice(0..0, [0_u8; 6]);
+    bldr.resolve().unwrap();
 
-    let wi = WordInfoParser::default().parse(&data).unwrap();
+    let mut bin = Vec::new();
+    bldr.compile(&mut bin).unwrap();
+    let dic = LoadedDictionary::load_system(&bin).unwrap();
+    let target = dic.lexicon_set.lookup("京都".as_bytes(), 0).next().unwrap().word_id;
+    let desc = Description::load(&bin).unwrap();
+    let entries = desc.slice(&bin, Block::Entries).unwrap();
+    let offset = (target.entry().as_raw() as usize) << WordInfos::WORD_ID_ALIGNMENT_BITS;
+
+    let wi = WordInfoParser::default().parse(&entries[offset..]).unwrap();
     assert_eq!(wi.pos_id, 0);
     assert_eq!(wi.index_form_length, "京都".len() as i16);
-    assert_eq!(wi.dictionary_form, WordId::INVALID.as_raw());
+    assert_ne!(wi.dictionary_form, WordId::INVALID.as_raw());
     assert_eq!(wi.a_unit_split.len(), 0);
     assert_eq!(wi.b_unit_split.len(), 0);
     assert_eq!(wi.word_structure.len(), 0);

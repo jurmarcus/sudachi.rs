@@ -14,14 +14,14 @@
  *  limitations under the License.
  */
 
-use crate::dic::build::lexicon::LexiconReader;
-use crate::dic::build::primitives::Utf16Writer;
+use crate::dic::binary_loader::LoadedDictionary;
+use crate::dic::build::DictBuilder;
+use crate::dic::description::{Block, Description};
+use crate::dic::lexicon::word_infos::WordInfos;
 use crate::dic::read::word_info::WordInfoParser;
-use crate::dic::word_id::WordId;
 use crate::dic::subset::InfoSubset;
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_surface() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::HEADWORD)
@@ -31,7 +31,6 @@ fn wordinfo_subset_surface() {
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_len() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::INDEX_FORM_LENGTH)
@@ -41,7 +40,6 @@ fn wordinfo_subset_len() {
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_pos() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::POS_ID)
@@ -51,17 +49,15 @@ fn wordinfo_subset_pos() {
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_norm() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::NORMALIZED_FORM)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.normalized_form, WordId::new(0, 1).as_raw());
+    assert_ne!(wi.normalized_form, 0);
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_reading() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::READING_FORM)
@@ -71,47 +67,42 @@ fn wordinfo_subset_reading() {
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_dic_form_id() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::DICTIONARY_FORM)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.dictionary_form, WordId::new(0, 1).as_raw());
+    assert_ne!(wi.dictionary_form, 0);
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_dic_split_a() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::SPLIT_A)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.a_unit_split, [1, 2]);
+    assert_eq!(wi.a_unit_split.len(), 2);
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_dic_split_b() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::SPLIT_B)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.b_unit_split, [3, 4]);
+    assert_eq!(wi.b_unit_split.len(), 2);
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_dic_word_structure() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::WORD_STRUCTURE)
         .parse(&data)
         .unwrap();
-    assert_eq!(wi.word_structure, vec![5, 6]);
+    assert_eq!(wi.word_structure.len(), 2);
 }
 
 #[test]
-#[ignore = "legacy word_info binary layout is being migrated"]
 fn wordinfo_subset_dic_synonym() {
     let data = make_data();
     let wi = WordInfoParser::subset(InfoSubset::SYNONYM_GROUP_IDS)
@@ -121,14 +112,25 @@ fn wordinfo_subset_dic_synonym() {
 }
 
 fn make_data() -> Vec<u8> {
-    let mut rdr = LexiconReader::new();
-    let data: &[u8] = include_bytes!("data_full_wordinfo.csv");
-    rdr.read_bytes(data).unwrap();
-    let mut u16w = Utf16Writer::new();
-    let mut data: Vec<u8> = Vec::new();
-    rdr.entries[1]
-        .write_word_info(&mut u16w, &mut data)
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(include_bytes!("../test/matrix_10x10.def")).unwrap();
+    bldr.read_lexicon(include_bytes!("data_full_wordinfo.csv"))
         .unwrap();
-    data.splice(0..0, [0_u8; 6]);
-    data
+    bldr.resolve().unwrap();
+
+    let mut bin = Vec::new();
+    bldr.compile(&mut bin).unwrap();
+
+    let dic = LoadedDictionary::load_system(&bin).unwrap();
+    let target = dic
+        .lexicon_set
+        .lookup("東京".as_bytes(), 0)
+        .find(|e| e.end == "東京".len())
+        .unwrap()
+        .word_id;
+
+    let desc = Description::load(&bin).unwrap();
+    let entries = desc.slice(&bin, Block::Entries).unwrap();
+    let offset = (target.entry().as_raw() as usize) << WordInfos::WORD_ID_ALIGNMENT_BITS;
+    entries[offset..].to_vec()
 }

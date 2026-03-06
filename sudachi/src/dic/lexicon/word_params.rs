@@ -60,7 +60,7 @@ impl<'a> WordParams<'a> {
 
     pub fn from_bytes(bytes: &'a [u8]) -> WordParams<'a> {
         Self {
-            data: CowArray::from_bytes(bytes, 0, bytes.len()),
+            data: CowArray::from_bytes(bytes, 0, bytes.len() / std::mem::size_of::<u64>()),
         }
     }
 

@@ -175,8 +175,14 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         let cm = system.grammar().conn_matrix();
         bldr.lexicon
             .set_max_conn_sizes(cm.num_left() as _, cm.num_right() as _);
-        bldr.lexicon
-            .set_num_system_words(system.lexicon().size() as usize);
+        let max_system_entry_plus_one = system
+            .lexicon()
+            .system_word_ids_in_order()
+            .into_iter()
+            .map(|wid| wid.entry().as_raw() as usize + 1)
+            .max()
+            .unwrap_or(0);
+        bldr.lexicon.set_num_system_words(max_system_entry_plus_one);
         bldr.prebuilt = Some(system);
         bldr
     }
@@ -271,22 +277,19 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         self.align_to_block(&mut buffer);
         let start = buffer.len();
         let report = ReportBuilder::new("trie");
-        let trie_size = trie.len() / 4;
-        buffer.write_all(&(trie_size as u32).to_le_bytes())?;
         buffer.write_all(&trie)?;
-        self.reporter.collect(4 + trie.len(), report);
-        blocks.push(BlockInfo::new(Block::TRIEIndex, start, 4 + trie.len()));
+        self.reporter.collect(trie.len(), report);
+        blocks.push(BlockInfo::new(Block::TRIEIndex, start, trie.len()));
 
         self.align_to_block(&mut buffer);
         let start = buffer.len();
         let report = ReportBuilder::new("word_id table");
-        buffer.write_all(&(word_id_table.len() as u32).to_le_bytes())?;
         buffer.write_all(&word_id_table)?;
-        self.reporter.collect(4 + word_id_table.len(), report);
+        self.reporter.collect(word_id_table.len(), report);
         blocks.push(BlockInfo::new(
             Block::WordPointers,
             start,
-            4 + word_id_table.len(),
+            word_id_table.len(),
         ));
 
         self.align_to_block(&mut buffer);

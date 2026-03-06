@@ -15,7 +15,6 @@
  */
 
 use crate::dic::build::error::{BuildFailure, DicBuildError};
-use crate::dic::build::primitives::write_u32_array;
 use crate::dic::word_id::WordId;
 use crate::error::{SudachiError, SudachiResult};
 use crate::util::fxhash::FxBuildHasher;
@@ -59,7 +58,7 @@ impl<'a> IndexBuilder<'a> {
             entry.offset = result.len();
             // clear stored ids memory after use
             let ids = std::mem::take(&mut entry.ids);
-            write_u32_array(&mut result, &ids).map_err(|e| {
+            write_delta_varint_word_ids(&mut result, &ids).map_err(|e| {
                 SudachiError::DictionaryCompilationError(DicBuildError {
                     cause: e,
                     line: 0,
@@ -96,6 +95,29 @@ impl<'a> IndexBuilder<'a> {
             }
             .into()),
         }
+    }
+}
+
+fn write_delta_varint_word_ids(dst: &mut Vec<u8>, ids: &[WordId]) -> Result<(), BuildFailure> {
+    write_varint32(dst, ids.len() as u32);
+    let mut prev = 0u32;
+    for wid in ids {
+        let current = wid.entry().as_raw();
+        let delta = current.saturating_sub(prev);
+        write_varint32(dst, delta);
+        prev = current;
+    }
+    Ok(())
+}
+
+fn write_varint32(dst: &mut Vec<u8>, mut value: u32) {
+    loop {
+        if (value & !0x7f) == 0 {
+            dst.push(value as u8);
+            return;
+        }
+        dst.push((value as u8 & 0x7f) | 0x80);
+        value >>= 7;
     }
 }
 

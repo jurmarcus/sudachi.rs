@@ -89,7 +89,7 @@ impl FusedIterator for TrieEntryIter<'_> {}
 impl<'a> Trie<'a> {
     pub fn from_bytes(data: &'a [u8]) -> Trie<'a> {
         Trie {
-            array: CowArray::from_bytes(data, 0, data.len()),
+            array: CowArray::from_bytes(data, 0, data.len() / std::mem::size_of::<u32>()),
         }
     }
 

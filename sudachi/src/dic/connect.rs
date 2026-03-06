@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 
 use nom::number::complete::le_i16;
- 
+
 use crate::error::{SudachiError, SudachiResult};
 use crate::util::cow_array::CowArray;
 
@@ -38,8 +38,7 @@ impl<'a> ConnectionMatrix<'a> {
         num_right: usize,
     ) -> SudachiResult<ConnectionMatrix<'a>> {
         let size = num_left * num_right;
-
-        let end = offset + size;
+        let end = offset + size * std::mem::size_of::<i16>();
         if end > data.len() {
             return Err(SudachiError::InvalidDictionaryGrammar.with_context("connection matrix"));
         }
@@ -55,8 +54,18 @@ impl<'a> ConnectionMatrix<'a> {
     fn index(&self, left: u16, right: u16) -> usize {
         let uleft = left as usize;
         let uright = right as usize;
-        debug_assert!(uleft < self.num_left);
-        debug_assert!(uright < self.num_right);
+        debug_assert!(
+            uleft < self.num_left,
+            "left id {} is out of range (num_left={})",
+            uleft,
+            self.num_left
+        );
+        debug_assert!(
+            uright < self.num_right,
+            "right id {} is out of range (num_right={})",
+            uright,
+            self.num_right
+        );
         let index = uright * self.num_left + uleft;
         debug_assert!(index < self.data.len());
         index

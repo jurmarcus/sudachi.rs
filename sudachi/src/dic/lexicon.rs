@@ -78,9 +78,15 @@ impl<'a> Lexicon<'a> {
     }
 
     pub fn entry_ids_in_order(&self) -> Vec<EntryId> {
-        let mut result: Vec<EntryId> = self.word_id_table.all_entries().collect();
-        result.sort_unstable();
-        result
+        match self.word_infos.entry_ids_in_order(self.num_total_entries) {
+            Some(result) => result,
+            None => {
+                // Fallback to trie-indexed entries for malformed binaries.
+                let mut result: Vec<EntryId> = self.word_id_table.all_entries().collect();
+                result.sort_unstable();
+                result
+            }
+        }
     }
 
     /// Assign lexicon id to the current Lexicon

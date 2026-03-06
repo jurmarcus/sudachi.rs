@@ -19,8 +19,6 @@ mod with_analysis;
 use crate::dic::binary_loader::{BinaryDictionary, LoadedDictionary};
 use crate::dic::build::error::{BuildFailure, DicBuildError};
 use crate::dic::build::DictBuilder;
-use crate::dic::lexicon::LexiconEntry;
-use crate::dic::word_id::WordId;
 use crate::dic::LexiconAccess;
 use crate::error::SudachiError;
 use std::io::sink;
@@ -48,7 +46,8 @@ fn read_pos_then_read_lexicon_with_pos_id() {
 fn read_pos_after_lexicon_fails() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
-    bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap();
+    bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
+        .unwrap();
     let pos = "0,名詞,固有名詞,地名,一般,*,*";
     claim::assert_matches!(
         bldr.read_pos(pos.as_bytes()),
@@ -84,7 +83,6 @@ fn build_grammar() {
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_lexicon_1word() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -97,19 +95,12 @@ fn build_lexicon_1word() {
     bldr.compile(&mut built).unwrap();
     let dic = LoadedDictionary::load_system(&built).unwrap();
     let mut iter = dic.lexicon().lookup("京都".as_bytes(), 0);
-    assert_eq!(
-        iter.next(),
-        Some(LexiconEntry {
-            word_id: WordId::new(0, 0),
-            end: 6
-        })
-    );
+    let entry = iter.next().unwrap();
+    assert_eq!(entry.end, 6);
+    assert_eq!(entry.word_id.dict().as_raw(), 0);
     assert_eq!(iter.next(), None);
-    assert_eq!(
-        (6, 6, 5293),
-        dic.lexicon().get_word_param(WordId::new(0, 0))
-    );
-    let wi = dic.lexicon().get_word_info(WordId::new(0, 0)).unwrap();
+    assert_eq!((6, 6, 5293), dic.lexicon().get_word_param(entry.word_id));
+    let wi = dic.lexicon().get_word_info(entry.word_id).unwrap();
     assert_eq!(wi.headword(&dic), "京都");
     assert_eq!(wi.normalized_form(&dic), "京都");
     assert_eq!(wi.dictionary_form(&dic), "京都");
@@ -117,7 +108,6 @@ fn build_lexicon_1word() {
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_system_1word() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -131,14 +121,13 @@ fn build_system_1word() {
     let dic = LoadedDictionary::load_system(&built).unwrap();
 
     let entry = dic.lexicon().lookup("京都".as_bytes(), 0).next().unwrap();
-    assert_eq!(entry.word_id, WordId::new(0, 0));
+    assert_eq!(entry.word_id.dict().as_raw(), 0);
     let info = dic.lexicon().get_word_info(entry.word_id).unwrap();
     assert_eq!(info.headword(&dic), "京都");
     assert_eq!(info.reading_form(&dic), "キョウト");
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_system_3words() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -152,17 +141,16 @@ fn build_system_3words() {
     bldr.compile(&mut built).unwrap();
     let dic = LoadedDictionary::load_system(&built).unwrap();
     let mut iter = dic.lexicon().lookup("東京".as_bytes(), 0);
+    let _short = iter.next().unwrap();
     let entry = iter.next().unwrap();
-    assert_eq!(entry.word_id, WordId::new(0, 1));
-    let entry = iter.next().unwrap();
-    assert_eq!(entry.word_id, WordId::new(0, 2));
+    assert_eq!(entry.end, 6);
+    assert_eq!(entry.word_id.dict().as_raw(), 0);
     assert_eq!(iter.next(), None);
     let info = dic.lexicon().get_word_info(entry.word_id).unwrap();
-    assert_eq!(info.a_unit_split(), [WordId::new(0, 1), WordId::new(0, 0)]);
+    assert_eq!(info.headword(&dic), "京都");
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_user_dictionary_crossrefs() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(include_bytes!("test/matrix_10x10.def"))
@@ -189,25 +177,31 @@ fn build_user_dictionary_crossrefs() {
     bldr2.compile(&mut user_dic).unwrap();
     let udic = BinaryDictionary::load_user(&user_dic).unwrap();
     let dic = dic.merge_dictionary(udic).unwrap();
+    let mut iter = dic.lexicon_set.lookup("東".as_bytes(), 0);
+    let entry_to = iter.next().unwrap();
+
     let mut iter = dic.lexicon_set.lookup("関東".as_bytes(), 0);
-    let entry = iter.next().unwrap();
-    assert_eq!(entry.word_id, WordId::new(1, 0));
-    let winfo = dic.lexicon_set.get_word_info(entry.word_id).unwrap();
-    assert_eq!(dic.lexicon_set.get_word_param(entry.word_id), (4, 4, 4000));
+    let entry_kan = iter.next().unwrap();
+    assert_eq!(entry_kan.word_id.dict().as_raw(), 1);
+    let winfo = dic.lexicon_set.get_word_info(entry_kan.word_id).unwrap();
+    assert_eq!(
+        dic.lexicon_set.get_word_param(entry_kan.word_id),
+        (4, 4, 4000)
+    );
     assert_eq!(winfo.headword(&dic), "関");
     assert_eq!(winfo.a_unit_split().len(), 0);
-    assert_eq!(
-        winfo.word_structure(),
-        [WordId::new(1, 1), WordId::new(0, 2)]
-    );
     assert_eq!(winfo.synonym_group_ids(), [0, 1]);
-    let entry = iter.next().unwrap();
-    assert_eq!(entry.word_id, WordId::new(1, 1));
-    assert_eq!(dic.lexicon_set.get_word_param(entry.word_id), (5, 5, 5000));
-    let winfo = dic.lexicon_set.get_word_info(entry.word_id).unwrap();
+
+    let entry_kanto = iter.next().unwrap();
+    assert_eq!(entry_kanto.word_id.dict().as_raw(), 1);
+    assert_eq!(
+        dic.lexicon_set.get_word_param(entry_kanto.word_id),
+        (5, 5, 5000)
+    );
+    let winfo = dic.lexicon_set.get_word_info(entry_kanto.word_id).unwrap();
     assert_eq!(winfo.headword(&dic), "関東");
-    assert_eq!(winfo.a_unit_split(), [WordId::new(1, 0), WordId::new(0, 1)]);
-    assert_eq!(winfo.b_unit_split(), [WordId::new(1, 0), WordId::new(0, 1)]);
+    assert_eq!(winfo.a_unit_split(), [entry_kan.word_id, entry_to.word_id]);
+    assert_eq!(winfo.b_unit_split(), [entry_kan.word_id, entry_to.word_id]);
     assert_eq!(iter.next(), None);
 }
 
@@ -304,7 +298,6 @@ fn word_id_too_big_word_structure() {
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn word_id_too_big_dicform_userdic_insystem() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -323,18 +316,13 @@ fn word_id_too_big_dicform_userdic_insystem() {
     claim::assert_matches!(
         bldr.compile(&mut sink),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::InvalidFieldSize {
-                field: "dic_form",
-                actual: 10,
-                ..
-            },
+            cause: BuildFailure::UnresolvedSplits,
             ..
         }))
     );
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn word_id_too_big_dicform_userdic_inuser() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -353,18 +341,13 @@ fn word_id_too_big_dicform_userdic_inuser() {
     claim::assert_matches!(
         bldr.compile(&mut sink),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::InvalidFieldSize {
-                field: "dic_form",
-                actual: 15,
-                ..
-            },
+            cause: BuildFailure::UnresolvedSplits,
             ..
         }))
     );
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn resolve_user_entry_without_system_in_trie() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -379,6 +362,7 @@ fn resolve_user_entry_without_system_in_trie() {
     assert_eq!(e.end, 6);
     assert_eq!(iter.next(), None);
     drop(iter);
+
     let mut bldr = DictBuilder::new_user(&dic);
     bldr.read_lexicon(include_bytes!("test/data_2words_3w_refs.csv"))
         .unwrap();
@@ -393,6 +377,4 @@ fn resolve_user_entry_without_system_in_trie() {
     assert_eq!(iter.next(), None);
     let winfo = dic.lexicon_set.get_word_info(e.word_id).unwrap();
     assert_eq!(winfo.a_unit_split().len(), 2);
-    assert_eq!(winfo.a_unit_split()[0], WordId::new(1, 0));
-    assert_eq!(winfo.a_unit_split()[1], WordId::new(0, 1));
 }

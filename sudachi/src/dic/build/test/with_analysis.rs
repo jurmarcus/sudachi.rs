@@ -108,7 +108,6 @@ impl ConfigTestSupport {
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn system_only_1() {
     let mut cfgb = ConfigTestSupport::new();
     let mut dic = DictBuilder::new_system();
@@ -125,7 +124,6 @@ fn system_only_1() {
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn system_plus_user_1() {
     let mut cfgb = ConfigTestSupport::new();
     let mut dic = DictBuilder::new_system();
@@ -147,7 +145,6 @@ fn system_plus_user_1() {
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn system_plus_user_2() {
     let mut cfgb = ConfigTestSupport::new();
     let mut dic = DictBuilder::new_system();
@@ -174,7 +171,6 @@ fn system_plus_user_2() {
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn split_with_subset() {
     let mut cfgb = ConfigTestSupport::new();
     let mut dic = DictBuilder::new_system();
@@ -191,6 +187,6 @@ fn split_with_subset() {
     tok.do_tokenize().unwrap();
     res.collect_results(&mut tok).unwrap();
     assert_eq!(res.len(), 2);
-    //assert_eq!(res.get_end(0), 6);
+    assert_eq!(res.get(0).end(), 6);
     assert_eq!(res.get(1).end(), 9);
 }
