@@ -59,7 +59,6 @@ fn read_pos_after_lexicon_fails() {
 }
 
 #[test]
-#[ignore = "legacy dictionary binary from DictBuilder is being migrated"]
 fn build_grammar() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
