@@ -6,6 +6,18 @@ Also check [rust changelog](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [0.6.11](https://github.com/WorksApplications/sudachi.rs/releases/tag/v0.6.11) (2026-03-06)
+
+### Added
+
+- Add support for CPython 3.14 and 3.14t (#307)
+- Add Linux arm64 wheel builds (#302)
+
+### Changed
+
+- Update PyO3 to v0.27 (#307)
+- Refresh Cargo.lock and packaging metadata for wheel and sdist builds (#303, #309)
+
 ## [0.6.10](https://github.com/WorksApplications/sudachi.rs/releases/tag/v0.6.10) (2025-01-10)
 
 - Add support for py3.13t (free thread) (#293, #295)
