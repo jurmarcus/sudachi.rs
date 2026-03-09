@@ -31,8 +31,8 @@ use sudachi::dic::grammar::Grammar;
 use sudachi::dic::lexicon::Lexicon;
 use sudachi::dic::lexicon_set::LexiconSet;
 use sudachi::dic::word_id::WordId;
-use sudachi::dic::word_info::WordInfo;
 use sudachi::error::SudachiResult;
+use sudachi::text_normalizer::TextNormalizer;
 
 /// Check that the first argument is a subcommand and the file with the same name does
 /// not exists.
@@ -262,7 +262,6 @@ fn dump_word_info<W: Write>(
 ) -> SudachiResult<()> {
     let is_user = dict.description.is_user_dictionary();
     let did = if is_user { 1 } else { 0 };
-    let size = dict.description.num_total_entries();
 
     let data = system.map(|system_path| {
         let file = File::open(system_path).expect("open system failed");
@@ -290,35 +289,81 @@ fn dump_word_info<W: Write>(
     };
 
     let (mut grammar, mut lex) = base;
+    let mut word_ids = Vec::new();
     if let Some(udic) = user {
-        lex.append(Lexicon::from_binary(udic.lexicon), grammar.pos_list.len())?;
+        let user_lex = Lexicon::from_binary(udic.lexicon);
+        for entry in user_lex.entry_ids_in_order() {
+            word_ids.push(WordId::new(1, entry.as_raw()));
+        }
+        lex.append(user_lex, grammar.pos_list.len())?;
         grammar.merge_binary(udic.grammar);
+    } else {
+        for entry in lex.system_word_ids_in_order() {
+            word_ids.push(entry);
+        }
     }
 
-    for i in 0..size {
-        let wid = WordId::checked(did, i)?;
+    let normalizer = TextNormalizer::new(&grammar)?;
+    if is_user {
+        writeln!(
+            w,
+            "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,split_c,word_structure,synonym_groups,user_data"
+        )?;
+    } else {
+        writeln!(
+            w,
+            "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,split_c,word_structure,synonym_groups"
+        )?;
+    }
+    for wid in word_ids {
+        if wid.dict().as_raw() != did {
+            continue;
+        }
         let (left, right, cost) = lex.get_word_param(wid);
+        // Internally generated phantom entries should not be dumped as source CSV rows.
+        if left == -1 && right == -1 && cost == i16::MAX {
+            continue;
+        }
         let winfo = lex.get_word_info(wid)?;
-        write!(w, "{},", unicode_escape(winfo.headword(&lex)))?;
+        let headword = winfo.headword(&lex);
+        let index_form = normalizer.normalize(headword)?;
+        write!(w, "{},", unicode_escape(&index_form))?;
         write!(w, "{},{},{},", left, right, cost)?;
-        write!(w, "{},", unicode_escape(winfo.headword(&lex)))?; // writing
+        if headword == index_form {
+            write!(w, ",")?;
+        } else {
+            write!(w, "{},", unicode_escape(headword))?;
+        }
         write!(w, "{},", pos_string(&grammar, winfo.pos_id()))?;
-        write!(w, "{},", unicode_escape(winfo.reading_form(&lex)))?;
-        write!(w, "{},", unicode_escape(winfo.normalized_form(&lex)))?;
+        let reading = winfo.reading_form(&lex);
+        write!(w, "{},", unicode_escape(reading))?;
+        let normalized = winfo.normalized_form(&lex);
+        if normalized == headword {
+            write!(w, ",")?;
+        } else {
+            write!(w, "{},", unicode_escape(normalized))?;
+        }
         let dict_form = dictionary_form_string(
             &grammar,
             &lex,
+            winfo.headword(&lex),
+            winfo.pos_id(),
+            winfo.reading_form(&lex),
             winfo.borrow_data().dictionary_form_word_id(),
-        );
+        )?;
         write!(w, "{},", dict_form)?;
-        write!(w, "{},", split_mode(&winfo))?;
         dump_wids(w, &grammar, &lex, winfo.a_unit_split())?;
         w.write_all(b",")?;
         dump_wids(w, &grammar, &lex, winfo.b_unit_split())?;
         w.write_all(b",")?;
+        dump_wids(w, &grammar, &lex, winfo.c_unit_split())?;
+        w.write_all(b",")?;
         dump_wids(w, &grammar, &lex, winfo.word_structure())?;
         w.write_all(b",")?;
         dump_gids(w, winfo.synonym_group_ids())?;
+        if is_user {
+            write!(w, ",{}", unicode_escape(winfo.user_data()))?;
+        }
         w.write_all(b"\n")?;
     }
     Ok(())
@@ -331,38 +376,33 @@ fn unicode_escape(raw: &str) -> String {
         .replace(',', "\\u002c")
 }
 
-fn split_mode(winfo: &WordInfo) -> &str {
-    let asplits = winfo.a_unit_split();
-    if asplits.is_empty() {
-        return "A";
-    }
-    let bsplits = winfo.b_unit_split();
-    if bsplits.is_empty() {
-        return "B";
-    }
-    "C"
-}
-
 fn pos_string(grammar: &Grammar, posid: u16) -> String {
     let pos_parts = grammar.pos_components(posid);
     pos_parts.join(",")
 }
 
-fn dictionary_form_string(grammar: &Grammar, lex: &LexiconSet, wid: WordId) -> String {
-    if wid == WordId::INVALID {
-        return "*".to_string();
-    }
-    format!("\"{}\"", wordref_string(grammar, lex, &wid))
-}
+fn dictionary_form_string(
+    grammar: &Grammar,
+    lex: &LexiconSet,
+    headword: &str,
+    pos_id: u16,
+    reading_form: &str,
+    wid: WordId,
+) -> SudachiResult<String> {
+    let dict_form_wi = lex.get_word_info(wid)?;
 
-fn wordref_string(grammar: &Grammar, lex: &LexiconSet, wid: &WordId) -> String {
-    let winfo = lex.get_word_info(*wid).expect("failed to get wordinfo");
-    format!(
-        "{},{},{}",
-        unicode_escape(winfo.headword(lex)),
-        pos_string(grammar, winfo.pos_id()),
-        unicode_escape(winfo.reading_form(lex)),
-    )
+    if dict_form_wi.headword(lex) == headword
+        && dict_form_wi.pos_id() == pos_id
+        && dict_form_wi.reading_form(lex) == reading_form
+    {
+        return Ok(String::new());
+    }
+    Ok(format!(
+        "\"{},{},{}\"",
+        unicode_escape(dict_form_wi.headword(lex)),
+        pos_string(grammar, dict_form_wi.pos_id()),
+        unicode_escape(dict_form_wi.reading_form(lex)),
+    ))
 }
 
 fn dump_wids<W: Write>(
@@ -372,13 +412,23 @@ fn dump_wids<W: Write>(
     data: &[WordId],
 ) -> SudachiResult<()> {
     if data.is_empty() {
-        write!(w, "*")?;
         return Ok(());
     }
+
+    let mut refs = Vec::with_capacity(data.len());
+    for wid in data {
+        let wi = lex.get_word_info(*wid)?;
+        refs.push(format!(
+            "{},{},{}",
+            unicode_escape(wi.headword(lex)),
+            pos_string(grammar, wi.pos_id()),
+            unicode_escape(wi.reading_form(lex)),
+        ));
+    }
     w.write_all(b"\"")?;
-    for (i, e) in data.iter().enumerate() {
-        write!(w, "{}", wordref_string(grammar, lex, e))?;
-        if i + 1 != data.len() {
+    for (i, r) in refs.iter().enumerate() {
+        write!(w, "{}", r)?;
+        if i + 1 != refs.len() {
             w.write_all(b"/")?;
         }
     }
@@ -388,14 +438,179 @@ fn dump_wids<W: Write>(
 
 fn dump_gids<W: Write>(w: &mut W, data: &[i32]) -> SudachiResult<()> {
     if data.is_empty() {
-        write!(w, "*")?;
+        write!(w, "")?;
         return Ok(());
     }
     for (i, e) in data.iter().enumerate() {
-        write!(w, "{:06}", e)?;
+        write!(w, "{}", e)?;
         if i + 1 != data.len() {
             w.write_all(b"/")?;
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use sudachi::dic::binary_loader::LoadedDictionary;
+
+    const MATRIX_10_10: &[u8] = include_bytes!("../../sudachi/src/dic/build/test/matrix_10x10.def");
+    const SYSTEM_CSV: &[u8] = include_bytes!("../../sudachi/tests/resources/lex.csv");
+    const USER1_CSV: &[u8] = include_bytes!("../../sudachi/tests/resources/user1.csv");
+
+    fn make_temp_path(stem: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("sudachi-cli-{stem}-{}-{nanos}.dic", std::process::id()))
+    }
+
+    fn normalize_source_csv_for_dump(data: &[u8], normalizer: &TextNormalizer) -> Vec<Vec<String>> {
+        let mut rdr = csv::ReaderBuilder::new().has_headers(true).from_reader(data);
+        let headers = rdr.headers().unwrap().clone();
+        let has_user_data = headers.iter().any(|h| h == "user_data");
+        let mut rows = Vec::new();
+        let mut dump_header = vec![
+            "index_form",
+            "left_id",
+            "right_id",
+            "cost",
+            "headword",
+            "pos1",
+            "pos2",
+            "pos3",
+            "pos4",
+            "pos5",
+            "pos6",
+            "reading_form",
+            "normalized_form",
+            "dictionary_form",
+            "split_a",
+            "split_b",
+            "split_c",
+            "word_structure",
+            "synonym_groups",
+        ];
+        if has_user_data {
+            dump_header.push("user_data");
+        }
+        rows.push(
+            dump_header
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+        );
+
+        for rec in rdr.records() {
+            let rec = rec.unwrap();
+            let index = rec.get(0).unwrap();
+            let head = rec.get(4).unwrap();
+            let effective_head = if head.is_empty() { index.to_string() } else { head.to_string() };
+            let normalized_index = normalizer.normalize(&effective_head).unwrap();
+            let reading = rec.get(11).unwrap();
+            let effective_reading = reading.to_string();
+            let norm = rec.get(12).unwrap();
+            let dict = rec.get(13).unwrap();
+            assert_ne!(
+                dict, "*",
+                "new-format CSV must not use '*' in dictionary_form"
+            );
+
+            let mut row = vec![
+                normalized_index.clone(),
+                rec.get(1).unwrap().to_string(),
+                rec.get(2).unwrap().to_string(),
+                rec.get(3).unwrap().to_string(),
+                if effective_head == normalized_index {
+                    String::new()
+                } else {
+                    effective_head.clone()
+                },
+                rec.get(5).unwrap().to_string(),
+                rec.get(6).unwrap().to_string(),
+                rec.get(7).unwrap().to_string(),
+                rec.get(8).unwrap().to_string(),
+                rec.get(9).unwrap().to_string(),
+                rec.get(10).unwrap().to_string(),
+                effective_reading.clone(),
+                if norm.is_empty() || norm == effective_head { String::new() } else { norm.to_string() },
+                dict.to_string(),
+                rec.get(14).unwrap().to_string(),
+                rec.get(15).unwrap().to_string(),
+                rec.get(16).unwrap().to_string(),
+                rec.get(17).unwrap().to_string(),
+                rec.get(18).unwrap().to_string(),
+            ];
+            if has_user_data {
+                row.push(rec.get(19).unwrap().to_string());
+            }
+            rows.push(row);
+        }
+        rows
+    }
+
+    fn parse_dump_csv(data: &[u8]) -> Vec<Vec<String>> {
+        let mut rdr = csv::ReaderBuilder::new().has_headers(false).from_reader(data);
+        rdr.records()
+            .map(|r| r.unwrap().iter().map(|x| x.to_string()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn dump_word_info_matches_system_csv() {
+        let mut bldr = DictBuilder::new_system();
+        bldr.read_conn(MATRIX_10_10).unwrap();
+        bldr.read_lexicon(SYSTEM_CSV).unwrap();
+        bldr.resolve().unwrap();
+        let mut sys_bin = Vec::new();
+        bldr.compile(&mut sys_bin).unwrap();
+
+        let dict = BinaryDictionary::load_system(&sys_bin).unwrap();
+        let dict_for_normalizer = BinaryDictionary::load_system(&sys_bin).unwrap();
+        let grammar = Grammar::from_system_binary(dict_for_normalizer.grammar).unwrap();
+        let normalizer = TextNormalizer::new(&grammar).unwrap();
+        let mut dumped = Vec::new();
+        dump_word_info(dict, None, &mut dumped).unwrap();
+
+        let expected = normalize_source_csv_for_dump(SYSTEM_CSV, &normalizer);
+        let actual = parse_dump_csv(&dumped);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn dump_word_info_matches_user_csv() {
+        let mut sys_builder = DictBuilder::new_system();
+        sys_builder.read_conn(MATRIX_10_10).unwrap();
+        sys_builder.read_lexicon(SYSTEM_CSV).unwrap();
+        sys_builder.resolve().unwrap();
+        let mut sys_bin = Vec::new();
+        sys_builder.compile(&mut sys_bin).unwrap();
+        let loaded_sys = LoadedDictionary::load_system(&sys_bin).unwrap();
+
+        let mut user_builder = DictBuilder::new_user(&loaded_sys);
+        user_builder.read_lexicon(USER1_CSV).unwrap();
+        user_builder.resolve().unwrap();
+        let mut user_bin = Vec::new();
+        user_builder.compile(&mut user_bin).unwrap();
+
+        let system_path = make_temp_path("system");
+        fs::write(&system_path, &sys_bin).unwrap();
+
+        let user_dict = BinaryDictionary::load_user(&user_bin).unwrap();
+        let mut dumped = Vec::new();
+        dump_word_info(user_dict, Some(system_path.clone()), &mut dumped).unwrap();
+
+        let _ = fs::remove_file(system_path);
+
+        let sys = BinaryDictionary::load_system(&sys_bin).unwrap();
+        let grammar = Grammar::from_system_binary(sys.grammar).unwrap();
+        let normalizer = TextNormalizer::new(&grammar).unwrap();
+        let expected = normalize_source_csv_for_dump(USER1_CSV, &normalizer);
+        let actual = parse_dump_csv(&dumped);
+        assert_eq!(actual, expected);
+    }
 }
