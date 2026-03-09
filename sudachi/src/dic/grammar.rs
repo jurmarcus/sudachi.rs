@@ -84,7 +84,7 @@ impl<'a> Grammar<'a> {
     }
 
     #[inline]
-    pub fn conn_matrix(&self) -> &ConnectionMatrix {
+    pub fn conn_matrix(&self) -> &ConnectionMatrix<'_> {
         &self.connection
     }
 

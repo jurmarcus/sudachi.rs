@@ -15,9 +15,9 @@
  */
 
 use crate::analysis::node::{LatticeNode, PathCost, ResultNode};
-use crate::dic::DictionaryAccess;
-use crate::dic::word_info::{WordInfo, WordInfoResolver};
 use crate::dic::word_id::WordId;
+use crate::dic::word_info::{WordInfo, WordInfoResolver};
+use crate::dic::DictionaryAccess;
 use crate::input_text::InputTextIndex;
 use crate::prelude::*;
 use std::cell::Ref;
@@ -82,7 +82,7 @@ impl<'a, D: DictionaryAccess> Morpheme<'a, D> {
     }
 
     /// Returns a substring of the original text which corresponds to the morpheme
-    pub fn surface(&self) -> Ref<str> {
+    pub fn surface(&self) -> Ref<'_, str> {
         let inp = self.list.input();
         Ref::map(inp, |i| i.orig_slice(self.node().bytes_range()))
     }

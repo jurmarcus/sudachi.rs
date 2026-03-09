@@ -46,7 +46,7 @@ pub fn build_mock_connection_bytes() -> Vec<u8> {
     buf
 }
 
-pub fn build_mock_grammar(connection_bytes: &[u8]) -> Grammar {
+pub fn build_mock_grammar(connection_bytes: &[u8]) -> Grammar<'_> {
     let mut pos_list = PosList::default();
     pos_list.push(vec![
         "補助記号".to_string(),

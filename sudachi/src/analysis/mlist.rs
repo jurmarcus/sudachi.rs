@@ -23,8 +23,8 @@ use crate::analysis::morpheme::Morpheme;
 use crate::analysis::node::{PathCost, ResultNode};
 use crate::analysis::stateful_tokenizer::StatefulTokenizer;
 use crate::analysis::{Mode, Node};
-use crate::dic::DictionaryAccess;
 use crate::dic::subset::InfoSubset;
+use crate::dic::DictionaryAccess;
 use crate::error::{SudachiError, SudachiResult};
 use crate::input_text::InputBuffer;
 
@@ -136,16 +136,16 @@ impl<D: DictionaryAccess> MorphemeList<D> {
         self.nodes.data.is_empty()
     }
 
-    pub fn get(&self, idx: usize) -> Morpheme<D> {
+    pub fn get(&self, idx: usize) -> Morpheme<'_, D> {
         return Morpheme::for_list(self, idx);
     }
 
-    pub fn surface(&self) -> Ref<str> {
+    pub fn surface(&self) -> Ref<'_, str> {
         let inp = self.input();
         Ref::map(inp, |i| i.original())
     }
 
-    pub fn iter(&self) -> MorphemeIter<D> {
+    pub fn iter(&self) -> MorphemeIter<'_, D> {
         MorphemeIter {
             index: 0,
             list: self,
@@ -172,7 +172,7 @@ impl<D: DictionaryAccess> MorphemeList<D> {
         &self.dict
     }
 
-    pub(crate) fn input(&self) -> Ref<InputBuffer> {
+    pub(crate) fn input(&self) -> Ref<'_, InputBuffer> {
         Ref::map(self.input.deref().borrow(), |x| &x.input)
     }
 

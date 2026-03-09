@@ -105,7 +105,7 @@ mod tests {
         buf
     }
 
-    fn build_mock_grammar(connection_bytes: &[u8]) -> Grammar {
+    fn build_mock_grammar(connection_bytes: &[u8]) -> Grammar<'_> {
         let pos_list = PosList::default();
         let connection = ConnectionMatrix::from_bytes(connection_bytes)
             .expect("Failed to parse connection matrix");

@@ -268,7 +268,7 @@ impl CharacterCategory {
         }
     }
 
-    pub fn iter(&self) -> CharCategoryIter {
+    pub fn iter(&self) -> CharCategoryIter<'_> {
         CharCategoryIter {
             categories: self,
             current: 0,
