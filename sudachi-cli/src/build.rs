@@ -320,28 +320,26 @@ fn dump_word_info<W: Write>(
         let winfo = lex.get_word_info(wid)?;
         let headword = winfo.headword(&lex);
         let index_form = normalizer.normalize(headword)?;
-        write!(w, "{},", unicode_escape(&index_form))?;
+        write!(w, "{},", csv_field(&index_form))?;
         write!(w, "{},{},{},", left, right, cost)?;
         if headword == index_form {
             write!(w, ",")?;
         } else {
-            write!(w, "{},", unicode_escape(headword))?;
+            write!(w, "{},", csv_field(headword))?;
         }
         write!(w, "{},", pos_string(&grammar, winfo.pos_id()))?;
         let reading = winfo.reading_form(&lex);
-        write!(w, "{},", unicode_escape(reading))?;
+        write!(w, "{},", csv_field(reading))?;
         let normalized = winfo.normalized_form(&lex);
         if normalized == headword {
             write!(w, ",")?;
         } else {
-            write!(w, "{},", unicode_escape(normalized))?;
+            write!(w, "{},", csv_field(normalized))?;
         }
         let dict_form = dictionary_form_string(
             &grammar,
             &lex,
-            winfo.headword(&lex),
-            winfo.pos_id(),
-            winfo.reading_form(&lex),
+            wid,
             winfo.borrow_data().dictionary_form_word_id(),
         )?;
         write!(w, "{},", dict_form)?;
@@ -354,17 +352,24 @@ fn dump_word_info<W: Write>(
         dump_wids(w, &grammar, &lex, winfo.word_structure())?;
         w.write_all(b",")?;
         dump_gids(w, winfo.synonym_group_ids())?;
-        write!(w, ",{}", unicode_escape(winfo.user_data()))?;
+        write!(w, ",{}", csv_field(winfo.user_data()))?;
         w.write_all(b"\n")?;
     }
     Ok(())
 }
 
 fn unicode_escape(raw: &str) -> String {
-    // replace '"' and ','
-    raw.to_string()
-        .replace('"', "\\u0022")
-        .replace(',', "\\u002c")
+    // replace '"' in raw data
+    raw.replace('"', "\\u0022")
+}
+
+fn csv_field(raw: &str) -> String {
+    let escaped = unicode_escape(raw);
+    if raw.contains(',') {
+        format!("\"{}\"", escaped)
+    } else {
+        escaped
+    }
 }
 
 fn pos_string(grammar: &Grammar, posid: u16) -> String {
@@ -375,24 +380,19 @@ fn pos_string(grammar: &Grammar, posid: u16) -> String {
 fn dictionary_form_string(
     grammar: &Grammar,
     lex: &LexiconSet,
-    headword: &str,
-    pos_id: u16,
-    reading_form: &str,
+    self_wid: WordId,
     wid: WordId,
 ) -> SudachiResult<String> {
-    let dict_form_wi = lex.get_word_info(wid)?;
-
-    if dict_form_wi.headword(lex) == headword
-        && dict_form_wi.pos_id() == pos_id
-        && dict_form_wi.reading_form(lex) == reading_form
-    {
+    if self_wid == wid {
         return Ok(String::new());
     }
+
+    let dict_form_wi = lex.get_word_info(wid)?;
     Ok(format!(
         "\"{},{},{}\"",
-        unicode_escape(dict_form_wi.headword(lex)),
-        pos_string(grammar, dict_form_wi.pos_id()),
-        unicode_escape(dict_form_wi.reading_form(lex)),
+        inline_ref_escape(dict_form_wi.headword(lex)),
+        pos_string_for_inline(grammar, dict_form_wi.pos_id()),
+        inline_ref_escape(dict_form_wi.reading_form(lex)),
     ))
 }
 
@@ -411,9 +411,9 @@ fn dump_wids<W: Write>(
         let wi = lex.get_word_info(*wid)?;
         refs.push(format!(
             "{},{},{}",
-            unicode_escape(wi.headword(lex)),
-            pos_string(grammar, wi.pos_id()),
-            unicode_escape(wi.reading_form(lex)),
+            inline_ref_escape(wi.headword(lex)),
+            pos_string_for_inline(grammar, wi.pos_id()),
+            inline_ref_escape(wi.reading_form(lex)),
         ));
     }
     w.write_all(b"\"")?;
@@ -439,6 +439,21 @@ fn dump_gids<W: Write>(w: &mut W, data: &[i32]) -> SudachiResult<()> {
         }
     }
     Ok(())
+}
+
+fn pos_string_for_inline(grammar: &Grammar, posid: u16) -> String {
+    let pos_parts = grammar.pos_components(posid);
+    pos_parts
+        .into_iter()
+        .map(|p| inline_ref_escape(p))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn inline_ref_escape(raw: &str) -> String {
+    raw.replace('"', "\\u0022")
+        .replace(',', "\\u002c")
+        .replace('/', "\\u002f")
 }
 
 #[cfg(test)]
@@ -554,6 +569,21 @@ mod tests {
             rows.push(row);
         }
         rows
+    }
+
+    #[test]
+    fn csv_field_quotes_fields_with_comma() {
+        assert_eq!(csv_field("a,b"), "\"a,b\"");
+    }
+
+    #[test]
+    fn unicode_escape_replaces_double_quote() {
+        assert_eq!(unicode_escape("a\"b"), "a\\u0022b");
+    }
+
+    #[test]
+    fn inline_ref_escape_replaces_inline_separators() {
+        assert_eq!(inline_ref_escape("a,b/c\"d"), "a\\u002cb\\u002fc\\u0022d");
     }
 
     fn parse_dump_csv(data: &[u8]) -> Vec<Vec<String>> {
