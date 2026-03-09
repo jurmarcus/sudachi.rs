@@ -304,17 +304,10 @@ fn dump_word_info<W: Write>(
     }
 
     let normalizer = TextNormalizer::new(&grammar)?;
-    if is_user {
-        writeln!(
-            w,
-            "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,split_c,word_structure,synonym_groups,user_data"
-        )?;
-    } else {
-        writeln!(
-            w,
-            "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,split_c,word_structure,synonym_groups"
-        )?;
-    }
+    writeln!(
+        w,
+        "INDEX_FORM,LEFT_ID,RIGHT_ID,COST,HEADWORD,POS1,POS2,POS3,POS4,POS5,POS6,READING_FORM,NORMALIZED_FORM,DICTIONARY_FORM,SPLIT_A,SPLIT_B,SPLIT_C,WORD_STRUCTURE,SYNONYM_GROUPS,USER_DATA"
+    )?;
     for wid in word_ids {
         if wid.dict().as_raw() != did {
             continue;
@@ -361,9 +354,7 @@ fn dump_word_info<W: Write>(
         dump_wids(w, &grammar, &lex, winfo.word_structure())?;
         w.write_all(b",")?;
         dump_gids(w, winfo.synonym_group_ids())?;
-        if is_user {
-            write!(w, ",{}", unicode_escape(winfo.user_data()))?;
-        }
+        write!(w, ",{}", unicode_escape(winfo.user_data()))?;
         w.write_all(b"\n")?;
     }
     Ok(())
@@ -466,38 +457,41 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("sudachi-cli-{stem}-{}-{nanos}.dic", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "sudachi-cli-{stem}-{}-{nanos}.dic",
+            std::process::id()
+        ))
     }
 
-    fn normalize_source_csv_for_dump(data: &[u8], normalizer: &TextNormalizer) -> Vec<Vec<String>> {
-        let mut rdr = csv::ReaderBuilder::new().has_headers(true).from_reader(data);
+    fn normalize_source_csv_for_dump(data: &[u8]) -> Vec<Vec<String>> {
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(true)
+            .from_reader(data);
         let headers = rdr.headers().unwrap().clone();
         let has_user_data = headers.iter().any(|h| h == "user_data");
         let mut rows = Vec::new();
-        let mut dump_header = vec![
-            "index_form",
-            "left_id",
-            "right_id",
-            "cost",
-            "headword",
-            "pos1",
-            "pos2",
-            "pos3",
-            "pos4",
-            "pos5",
-            "pos6",
-            "reading_form",
-            "normalized_form",
-            "dictionary_form",
-            "split_a",
-            "split_b",
-            "split_c",
-            "word_structure",
-            "synonym_groups",
+        let dump_header = vec![
+            "INDEX_FORM",
+            "LEFT_ID",
+            "RIGHT_ID",
+            "COST",
+            "HEADWORD",
+            "POS1",
+            "POS2",
+            "POS3",
+            "POS4",
+            "POS5",
+            "POS6",
+            "READING_FORM",
+            "NORMALIZED_FORM",
+            "DICTIONARY_FORM",
+            "SPLIT_A",
+            "SPLIT_B",
+            "SPLIT_C",
+            "WORD_STRUCTURE",
+            "SYNONYM_GROUPS",
+            "USER_DATA",
         ];
-        if has_user_data {
-            dump_header.push("user_data");
-        }
         rows.push(
             dump_header
                 .into_iter()
@@ -509,8 +503,11 @@ mod tests {
             let rec = rec.unwrap();
             let index = rec.get(0).unwrap();
             let head = rec.get(4).unwrap();
-            let effective_head = if head.is_empty() { index.to_string() } else { head.to_string() };
-            let normalized_index = normalizer.normalize(&effective_head).unwrap();
+            let effective_head = if head.is_empty() {
+                index.to_string()
+            } else {
+                head.to_string()
+            };
             let reading = rec.get(11).unwrap();
             let effective_reading = reading.to_string();
             let norm = rec.get(12).unwrap();
@@ -521,11 +518,11 @@ mod tests {
             );
 
             let mut row = vec![
-                normalized_index.clone(),
+                index.to_string(),
                 rec.get(1).unwrap().to_string(),
                 rec.get(2).unwrap().to_string(),
                 rec.get(3).unwrap().to_string(),
-                if effective_head == normalized_index {
+                if effective_head == index {
                     String::new()
                 } else {
                     effective_head.clone()
@@ -537,7 +534,11 @@ mod tests {
                 rec.get(9).unwrap().to_string(),
                 rec.get(10).unwrap().to_string(),
                 effective_reading.clone(),
-                if norm.is_empty() || norm == effective_head { String::new() } else { norm.to_string() },
+                if norm.is_empty() || norm == effective_head {
+                    String::new()
+                } else {
+                    norm.to_string()
+                },
                 dict.to_string(),
                 rec.get(14).unwrap().to_string(),
                 rec.get(15).unwrap().to_string(),
@@ -545,16 +546,20 @@ mod tests {
                 rec.get(17).unwrap().to_string(),
                 rec.get(18).unwrap().to_string(),
             ];
-            if has_user_data {
-                row.push(rec.get(19).unwrap().to_string());
-            }
+            row.push(if has_user_data {
+                rec.get(19).unwrap().to_string()
+            } else {
+                String::new()
+            });
             rows.push(row);
         }
         rows
     }
 
     fn parse_dump_csv(data: &[u8]) -> Vec<Vec<String>> {
-        let mut rdr = csv::ReaderBuilder::new().has_headers(false).from_reader(data);
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
         rdr.records()
             .map(|r| r.unwrap().iter().map(|x| x.to_string()).collect())
             .collect()
@@ -570,13 +575,10 @@ mod tests {
         bldr.compile(&mut sys_bin).unwrap();
 
         let dict = BinaryDictionary::load_system(&sys_bin).unwrap();
-        let dict_for_normalizer = BinaryDictionary::load_system(&sys_bin).unwrap();
-        let grammar = Grammar::from_system_binary(dict_for_normalizer.grammar).unwrap();
-        let normalizer = TextNormalizer::new(&grammar).unwrap();
         let mut dumped = Vec::new();
         dump_word_info(dict, None, &mut dumped).unwrap();
 
-        let expected = normalize_source_csv_for_dump(SYSTEM_CSV, &normalizer);
+        let expected = normalize_source_csv_for_dump(SYSTEM_CSV);
         let actual = parse_dump_csv(&dumped);
         assert_eq!(actual, expected);
     }
@@ -606,10 +608,7 @@ mod tests {
 
         let _ = fs::remove_file(system_path);
 
-        let sys = BinaryDictionary::load_system(&sys_bin).unwrap();
-        let grammar = Grammar::from_system_binary(sys.grammar).unwrap();
-        let normalizer = TextNormalizer::new(&grammar).unwrap();
-        let expected = normalize_source_csv_for_dump(USER1_CSV, &normalizer);
+        let expected = normalize_source_csv_for_dump(USER1_CSV);
         let actual = parse_dump_csv(&dumped);
         assert_eq!(actual, expected);
     }
