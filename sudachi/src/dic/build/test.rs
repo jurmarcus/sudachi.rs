@@ -110,6 +110,44 @@ fn build_lexicon_1word() {
 }
 
 #[test]
+fn omitted_headword_resolves_normalized_and_dictionary_form_to_self() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    let lex = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,split_c,word_structure,synonym_groups\n",
+        "京都,6,6,5293,,名詞,固有名詞,地名,一般,*,*,キョウト,,,,,,,\n"
+    );
+    assert_eq!(1, bldr.read_lexicon(lex.as_bytes()).unwrap());
+    let mut built = Vec::new();
+    bldr.compile(&mut built).unwrap();
+    let dic = LoadedDictionary::load_system(&built).unwrap();
+    let entry = dic.lexicon().lookup("京都".as_bytes(), 0).next().unwrap();
+    let wi = dic.lexicon().get_word_info(entry.word_id).unwrap();
+    assert_eq!(wi.headword(&dic), "京都");
+    assert_eq!(wi.normalized_form(&dic), "京都");
+    assert_eq!(wi.dictionary_form(&dic), "京都");
+}
+
+#[test]
+fn different_headword_resolves_normalized_and_dictionary_form_to_headword() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    let lex = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,split_c,word_structure,synonym_groups\n",
+        "東京,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,トウキョウ,,,,,,,\n"
+    );
+    assert_eq!(1, bldr.read_lexicon(lex.as_bytes()).unwrap());
+    let mut built = Vec::new();
+    bldr.compile(&mut built).unwrap();
+    let dic = LoadedDictionary::load_system(&built).unwrap();
+    let entry = dic.lexicon().lookup("東京".as_bytes(), 0).next().unwrap();
+    let wi = dic.lexicon().get_word_info(entry.word_id).unwrap();
+    assert_eq!(wi.headword(&dic), "京都");
+    assert_eq!(wi.normalized_form(&dic), "京都");
+    assert_eq!(wi.dictionary_form(&dic), "京都");
+}
+
+#[test]
 fn build_system_1word() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
