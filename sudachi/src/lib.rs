@@ -35,6 +35,7 @@ pub(crate) mod util;
 
 mod hash;
 pub mod pos;
+pub mod text_normalizer;
 #[cfg(test)]
 pub mod test;
 

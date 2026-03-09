@@ -123,6 +123,7 @@ impl ToU32 for WordRef {
     fn to_u32(&self) -> u32 {
         match self {
             WordRef::Ref(w) => w.to_u32(),
+            WordRef::SelfRef => panic!("self refs must be resolved before writing"),
             WordRef::LineRef(_) => panic!("word refs must be resolved before writing"),
             WordRef::Headword(_) => panic!("word refs must be resolved before writing"),
             WordRef::Inline { .. } => panic!("splits must be resolved before writing"),

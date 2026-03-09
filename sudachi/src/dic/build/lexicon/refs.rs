@@ -19,6 +19,8 @@ use crate::dic::word_id::WordId;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum WordRef {
     Ref(WordId),
+    // explicit self-reference used for dictionary_form omission.
+    SelfRef,
     // we use WordId to store system/user flag with line number.
     LineRef(WordId),
     Headword(String),
@@ -39,6 +41,7 @@ pub(crate) trait WordRefResolver {
     fn resolve(&self, unit: &WordRef) -> Option<WordId> {
         match unit {
             WordRef::Ref(wid) => Some(*wid),
+            WordRef::SelfRef => None,
             WordRef::LineRef(line_ref) => self.resolve_by_line_ref(*line_ref),
             WordRef::Headword(headword) => self.resolve_by_headword(headword),
             WordRef::Inline {

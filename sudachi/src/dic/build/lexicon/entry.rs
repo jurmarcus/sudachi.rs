@@ -147,8 +147,8 @@ impl RawLexiconEntry {
         w.write_all(&norm_form_word_id.as_raw().to_le_bytes())?;
 
         let dic_form_word_id = match self.dic_form {
-            WordRef::Ref(wid) if wid == WordId::INVALID => self_word_id,
             WordRef::Ref(wid) => wid,
+            WordRef::SelfRef => self_word_id,
             WordRef::LineRef(_) => panic!("dictionary_form must be resolved before writing"),
             WordRef::Headword(_) => panic!("dictionary_form must be resolved before writing"),
             WordRef::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
@@ -264,6 +264,7 @@ impl RawLexiconEntry {
         size += u16w.write_empty_if_equal(w, self.norm_form(), self.headword())?;
         let dic_form = match self.dic_form {
             WordRef::Ref(wid) => wid,
+            WordRef::SelfRef => panic!("dictionary_form self reference must be resolved before writing"),
             _ => panic!("dictionary_form must be resolved before writing"),
         };
         w.write_all(&dic_form.as_raw().to_le_bytes())?;

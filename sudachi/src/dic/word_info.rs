@@ -271,12 +271,20 @@ impl WordInfo {
         &self.data.b_unit_split()
     }
 
+    pub fn c_unit_split(&self) -> &[WordId] {
+        &self.data.c_unit_split()
+    }
+
     pub fn word_structure(&self) -> &[WordId] {
         &self.data.word_structure()
     }
 
     pub fn synonym_group_ids(&self) -> &[i32] {
         &self.data.synonym_group_ids()
+    }
+
+    pub fn user_data(&self) -> &str {
+        self.data.user_data()
     }
 
     pub fn borrow_data(&self) -> &WordInfoData {

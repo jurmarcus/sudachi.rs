@@ -127,6 +127,7 @@ impl WordRef {
     pub fn format(&self, lexicon: &LexiconReader) -> String {
         match self {
             WordRef::Ref(id) => id.as_raw().to_string(),
+            WordRef::SelfRef => "<self>".to_owned(),
             WordRef::LineRef(id) => id.as_raw().to_string(),
             WordRef::Headword(h) => h.clone(),
             WordRef::Inline {
@@ -449,10 +450,9 @@ impl LexiconReader {
 
             match e.dic_form {
                 WordRef::Ref(wid) => {
-                    if wid != WordId::INVALID {
-                        ctx.transform(Self::validate_wid(wid, max_0, max_1, "dic_form"))?;
-                    }
+                    ctx.transform(Self::validate_wid(wid, max_0, max_1, "dic_form"))?;
                 }
+                WordRef::SelfRef => {}
                 _ => panic!("at this point dictionary_form must be resolved"),
             }
             if matches!(e.norm_form, Some(NormFormValue::Ref(_))) {
@@ -736,6 +736,7 @@ impl LexiconReader {
     fn resolve_split<R: WordRefResolver>(unit: &mut WordRef, resolver: &R) -> Option<usize> {
         match unit {
             WordRef::Ref(_) => Some(0),
+            WordRef::SelfRef => Some(0),
             _ => {
                 let wid = resolver.resolve(&*unit)?;
                 *unit = WordRef::Ref(wid);
@@ -772,7 +773,7 @@ impl LexiconReader {
         reading: &str,
     ) -> DicWriteResult<(WordRef, usize)> {
         if data.is_empty() || (allow_word_id_ref && data == "*") {
-            return Ok((WordRef::Ref(WordId::INVALID), 0));
+            return Ok((WordRef::SelfRef, 0));
         }
         if data == "*" {
             return Err(BuildFailure::InvalidSplit(data.to_owned()));
@@ -791,12 +792,13 @@ impl LexiconReader {
                 Some(reading)
             };
             if surface == headword && *p == pos && r.as_deref() == own_reading {
-                return Ok((WordRef::Ref(WordId::INVALID), 0));
+                return Ok((WordRef::SelfRef, 0));
             }
         }
 
         let unresolved = match parsed {
             WordRef::Ref(_) => 0,
+            WordRef::SelfRef => 0,
             WordRef::LineRef(_) => 1,
             WordRef::Headword(_) => 1,
             WordRef::Inline { .. } => 1,
