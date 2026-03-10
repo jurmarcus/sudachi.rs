@@ -21,12 +21,10 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Subcommand};
 use memmap2::Mmap;
 
-use sudachi::config::Config;
-use sudachi::dic::binary_loader::BinaryDictionary;
+use sudachi::dic::binary_loader::{BinaryDictionary, LoadedDictionary};
 use sudachi::dic::build::report::DictPartReport;
 use sudachi::dic::build::DictBuilder;
 use sudachi::dic::description::Description;
-use sudachi::dic::dictionary::JapaneseDictionary;
 use sudachi::dic::grammar::Grammar;
 use sudachi::dic::lexicon::Lexicon;
 use sudachi::dic::lexicon_set::LexiconSet;
@@ -155,9 +153,9 @@ fn build_system(mut cmd: BuildCmd, matrix: PathBuf, pos: Option<PathBuf>) {
 }
 
 fn build_user(mut cmd: BuildCmd, system: PathBuf) {
-    let cfg =
-        Config::new(None, None, Some(system)).expect("failed to create default configuration");
-    let dict = JapaneseDictionary::from_cfg(&cfg).expect("failed to load system dictionary");
+    let system_file = File::open(&system).expect("failed to open system dictionary");
+    let system_data = unsafe { Mmap::map(&system_file) }.expect("failed to mmap system dictionary");
+    let dict = LoadedDictionary::load_system(&system_data).expect("failed to load system dictionary");
 
     let mut builder = DictBuilder::new_user(&dict);
     builder.set_description(std::mem::take(&mut cmd.description));
