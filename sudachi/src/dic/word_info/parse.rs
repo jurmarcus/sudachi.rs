@@ -118,3 +118,96 @@ impl WordInfoParser {
         Ok(self.info)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dic::lexicon::strings::StringPointer;
+
+    fn push_u32s(buf: &mut Vec<u8>, data: &[u32]) {
+        for value in data {
+            buf.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+
+    fn push_i32s(buf: &mut Vec<u8>, data: &[i32]) {
+        for value in data {
+            buf.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+
+    fn push_utf16(buf: &mut Vec<u8>, data: &str) {
+        let utf16: Vec<u16> = data.encode_utf16().collect();
+        buf.extend_from_slice(&(utf16.len() as i16).to_le_bytes());
+        for unit in utf16 {
+            buf.extend_from_slice(&unit.to_le_bytes());
+        }
+    }
+
+    #[test]
+    fn parses_embedded_variable_length_fields() {
+        let fixed = WordInfoFixedData {
+            pos_id: 5,
+            headword_strptr: StringPointer::unchecked(2, 4),
+            reading_form_strptr: StringPointer::unchecked(3, 8),
+            normalized_form: 11,
+            dictionary_form: 12,
+            index_form_length: 6,
+            c_unit_split_length: 2,
+            b_unit_split_length: 1,
+            a_unit_split_length: 3,
+            word_structure_length: 2,
+            synonym_group_ids_length: 2,
+            user_data_flag: 1,
+        };
+
+        let mut bytes = vec![0u8; layout::PARAMS_SIZE];
+        fixed.write_to(&mut bytes).unwrap();
+        push_u32s(&mut bytes, &[100, 101]);
+        push_u32s(&mut bytes, &[200]);
+        push_u32s(&mut bytes, &[300, 301, 302]);
+        push_u32s(&mut bytes, &[400, 401]);
+        push_i32s(&mut bytes, &[7, 8]);
+        push_utf16(&mut bytes, "meta");
+
+        let parsed = WordInfoParser::default().parse(&bytes).unwrap();
+        assert_eq!(parsed.pos_id, fixed.pos_id);
+        assert_eq!(parsed.c_unit_split, vec![100, 101]);
+        assert_eq!(parsed.b_unit_split, vec![200]);
+        assert_eq!(parsed.a_unit_split, vec![300, 301, 302]);
+        assert_eq!(parsed.word_structure, vec![400, 401]);
+        assert_eq!(parsed.synonym_group_ids, vec![7, 8]);
+        assert_eq!(parsed.user_data, "meta");
+    }
+
+    #[test]
+    fn expands_shared_split_arrays() {
+        let fixed = WordInfoFixedData {
+            pos_id: 9,
+            headword_strptr: StringPointer::unchecked(1, 2),
+            reading_form_strptr: StringPointer::unchecked(1, 4),
+            normalized_form: 21,
+            dictionary_form: 22,
+            index_form_length: 3,
+            c_unit_split_length: 2,
+            b_unit_split_length: -1,
+            a_unit_split_length: -1,
+            word_structure_length: -1,
+            synonym_group_ids_length: 1,
+            user_data_flag: 0,
+        };
+
+        let mut bytes = vec![0u8; layout::PARAMS_SIZE];
+        fixed.write_to(&mut bytes).unwrap();
+        push_u32s(&mut bytes, &[10, 11]);
+        push_i32s(&mut bytes, &[99]);
+
+        let parsed = WordInfoParser::default().parse(&bytes).unwrap();
+        assert_eq!(parsed.c_unit_split, vec![10, 11]);
+        assert_eq!(parsed.b_unit_split, vec![10, 11]);
+        assert_eq!(parsed.a_unit_split, vec![10, 11]);
+        assert_eq!(parsed.word_structure, vec![10, 11]);
+        assert_eq!(parsed.synonym_group_ids, vec![99]);
+        assert!(parsed.user_data.is_empty());
+    }
+}

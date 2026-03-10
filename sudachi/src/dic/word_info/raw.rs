@@ -148,3 +148,76 @@ impl WordInfoFixedData {
         Ok(layout::WORD_INFO_FIXED_SIZE)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_fixed() -> WordInfoFixedData {
+        WordInfoFixedData {
+            pos_id: 123,
+            headword_strptr: StringPointer::unchecked(3, 8),
+            reading_form_strptr: StringPointer::unchecked(5, 16),
+            normalized_form: 42,
+            dictionary_form: 84,
+            index_form_length: 9,
+            c_unit_split_length: 2,
+            b_unit_split_length: -1,
+            a_unit_split_length: 4,
+            word_structure_length: -1,
+            synonym_group_ids_length: 3,
+            user_data_flag: 1,
+        }
+    }
+
+    #[test]
+    fn fixed_data_write_and_parse_round_trip() {
+        let fixed = sample_fixed();
+        let mut bytes = Vec::new();
+        let written = fixed.write_to(&mut bytes).unwrap();
+        assert_eq!(written, layout::WORD_INFO_FIXED_SIZE);
+
+        let (rest, parsed) = WordInfoFixedData::parse(&bytes).unwrap();
+        assert!(rest.is_empty());
+        assert_eq!(parsed.pos_id, fixed.pos_id);
+        assert_eq!(parsed.headword_strptr, fixed.headword_strptr);
+        assert_eq!(parsed.reading_form_strptr, fixed.reading_form_strptr);
+        assert_eq!(parsed.normalized_form, fixed.normalized_form);
+        assert_eq!(parsed.dictionary_form, fixed.dictionary_form);
+        assert_eq!(parsed.index_form_length, fixed.index_form_length);
+        assert_eq!(parsed.c_unit_split_length, fixed.c_unit_split_length);
+        assert_eq!(parsed.b_unit_split_length, fixed.b_unit_split_length);
+        assert_eq!(parsed.a_unit_split_length, fixed.a_unit_split_length);
+        assert_eq!(parsed.word_structure_length, fixed.word_structure_length);
+        assert_eq!(
+            parsed.synonym_group_ids_length,
+            fixed.synonym_group_ids_length
+        );
+        assert_eq!(parsed.user_data_flag, fixed.user_data_flag);
+    }
+
+    #[test]
+    fn fixed_data_reads_from_entry_bytes_after_params() {
+        let fixed = sample_fixed();
+        let mut entry = vec![0u8; layout::PARAMS_SIZE];
+        fixed.write_to(&mut entry).unwrap();
+        assert_eq!(entry.len(), layout::FIXED_PART_SIZE);
+
+        let scanned = WordInfoFixedData::from_entry_bytes(&entry).unwrap();
+        assert_eq!(scanned.pos_id, fixed.pos_id);
+        assert_eq!(scanned.headword_strptr, fixed.headword_strptr);
+        assert_eq!(scanned.reading_form_strptr, fixed.reading_form_strptr);
+        assert_eq!(scanned.normalized_form, fixed.normalized_form);
+        assert_eq!(scanned.dictionary_form, fixed.dictionary_form);
+        assert_eq!(scanned.index_form_length, fixed.index_form_length);
+        assert_eq!(scanned.c_unit_split_length, fixed.c_unit_split_length);
+        assert_eq!(scanned.b_unit_split_length, fixed.b_unit_split_length);
+        assert_eq!(scanned.a_unit_split_length, fixed.a_unit_split_length);
+        assert_eq!(scanned.word_structure_length, fixed.word_structure_length);
+        assert_eq!(
+            scanned.synonym_group_ids_length,
+            fixed.synonym_group_ids_length
+        );
+        assert_eq!(scanned.user_data_flag, fixed.user_data_flag);
+    }
+}
