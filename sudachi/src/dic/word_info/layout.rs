@@ -55,6 +55,17 @@ pub fn size_from_lengths(
     Some(aligned_size(size))
 }
 
+pub(crate) fn size_from_variable_layout(layout: WordInfoVariableLayout) -> Option<usize> {
+    size_from_lengths(
+        layout.c_unit_split_length,
+        layout.b_unit_split_length,
+        layout.a_unit_split_length,
+        layout.word_structure_length,
+        layout.synonym_group_ids_length,
+        layout.user_data_units(),
+    )
+}
+
 pub fn unaligned_size_from_lengths(
     c_len: i8,
     b_len: i8,
@@ -85,6 +96,69 @@ pub fn unaligned_size_from_lengths(
     Some(size)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct WordInfoVariableLayout {
+    pub c_unit_split_length: i8,
+    pub b_unit_split_length: i8,
+    pub a_unit_split_length: i8,
+    pub word_structure_length: i8,
+    pub synonym_group_ids_length: i8,
+    pub user_data_flag: i8,
+    pub user_data_units: i16,
+}
+
+impl WordInfoVariableLayout {
+    pub fn new(
+        c_unit_split_len: usize,
+        b_unit_split_shared: bool,
+        b_unit_split_len: usize,
+        a_unit_split_shared: bool,
+        a_unit_split_len: usize,
+        word_structure_shared: bool,
+        word_structure_len: usize,
+        synonym_group_ids_len: usize,
+        user_data_units: usize,
+    ) -> Option<Self> {
+        let c_len = i8::try_from(c_unit_split_len).ok()?;
+        let b_len = if b_unit_split_shared {
+            -1
+        } else {
+            i8::try_from(b_unit_split_len).ok()?
+        };
+        let a_len = if a_unit_split_shared {
+            -1
+        } else {
+            i8::try_from(a_unit_split_len).ok()?
+        };
+        let ws_len = if word_structure_shared {
+            -1
+        } else {
+            i8::try_from(word_structure_len).ok()?
+        };
+        let syn_len = i8::try_from(synonym_group_ids_len).ok()?;
+        let user_data_units = i16::try_from(user_data_units).ok()?;
+        let user_data_flag = if user_data_units == 0 { 0 } else { 1 };
+        Some(Self {
+            c_unit_split_length: c_len,
+            b_unit_split_length: b_len,
+            a_unit_split_length: a_len,
+            word_structure_length: ws_len,
+            synonym_group_ids_length: syn_len,
+            user_data_flag,
+            user_data_units,
+        })
+    }
+
+    #[inline]
+    pub fn user_data_units(self) -> Option<i16> {
+        if self.user_data_flag == 0 {
+            None
+        } else {
+            Some(self.user_data_units)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,9 +176,63 @@ mod tests {
     }
 
     #[test]
+    fn computes_size_from_variable_layout() {
+        let layout = WordInfoVariableLayout::new(1, false, 2, false, 3, true, 3, 2, 4).unwrap();
+        let size = size_from_variable_layout(layout).unwrap();
+        assert_eq!(size, 80);
+    }
+
+    #[test]
     fn rejects_invalid_lengths() {
         assert!(size_from_lengths(-1, 0, 0, 0, 0, None).is_none());
         assert!(size_from_lengths(0, 0, 0, 0, -1, None).is_none());
         assert!(size_from_lengths(0, 0, 0, 0, 0, Some(-1)).is_none());
+    }
+
+    #[test]
+    fn variable_layout_marks_shared_split_arrays() {
+        let layout = WordInfoVariableLayout::new(2, true, 2, false, 1, true, 1, 3, 0).unwrap();
+        assert_eq!(layout.c_unit_split_length, 2);
+        assert_eq!(layout.b_unit_split_length, -1);
+        assert_eq!(layout.a_unit_split_length, 1);
+        assert_eq!(layout.word_structure_length, -1);
+        assert_eq!(layout.synonym_group_ids_length, 3);
+        assert_eq!(layout.user_data_flag, 0);
+        assert_eq!(layout.user_data_units, 0);
+    }
+
+    #[test]
+    fn variable_layout_marks_user_data_presence() {
+        let layout = WordInfoVariableLayout::new(0, false, 1, false, 2, false, 3, 4, 5).unwrap();
+        assert_eq!(layout.user_data_flag, 1);
+        assert_eq!(layout.user_data_units, 5);
+    }
+
+    #[test]
+    fn variable_layout_rejects_large_lengths() {
+        assert!(WordInfoVariableLayout::new(
+            usize::from(i8::MAX as u8) + 1,
+            false,
+            0,
+            false,
+            0,
+            false,
+            0,
+            0,
+            0,
+        )
+        .is_none());
+        assert!(WordInfoVariableLayout::new(
+            0,
+            false,
+            0,
+            false,
+            0,
+            false,
+            0,
+            0,
+            i16::MAX as usize + 1
+        )
+        .is_none());
     }
 }

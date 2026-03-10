@@ -22,7 +22,9 @@ use crate::dic::build::error::{BuildFailure, DicWriteResult};
 use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::word_id::WordId;
-use crate::dic::word_info::{layout, WordInfoFixedData};
+use crate::dic::word_info::{
+    layout, WordInfoFixedData, WordInfoVariableData, WordInfoVariableLayout,
+};
 
 use super::refs::{NormFormValue, WordRef};
 
@@ -98,30 +100,11 @@ impl RawLexiconEntry {
     }
 
     pub fn expected_entry_size(&self) -> usize {
-        let c_len = self.splits_c.len() as i8;
-        let b_len = if self.splits_b == self.splits_c {
-            -1
-        } else {
-            self.splits_b.len() as i8
-        };
-        let a_len = if self.splits_a == self.splits_b {
-            -1
-        } else {
-            self.splits_a.len() as i8
-        };
-        let ws_len = if self.word_structure == self.splits_a {
-            -1
-        } else {
-            self.word_structure.len() as i8
-        };
-        let syn_len = self.synonym_groups.len() as i8;
-        let user_data_units = if self.user_data.is_empty() {
-            None
-        } else {
-            Some(self.user_data.encode_utf16().count() as i16)
-        };
+        let variable = self
+            .variable_layout()
+            .expect("entry lengths are validated before size computation");
 
-        layout::size_from_lengths(c_len, b_len, a_len, ws_len, syn_len, user_data_units)
+        layout::size_from_variable_layout(variable)
             .expect("entry lengths are validated before size computation")
     }
 
@@ -156,32 +139,7 @@ impl RawLexiconEntry {
             });
         }
 
-        let c_len = self.len_as_i8(self.splits_c.len(), "splits_c")?;
-        let b_len = if self.splits_b == self.splits_c {
-            -1
-        } else {
-            self.len_as_i8(self.splits_b.len(), "splits_b")?
-        };
-        let a_len = if self.splits_a == self.splits_b {
-            -1
-        } else {
-            self.len_as_i8(self.splits_a.len(), "splits_a")?
-        };
-        let ws_len = if self.word_structure == self.splits_a {
-            -1
-        } else {
-            self.len_as_i8(self.word_structure.len(), "word_structure")?
-        };
-        let syn_len = self.len_as_i8(self.synonym_groups.len(), "synonym_groups")?;
-        let user_data_units = self.user_data.encode_utf16().count();
-        if user_data_units > i16::MAX as usize {
-            return Err(BuildFailure::InvalidFieldSize {
-                actual: user_data_units,
-                expected: i16::MAX as usize,
-                field: "user_data",
-            });
-        }
-        let user_data_flag = if user_data_units == 0 { 0i8 } else { 1i8 };
+        let variable = self.variable_layout()?;
 
         let fixed = WordInfoFixedData {
             pos_id: self.pos as i16,
@@ -190,60 +148,99 @@ impl RawLexiconEntry {
             normalized_form: norm_form_word_id.as_raw(),
             dictionary_form: dic_form_word_id.as_raw(),
             index_form_length: self.surface.len() as i16,
-            c_unit_split_length: c_len,
-            b_unit_split_length: b_len,
-            a_unit_split_length: a_len,
-            word_structure_length: ws_len,
-            synonym_group_ids_length: syn_len,
-            user_data_flag,
+            c_unit_split_length: variable.c_unit_split_length,
+            b_unit_split_length: variable.b_unit_split_length,
+            a_unit_split_length: variable.a_unit_split_length,
+            word_structure_length: variable.word_structure_length,
+            synonym_group_ids_length: variable.synonym_group_ids_length,
+            user_data_flag: variable.user_data_flag,
         };
         let mut size = fixed.write_to(w)?;
-
-        size += self.write_word_refs(w, &self.splits_c)?;
-        if b_len > 0 {
-            size += self.write_word_refs(w, &self.splits_b)?;
-        }
-        if a_len > 0 {
-            size += self.write_word_refs(w, &self.splits_a)?;
-        }
-        if ws_len > 0 {
-            size += self.write_word_refs(w, &self.word_structure)?;
-        }
-        for sg in &self.synonym_groups {
-            w.write_all(&(*sg as i32).to_le_bytes())?;
-            size += 4;
-        }
-        if user_data_flag == 1 {
-            w.write_all(&(user_data_units as i16).to_le_bytes())?;
-            size += 2;
-            for c in self.user_data.encode_utf16() {
-                w.write_all(&c.to_le_bytes())?;
-                size += 2;
-            }
-        }
+        let c_refs = self.word_ref_ids(&self.splits_c);
+        let b_refs = self.word_ref_ids(&self.splits_b);
+        let a_refs = self.word_ref_ids(&self.splits_a);
+        let ws_refs = self.word_ref_ids(&self.word_structure);
+        let syns: Vec<i32> = self.synonym_groups.iter().map(|sg| *sg as i32).collect();
+        let payload = WordInfoVariableData {
+            c_unit_split: &c_refs,
+            b_unit_split: &b_refs,
+            a_unit_split: &a_refs,
+            word_structure: &ws_refs,
+            synonym_group_ids: &syns,
+            user_data: &self.user_data,
+        };
+        size += payload.write_to(w, &fixed)?;
 
         Ok(size)
     }
 
-    fn write_word_refs<W: Write>(&self, w: &mut W, refs: &[WordRef]) -> DicWriteResult<usize> {
-        let mut size = 0;
+    fn word_ref_ids(&self, refs: &[WordRef]) -> Vec<u32> {
+        let mut result = Vec::with_capacity(refs.len());
         for s in refs {
             match s {
                 WordRef::Ref(wid) => {
-                    w.write_all(&wid.as_raw().to_le_bytes())?;
-                    size += 4;
+                    result.push(wid.as_raw());
                 }
                 _ => panic!("word refs must be resolved before writing"),
             }
         }
-        Ok(size)
+        result
     }
 
-    fn len_as_i8(&self, len: usize, field: &'static str) -> DicWriteResult<i8> {
-        i8::try_from(len).map_err(|_| BuildFailure::InvalidFieldSize {
-            actual: len,
-            expected: i8::MAX as usize,
-            field,
+    fn variable_layout(&self) -> DicWriteResult<WordInfoVariableLayout> {
+        WordInfoVariableLayout::new(
+            self.splits_c.len(),
+            self.splits_b == self.splits_c,
+            self.splits_b.len(),
+            self.splits_a == self.splits_b,
+            self.splits_a.len(),
+            self.word_structure == self.splits_a,
+            self.word_structure.len(),
+            self.synonym_groups.len(),
+            self.user_data.encode_utf16().count(),
+        )
+        .ok_or_else(|| {
+            let user_data_units = self.user_data.encode_utf16().count();
+            if self.splits_c.len() > i8::MAX as usize {
+                return BuildFailure::InvalidFieldSize {
+                    actual: self.splits_c.len(),
+                    expected: i8::MAX as usize,
+                    field: "splits_c",
+                };
+            }
+            if self.splits_b.len() > i8::MAX as usize {
+                return BuildFailure::InvalidFieldSize {
+                    actual: self.splits_b.len(),
+                    expected: i8::MAX as usize,
+                    field: "splits_b",
+                };
+            }
+            if self.splits_a.len() > i8::MAX as usize {
+                return BuildFailure::InvalidFieldSize {
+                    actual: self.splits_a.len(),
+                    expected: i8::MAX as usize,
+                    field: "splits_a",
+                };
+            }
+            if self.word_structure.len() > i8::MAX as usize {
+                return BuildFailure::InvalidFieldSize {
+                    actual: self.word_structure.len(),
+                    expected: i8::MAX as usize,
+                    field: "word_structure",
+                };
+            }
+            if self.synonym_groups.len() > i8::MAX as usize {
+                return BuildFailure::InvalidFieldSize {
+                    actual: self.synonym_groups.len(),
+                    expected: i8::MAX as usize,
+                    field: "synonym_groups",
+                };
+            }
+            BuildFailure::InvalidFieldSize {
+                actual: user_data_units,
+                expected: i16::MAX as usize,
+                field: "user_data",
+            }
         })
     }
 

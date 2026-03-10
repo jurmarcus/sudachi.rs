@@ -24,8 +24,16 @@ pub mod layout;
 pub mod parse;
 #[path = "word_info/raw.rs"]
 mod raw;
+#[path = "word_info/variable_io.rs"]
+mod variable_io;
 
 pub use data::*;
 pub use infos::WordInfos;
+pub(crate) use layout::WordInfoVariableLayout;
 pub use parse::WordInfoParser;
+pub(crate) use raw::WordInfoVariableData;
 pub use raw::{WordInfoFixedData, WordInfoRawData};
+pub(crate) use variable_io::{
+    parse_i32_array, parse_u32_array, parse_user_data, write_i32_slice, write_u32_slice,
+    write_utf16_string,
+};

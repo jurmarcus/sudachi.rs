@@ -21,6 +21,7 @@ use nom::number::complete::{le_i16, le_i8, le_u32};
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::read::error::SudachiNomResult;
 use crate::dic::word_info::layout;
+use crate::dic::word_info::{write_i32_slice, write_u32_slice, write_utf16_string};
 
 /// Parsed raw binary representation of a word info entry.
 ///
@@ -50,6 +51,40 @@ pub struct WordInfoRawData {
     pub word_structure: Vec<u32>,
     pub synonym_group_ids: Vec<i32>,
     pub user_data: String,
+}
+
+pub(crate) struct WordInfoVariableData<'a> {
+    pub c_unit_split: &'a [u32],
+    pub b_unit_split: &'a [u32],
+    pub a_unit_split: &'a [u32],
+    pub word_structure: &'a [u32],
+    pub synonym_group_ids: &'a [i32],
+    pub user_data: &'a str,
+}
+
+impl<'a> WordInfoVariableData<'a> {
+    pub fn write_to<W: Write>(
+        &self,
+        w: &mut W,
+        fixed: &WordInfoFixedData,
+    ) -> std::io::Result<usize> {
+        let mut size = 0;
+        size += write_u32_slice(w, self.c_unit_split)?;
+        if fixed.b_unit_split_length > 0 {
+            size += write_u32_slice(w, self.b_unit_split)?;
+        }
+        if fixed.a_unit_split_length > 0 {
+            size += write_u32_slice(w, self.a_unit_split)?;
+        }
+        if fixed.word_structure_length > 0 {
+            size += write_u32_slice(w, self.word_structure)?;
+        }
+        size += write_i32_slice(w, self.synonym_group_ids)?;
+        if fixed.has_user_data() {
+            size += write_utf16_string(w, self.user_data)?;
+        }
+        Ok(size)
+    }
 }
 
 #[derive(Clone, Debug, Default)]

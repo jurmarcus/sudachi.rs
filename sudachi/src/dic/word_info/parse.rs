@@ -14,12 +14,11 @@
  *  limitations under the License.
  */
 
-use nom::number::complete::{le_i32, le_u32};
-
-use crate::dic::read::utf16_string::utf16_string;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_info::layout;
-use crate::dic::word_info::{WordInfoFixedData, WordInfoRawData};
+use crate::dic::word_info::{
+    parse_i32_array, parse_u32_array, parse_user_data, WordInfoFixedData, WordInfoRawData,
+};
 use crate::error::SudachiResult;
 
 pub struct WordInfoParser {
@@ -155,34 +154,13 @@ impl WordInfoParser {
             self.info.synonym_group_ids = synonym_group_ids;
         }
 
-        // since this is the last field, we can skip skipping unused bytes for the next fields.
-        if fixed.has_user_data() && self.flds.contains(InfoSubset::USER_DATA) {
-            let (_, user_data) = utf16_string(data)?;
-            self.info.user_data = user_data;
+        if fixed.has_user_data() {
+            let (_, user_data) = parse_user_data(data, self.flds.contains(InfoSubset::USER_DATA))?;
+            if self.flds.contains(InfoSubset::USER_DATA) {
+                self.info.user_data = user_data;
+            }
         }
         Ok(self.info)
-    }
-}
-
-fn parse_u32_array(input: &[u8], length: usize, keep: bool) -> SudachiResult<(&[u8], Vec<u32>)> {
-    if keep {
-        let (rest, values) = nom::multi::count(le_u32, length)(input)?;
-        Ok((rest, values))
-    } else {
-        let bytes = length * 4;
-        let (rest, _) = nom::bytes::complete::take(bytes)(input)?;
-        Ok((rest, Vec::new()))
-    }
-}
-
-fn parse_i32_array(input: &[u8], length: usize, keep: bool) -> SudachiResult<(&[u8], Vec<i32>)> {
-    if keep {
-        let (rest, values) = nom::multi::count(le_i32, length)(input)?;
-        Ok((rest, values))
-    } else {
-        let bytes = length * 4;
-        let (rest, _) = nom::bytes::complete::take(bytes)(input)?;
-        Ok((rest, Vec::new()))
     }
 }
 
