@@ -32,6 +32,12 @@ use sudachi::dic::word_id::WordId;
 use sudachi::error::SudachiResult;
 use sudachi::text_normalizer::TextNormalizer;
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum PosDumpFormat {
+    Components,
+    Id,
+}
+
 /// Check that the first argument is a subcommand and the file with the same name does
 /// not exists.
 /// If the file does exists, probably it's safer to use default Sudachi analysis mode.
@@ -91,6 +97,11 @@ pub(crate) enum BuildCli {
         /// required to dump winfo of an user dictionary
         #[arg(short = 's', long = "system")]
         system: Option<PathBuf>,
+
+        /// Use POS_ID instead of POS1..POS6 in dump winfo output.
+        /// Inline references in dictionary_form and split columns also use POS_ID.
+        #[arg(long = "pos-id")]
+        pos_id: bool,
     },
 }
 
@@ -122,7 +133,18 @@ pub fn build_main(subcommand: BuildCli) {
             part,
             output,
             system,
-        } => dump_part(dictionary, system, part, output),
+            pos_id,
+        } => dump_part(
+            dictionary,
+            system,
+            part,
+            output,
+            if pos_id {
+                PosDumpFormat::Id
+            } else {
+                PosDumpFormat::Components
+            },
+        ),
     }
 }
 
@@ -155,7 +177,8 @@ fn build_system(mut cmd: BuildCmd, matrix: PathBuf, pos: Option<PathBuf>) {
 fn build_user(mut cmd: BuildCmd, system: PathBuf) {
     let system_file = File::open(&system).expect("failed to open system dictionary");
     let system_data = unsafe { Mmap::map(&system_file) }.expect("failed to mmap system dictionary");
-    let dict = LoadedDictionary::load_system(&system_data).expect("failed to load system dictionary");
+    let dict =
+        LoadedDictionary::load_system(&system_data).expect("failed to load system dictionary");
 
     let mut builder = DictBuilder::new_user(&dict);
     builder.set_description(std::mem::take(&mut cmd.description));
@@ -202,7 +225,13 @@ fn output_file(p: &Path) -> File {
         .unwrap_or_else(|e| panic!("failed to open {:?} for writing:\n{:?}", p, e))
 }
 
-fn dump_part(dict: PathBuf, system: Option<PathBuf>, part: String, output: PathBuf) {
+fn dump_part(
+    dict: PathBuf,
+    system: Option<PathBuf>,
+    part: String,
+    output: PathBuf,
+    pos_format: PosDumpFormat,
+) {
     let file = File::open(dict).expect("open dict failed");
     let data = unsafe { Mmap::map(&file) }.expect("mmap dict failed");
     let desc = Description::load(&data).expect("failed to load dictionary description");
@@ -218,7 +247,7 @@ fn dump_part(dict: PathBuf, system: Option<PathBuf>, part: String, output: PathB
     match part.as_str() {
         "pos" => dump_pos(loaded, &mut writer),
         "matrix" => dump_matrix(loaded, &mut writer),
-        "winfo" => dump_word_info(loaded, system, &mut writer).unwrap(),
+        "winfo" => dump_word_info(loaded, system, pos_format, &mut writer).unwrap(),
         _ => unimplemented!(),
     }
     writer.flush().unwrap();
@@ -254,6 +283,7 @@ fn dump_matrix<W: Write>(dict: BinaryDictionary, w: &mut W) {
 fn dump_word_info<W: Write>(
     dict: BinaryDictionary,
     system: Option<PathBuf>,
+    pos_format: PosDumpFormat,
     w: &mut W,
 ) -> SudachiResult<()> {
     let is_user = dict.description.is_user_dictionary();
@@ -300,10 +330,7 @@ fn dump_word_info<W: Write>(
     }
 
     let normalizer = TextNormalizer::new(&grammar)?;
-    writeln!(
-        w,
-        "INDEX_FORM,LEFT_ID,RIGHT_ID,COST,HEADWORD,POS1,POS2,POS3,POS4,POS5,POS6,READING_FORM,NORMALIZED_FORM,DICTIONARY_FORM,SPLIT_A,SPLIT_B,SPLIT_C,WORD_STRUCTURE,SYNONYM_GROUPS,USER_DATA"
-    )?;
+    writeln!(w, "{}", word_info_header(pos_format))?;
     for wid in word_ids {
         if wid.dict().as_raw() != did {
             continue;
@@ -323,7 +350,7 @@ fn dump_word_info<W: Write>(
         } else {
             write!(w, "{},", csv_field(headword))?;
         }
-        write!(w, "{},", pos_string(&grammar, winfo.pos_id()))?;
+        write!(w, "{},", pos_string(&grammar, winfo.pos_id(), pos_format))?;
         let reading = winfo.reading_form(&lex);
         write!(w, "{},", csv_field(reading))?;
         let normalized = winfo.normalized_form(&lex);
@@ -337,15 +364,16 @@ fn dump_word_info<W: Write>(
             &lex,
             wid,
             winfo.borrow_data().dictionary_form_word_id(),
+            pos_format,
         )?;
         write!(w, "{},", dict_form)?;
-        dump_wids(w, &grammar, &lex, winfo.a_unit_split())?;
+        dump_wids(w, &grammar, &lex, winfo.a_unit_split(), pos_format)?;
         w.write_all(b",")?;
-        dump_wids(w, &grammar, &lex, winfo.b_unit_split())?;
+        dump_wids(w, &grammar, &lex, winfo.b_unit_split(), pos_format)?;
         w.write_all(b",")?;
-        dump_wids(w, &grammar, &lex, winfo.c_unit_split())?;
+        dump_wids(w, &grammar, &lex, winfo.c_unit_split(), pos_format)?;
         w.write_all(b",")?;
-        dump_wids(w, &grammar, &lex, winfo.word_structure())?;
+        dump_wids(w, &grammar, &lex, winfo.word_structure(), pos_format)?;
         w.write_all(b",")?;
         dump_gids(w, winfo.synonym_group_ids())?;
         write!(w, ",{}", csv_field(winfo.user_data()))?;
@@ -359,6 +387,12 @@ fn unicode_escape(raw: &str) -> String {
     raw.replace('"', "\\u0022")
 }
 
+fn inline_ref_escape(raw: &str) -> String {
+    raw.replace('"', "\\u0022")
+        .replace(',', "\\u002c")
+        .replace('/', "\\u002f")
+}
+
 fn csv_field(raw: &str) -> String {
     let escaped = unicode_escape(raw);
     if raw.contains(',') {
@@ -368,9 +402,39 @@ fn csv_field(raw: &str) -> String {
     }
 }
 
-fn pos_string(grammar: &Grammar, posid: u16) -> String {
-    let pos_parts = grammar.pos_components(posid);
-    pos_parts.join(",")
+fn word_info_header(pos_format: PosDumpFormat) -> &'static str {
+    match pos_format {
+        PosDumpFormat::Components => {
+            "INDEX_FORM,LEFT_ID,RIGHT_ID,COST,HEADWORD,POS1,POS2,POS3,POS4,POS5,POS6,READING_FORM,NORMALIZED_FORM,DICTIONARY_FORM,SPLIT_A,SPLIT_B,SPLIT_C,WORD_STRUCTURE,SYNONYM_GROUPS,USER_DATA"
+        }
+        PosDumpFormat::Id => {
+            "INDEX_FORM,LEFT_ID,RIGHT_ID,COST,HEADWORD,POS_ID,READING_FORM,NORMALIZED_FORM,DICTIONARY_FORM,SPLIT_A,SPLIT_B,SPLIT_C,WORD_STRUCTURE,SYNONYM_GROUPS,USER_DATA"
+        }
+    }
+}
+
+fn pos_string(grammar: &Grammar, posid: u16, pos_format: PosDumpFormat) -> String {
+    match pos_format {
+        PosDumpFormat::Components => grammar
+            .pos_components(posid)
+            .into_iter()
+            .map(|p| csv_field(p))
+            .collect::<Vec<_>>()
+            .join(","),
+        PosDumpFormat::Id => posid.to_string(),
+    }
+}
+
+fn pos_string_for_inline(grammar: &Grammar, posid: u16, pos_format: PosDumpFormat) -> String {
+    match pos_format {
+        PosDumpFormat::Components => grammar
+            .pos_components(posid)
+            .into_iter()
+            .map(|p| inline_ref_escape(p))
+            .collect::<Vec<_>>()
+            .join(","),
+        PosDumpFormat::Id => posid.to_string(),
+    }
 }
 
 fn dictionary_form_string(
@@ -378,6 +442,7 @@ fn dictionary_form_string(
     lex: &LexiconSet,
     self_wid: WordId,
     wid: WordId,
+    pos_format: PosDumpFormat,
 ) -> SudachiResult<String> {
     if self_wid == wid {
         return Ok(String::new());
@@ -387,7 +452,7 @@ fn dictionary_form_string(
     Ok(format!(
         "\"{},{},{}\"",
         inline_ref_escape(dict_form_wi.headword(lex)),
-        pos_string_for_inline(grammar, dict_form_wi.pos_id()),
+        pos_string_for_inline(grammar, dict_form_wi.pos_id(), pos_format),
         inline_ref_escape(dict_form_wi.reading_form(lex)),
     ))
 }
@@ -397,6 +462,7 @@ fn dump_wids<W: Write>(
     grammar: &Grammar,
     lex: &LexiconSet,
     data: &[WordId],
+    pos_format: PosDumpFormat,
 ) -> SudachiResult<()> {
     if data.is_empty() {
         return Ok(());
@@ -408,7 +474,7 @@ fn dump_wids<W: Write>(
         refs.push(format!(
             "{},{},{}",
             inline_ref_escape(wi.headword(lex)),
-            pos_string_for_inline(grammar, wi.pos_id()),
+            pos_string_for_inline(grammar, wi.pos_id(), pos_format),
             inline_ref_escape(wi.reading_form(lex)),
         ));
     }
@@ -435,21 +501,6 @@ fn dump_gids<W: Write>(w: &mut W, data: &[i32]) -> SudachiResult<()> {
         }
     }
     Ok(())
-}
-
-fn pos_string_for_inline(grammar: &Grammar, posid: u16) -> String {
-    let pos_parts = grammar.pos_components(posid);
-    pos_parts
-        .into_iter()
-        .map(|p| inline_ref_escape(p))
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
-fn inline_ref_escape(raw: &str) -> String {
-    raw.replace('"', "\\u0022")
-        .replace(',', "\\u002c")
-        .replace('/', "\\u002f")
 }
 
 #[cfg(test)]
@@ -619,7 +670,7 @@ mod tests {
 
         let dict = BinaryDictionary::load_system(&sys_bin).unwrap();
         let mut dumped = Vec::new();
-        dump_word_info(dict, None, &mut dumped).unwrap();
+        dump_word_info(dict, None, PosDumpFormat::Components, &mut dumped).unwrap();
 
         let expected = normalize_source_csv_for_dump(SYSTEM_CSV);
         let actual = parse_dump_csv(&dumped);
@@ -647,7 +698,13 @@ mod tests {
 
         let user_dict = BinaryDictionary::load_user(&user_bin).unwrap();
         let mut dumped = Vec::new();
-        dump_word_info(user_dict, Some(system_path.clone()), &mut dumped).unwrap();
+        dump_word_info(
+            user_dict,
+            Some(system_path.clone()),
+            PosDumpFormat::Components,
+            &mut dumped,
+        )
+        .unwrap();
 
         let _ = fs::remove_file(system_path);
 
@@ -682,6 +739,105 @@ mod tests {
         dump_pos(dict, &mut dumped);
 
         let expected = normalize_pos_source_for_dump(pos.as_bytes());
+        let actual = parse_dump_csv(&dumped);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn dump_word_info_uses_pos_id_for_columns_and_inline_refs() {
+        let pos = concat!(
+            "POS_ID,POS1,POS2,POS3,POS4,POS5,POS6\n",
+            "0,名詞,固有名詞,地名,一般,*,*\n",
+            "1,名詞,普通名詞,一般,*,*,*\n"
+        );
+        let lex = concat!(
+            "INDEX_FORM,LEFT_ID,RIGHT_ID,COST,HEADWORD,POS_ID,READING_FORM,NORMALIZED_FORM,DICTIONARY_FORM,MODE,SPLIT_A,SPLIT_B,SPLIT_C,WORD_STRUCTURE,SYNONYM_GROUPS\n",
+            "京都,6,6,5293,京都,0,キョウト,京都,,A,,,,,\n",
+            "府,2,2,2914,,1,フ,,,A,,,,,\n",
+            "東京府,2,2,2816,,0,トウキョウフ,,,B,\"京都,0,キョウト/府,1,フ\",,,,\n"
+        );
+
+        let mut builder = DictBuilder::new_system();
+        builder.read_conn(MATRIX_10_10).unwrap();
+        builder.read_pos(pos.as_bytes()).unwrap();
+        builder.read_lexicon(lex.as_bytes()).unwrap();
+        builder.resolve().unwrap();
+
+        let mut compiled = Vec::new();
+        builder.compile(&mut compiled).unwrap();
+
+        let dict = BinaryDictionary::load_system(&compiled).unwrap();
+        let mut dumped = Vec::new();
+        dump_word_info(dict, None, PosDumpFormat::Id, &mut dumped).unwrap();
+
+        let expected = vec![
+            vec![
+                "INDEX_FORM",
+                "LEFT_ID",
+                "RIGHT_ID",
+                "COST",
+                "HEADWORD",
+                "POS_ID",
+                "READING_FORM",
+                "NORMALIZED_FORM",
+                "DICTIONARY_FORM",
+                "SPLIT_A",
+                "SPLIT_B",
+                "SPLIT_C",
+                "WORD_STRUCTURE",
+                "SYNONYM_GROUPS",
+                "USER_DATA",
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+            vec![
+                "京都",
+                "6",
+                "6",
+                "5293",
+                "",
+                "0",
+                "キョウト",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+            vec![
+                "府", "2", "2", "2914", "", "1", "フ", "", "", "", "", "", "", "", "",
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+            vec![
+                "東京府",
+                "2",
+                "2",
+                "2816",
+                "",
+                "0",
+                "トウキョウフ",
+                "",
+                "",
+                "京都,0,キョウト/府,1,フ",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+        ];
         let actual = parse_dump_csv(&dumped);
         assert_eq!(actual, expected);
     }
