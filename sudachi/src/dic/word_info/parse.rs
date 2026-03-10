@@ -24,6 +24,7 @@ use crate::error::SudachiResult;
 
 pub struct WordInfoParser {
     info: WordInfoRawData,
+    flds: InfoSubset,
 }
 
 impl Default for WordInfoParser {
@@ -35,9 +36,10 @@ impl Default for WordInfoParser {
 
 impl WordInfoParser {
     #[inline]
-    pub fn subset(_flds: InfoSubset) -> WordInfoParser {
+    pub fn subset(flds: InfoSubset) -> WordInfoParser {
         Self {
             info: Default::default(),
+            flds: flds.normalize(),
         }
     }
 
@@ -70,12 +72,24 @@ impl WordInfoParser {
     pub fn parse(mut self, data: &[u8]) -> SudachiResult<WordInfoRawData> {
         let (data, _) = nom::bytes::complete::take(layout::PARAMS_SIZE)(data)?;
         let (data, fixed) = WordInfoFixedData::parse(data)?;
-        self.info.pos_id = fixed.pos_id;
-        self.info.headword_strptr = fixed.headword_strptr;
-        self.info.reading_form_strptr = fixed.reading_form_strptr;
-        self.info.normalized_form = fixed.normalized_form;
-        self.info.dictionary_form = fixed.dictionary_form;
-        self.info.index_form_length = fixed.index_form_length;
+        if self.flds.contains(InfoSubset::POS_ID) {
+            self.info.pos_id = fixed.pos_id;
+        }
+        if self.flds.contains(InfoSubset::HEADWORD) {
+            self.info.headword_strptr = fixed.headword_strptr;
+        }
+        if self.flds.contains(InfoSubset::READING_FORM) {
+            self.info.reading_form_strptr = fixed.reading_form_strptr;
+        }
+        if self.flds.contains(InfoSubset::NORMALIZED_FORM) {
+            self.info.normalized_form = fixed.normalized_form;
+        }
+        if self.flds.contains(InfoSubset::DICTIONARY_FORM) {
+            self.info.dictionary_form = fixed.dictionary_form;
+        }
+        if self.flds.contains(InfoSubset::INDEX_FORM_LENGTH) {
+            self.info.index_form_length = fixed.index_form_length;
+        }
         self.info.c_unit_split_length = fixed.c_unit_split_length;
         self.info.b_unit_split_length = fixed.b_unit_split_length;
         self.info.a_unit_split_length = fixed.a_unit_split_length;
@@ -83,39 +97,92 @@ impl WordInfoParser {
         self.info.synonym_group_ids_length = fixed.synonym_group_ids_length;
         self.info.user_data_flag = fixed.user_data_flag;
 
+        let need_c = self.flds.intersects(
+            InfoSubset::SPLIT_C
+                | InfoSubset::SPLIT_B
+                | InfoSubset::SPLIT_A
+                | InfoSubset::WORD_STRUCTURE,
+        );
         let (data, c_unit_split) =
-            nom::multi::count(le_u32, self.embedded_c_unit_split_length())(data)?;
-        self.info.c_unit_split = c_unit_split;
+            parse_u32_array(data, self.embedded_c_unit_split_length(), need_c)?;
+        if need_c {
+            self.info.c_unit_split = c_unit_split;
+        }
+
+        let need_b = self
+            .flds
+            .intersects(InfoSubset::SPLIT_B | InfoSubset::SPLIT_A | InfoSubset::WORD_STRUCTURE);
         let (data, b_unit_split) =
-            nom::multi::count(le_u32, self.embedded_b_unit_split_length())(data)?;
-        self.info.b_unit_split = b_unit_split;
+            parse_u32_array(data, self.embedded_b_unit_split_length(), need_b)?;
+        if fixed.b_unit_split_length < 0 {
+            if need_b {
+                self.info.b_unit_split = self.info.c_unit_split.clone();
+            }
+        } else if need_b {
+            self.info.b_unit_split = b_unit_split;
+        }
+
+        let need_a = self
+            .flds
+            .intersects(InfoSubset::SPLIT_A | InfoSubset::WORD_STRUCTURE);
         let (data, a_unit_split) =
-            nom::multi::count(le_u32, self.embedded_a_unit_split_length())(data)?;
-        self.info.a_unit_split = a_unit_split;
+            parse_u32_array(data, self.embedded_a_unit_split_length(), need_a)?;
+        if fixed.a_unit_split_length < 0 {
+            if need_a {
+                self.info.a_unit_split = self.info.b_unit_split.clone();
+            }
+        } else if need_a {
+            self.info.a_unit_split = a_unit_split;
+        }
+
+        let need_ws = self.flds.contains(InfoSubset::WORD_STRUCTURE);
         let (data, word_structure) =
-            nom::multi::count(le_u32, self.embedded_word_structure_length())(data)?;
-        self.info.word_structure = word_structure;
-        let (data, synonym_group_ids) =
-            nom::multi::count(le_i32, self.embedded_synonym_group_ids_length())(data)?;
-        self.info.synonym_group_ids = synonym_group_ids;
+            parse_u32_array(data, self.embedded_word_structure_length(), need_ws)?;
+        if fixed.word_structure_length < 0 {
+            if need_ws {
+                self.info.word_structure = self.info.a_unit_split.clone();
+            }
+        } else if need_ws {
+            self.info.word_structure = word_structure;
+        }
 
-        if fixed.has_user_data() {
-            let (data, user_data) = utf16_string(data)?;
+        let (data, synonym_group_ids) = parse_i32_array(
+            data,
+            self.embedded_synonym_group_ids_length(),
+            self.flds.contains(InfoSubset::SYNONYM_GROUP_IDS),
+        )?;
+        if self.flds.contains(InfoSubset::SYNONYM_GROUP_IDS) {
+            self.info.synonym_group_ids = synonym_group_ids;
+        }
+
+        // since this is the last field, we can skip skipping unused bytes for the next fields.
+        if fixed.has_user_data() && self.flds.contains(InfoSubset::USER_DATA) {
+            let (_, user_data) = utf16_string(data)?;
             self.info.user_data = user_data;
-            let _ = data;
         }
-
-        if self.info.b_unit_split_length < 0 {
-            self.info.b_unit_split = self.info.c_unit_split.clone();
-        }
-        if self.info.a_unit_split_length < 0 {
-            self.info.a_unit_split = self.info.b_unit_split.clone();
-        }
-        if self.info.word_structure_length < 0 {
-            self.info.word_structure = self.info.a_unit_split.clone();
-        }
-
         Ok(self.info)
+    }
+}
+
+fn parse_u32_array(input: &[u8], length: usize, keep: bool) -> SudachiResult<(&[u8], Vec<u32>)> {
+    if keep {
+        let (rest, values) = nom::multi::count(le_u32, length)(input)?;
+        Ok((rest, values))
+    } else {
+        let bytes = length * 4;
+        let (rest, _) = nom::bytes::complete::take(bytes)(input)?;
+        Ok((rest, Vec::new()))
+    }
+}
+
+fn parse_i32_array(input: &[u8], length: usize, keep: bool) -> SudachiResult<(&[u8], Vec<i32>)> {
+    if keep {
+        let (rest, values) = nom::multi::count(le_i32, length)(input)?;
+        Ok((rest, values))
+    } else {
+        let bytes = length * 4;
+        let (rest, _) = nom::bytes::complete::take(bytes)(input)?;
+        Ok((rest, Vec::new()))
     }
 }
 
@@ -209,5 +276,78 @@ mod tests {
         assert_eq!(parsed.word_structure, vec![10, 11]);
         assert_eq!(parsed.synonym_group_ids, vec![99]);
         assert!(parsed.user_data.is_empty());
+    }
+
+    #[test]
+    fn subset_clears_unrequested_fields() {
+        let fixed = WordInfoFixedData {
+            pos_id: 9,
+            headword_strptr: StringPointer::unchecked(1, 2),
+            reading_form_strptr: StringPointer::unchecked(1, 4),
+            normalized_form: 21,
+            dictionary_form: 22,
+            index_form_length: 3,
+            c_unit_split_length: 2,
+            b_unit_split_length: 1,
+            a_unit_split_length: 1,
+            word_structure_length: 1,
+            synonym_group_ids_length: 1,
+            user_data_flag: 1,
+        };
+
+        let mut bytes = vec![0u8; layout::PARAMS_SIZE];
+        fixed.write_to(&mut bytes).unwrap();
+        push_u32s(&mut bytes, &[10, 11]);
+        push_u32s(&mut bytes, &[20]);
+        push_u32s(&mut bytes, &[30]);
+        push_u32s(&mut bytes, &[40]);
+        push_i32s(&mut bytes, &[99]);
+        push_utf16(&mut bytes, "meta");
+
+        let parsed = WordInfoParser::subset(InfoSubset::READING_FORM)
+            .parse(&bytes)
+            .unwrap();
+        assert_eq!(parsed.reading_form_strptr, fixed.reading_form_strptr);
+        assert_eq!(parsed.pos_id, 0);
+        assert_eq!(parsed.headword_strptr, Default::default());
+        assert_eq!(parsed.normalized_form, 0);
+        assert_eq!(parsed.dictionary_form, 0);
+        assert_eq!(parsed.index_form_length, 0);
+        assert!(parsed.c_unit_split.is_empty());
+        assert!(parsed.b_unit_split.is_empty());
+        assert!(parsed.a_unit_split.is_empty());
+        assert!(parsed.word_structure.is_empty());
+        assert!(parsed.synonym_group_ids.is_empty());
+        assert!(parsed.user_data.is_empty());
+    }
+
+    #[test]
+    fn subset_normalize_keeps_required_dependencies() {
+        let fixed = WordInfoFixedData {
+            pos_id: 7,
+            headword_strptr: StringPointer::unchecked(2, 6),
+            reading_form_strptr: StringPointer::unchecked(1, 2),
+            normalized_form: 33,
+            dictionary_form: 44,
+            index_form_length: 5,
+            c_unit_split_length: 1,
+            b_unit_split_length: 0,
+            a_unit_split_length: 0,
+            word_structure_length: 0,
+            synonym_group_ids_length: 0,
+            user_data_flag: 0,
+        };
+
+        let mut bytes = vec![0u8; layout::PARAMS_SIZE];
+        fixed.write_to(&mut bytes).unwrap();
+        push_u32s(&mut bytes, &[10]);
+
+        let parsed = WordInfoParser::subset(InfoSubset::NORMALIZED_FORM | InfoSubset::SPLIT_C)
+            .parse(&bytes)
+            .unwrap();
+        assert_eq!(parsed.normalized_form, fixed.normalized_form);
+        assert_eq!(parsed.headword_strptr, fixed.headword_strptr);
+        assert_eq!(parsed.index_form_length, fixed.index_form_length);
+        assert_eq!(parsed.c_unit_split, vec![10]);
     }
 }
