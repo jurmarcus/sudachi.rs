@@ -27,4 +27,5 @@ mod raw;
 
 pub use data::*;
 pub use infos::WordInfos;
+pub use parse::WordInfoParser;
 pub use raw::WordInfoRawData;

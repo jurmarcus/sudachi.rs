@@ -17,8 +17,7 @@
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::EntryId;
 use crate::dic::word_info::layout;
-use crate::dic::word_info::parse::WordInfoParser;
-use crate::dic::word_info::WordInfoRefData;
+use crate::dic::word_info::{WordInfoParser, WordInfoRefData};
 use crate::prelude::*;
 
 pub struct WordInfos<'a> {
