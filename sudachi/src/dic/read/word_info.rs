@@ -14,4 +14,5 @@
  *  limitations under the License.
  */
 
+#[allow(unused_imports)]
 pub use crate::dic::word_info::parse::WordInfoParser;

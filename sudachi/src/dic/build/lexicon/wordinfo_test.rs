@@ -17,9 +17,9 @@
 use crate::dic::binary_loader::LoadedDictionary;
 use crate::dic::build::DictBuilder;
 use crate::dic::description::{Block, Description};
-use crate::dic::lexicon::word_infos::WordInfos;
-use crate::dic::read::word_info::WordInfoParser;
 use crate::dic::subset::InfoSubset;
+use crate::dic::word_info::parse::WordInfoParser;
+use crate::dic::word_info::WordInfos;
 
 #[test]
 fn wordinfo_subset_surface() {

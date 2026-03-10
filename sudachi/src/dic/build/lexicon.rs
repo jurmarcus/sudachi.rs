@@ -38,9 +38,9 @@ use crate::dic::build::primitives::Utf16Writer;
 use crate::dic::build::report::{ReportBuilder, Reporter};
 use crate::dic::build::MAX_POS_IDS;
 use crate::dic::grammar::Grammar;
-use crate::dic::lexicon::word_infos::WordInfos;
 use crate::dic::pos::POS_DEPTH;
 use crate::dic::word_id::WordId;
+use crate::dic::word_info::WordInfos;
 use crate::error::SudachiResult;
 
 #[cfg(test)]

@@ -16,6 +16,8 @@
 
 #[path = "word_info/data.rs"]
 mod data;
+#[path = "word_info/infos.rs"]
+mod infos;
 #[path = "word_info/layout.rs"]
 pub mod layout;
 #[path = "word_info/parse.rs"]
@@ -24,4 +26,5 @@ pub mod parse;
 mod raw;
 
 pub use data::*;
+pub use infos::WordInfos;
 pub use raw::WordInfoRawData;

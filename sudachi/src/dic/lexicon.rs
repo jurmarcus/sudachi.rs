@@ -18,14 +18,13 @@ use std::cmp;
 
 use self::trie::Trie;
 use self::word_id_table::WordIdTable;
-use self::word_infos::WordInfos;
 use self::word_params::WordParams;
 use crate::analysis::stateful_tokenizer::StatefulTokenizer;
 use crate::dic::binary_loader::BinaryLexicon;
 use crate::dic::lexicon::strings::CompactedStrings;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::{EntryId, WordId};
-use crate::dic::word_info::WordInfoRefData;
+use crate::dic::word_info::{WordInfoRefData, WordInfos};
 use crate::dic::DictionaryAccess;
 use crate::prelude::*;
 
