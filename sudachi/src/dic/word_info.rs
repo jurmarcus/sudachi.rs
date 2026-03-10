@@ -18,5 +18,8 @@
 mod data;
 #[path = "word_info/layout.rs"]
 pub mod layout;
+#[path = "word_info/raw.rs"]
+mod raw;
 
 pub use data::*;
+pub use raw::WordInfoRawData;

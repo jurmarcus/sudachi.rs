@@ -21,40 +21,11 @@ use crate::dic::read::error::SudachiNomResult;
 use crate::dic::read::utf16_string::utf16_string;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_info::layout;
+use crate::dic::word_info::WordInfoRawData;
 use crate::error::SudachiResult;
 
 pub fn le_u32_string_pointer(input: &[u8]) -> SudachiNomResult<&[u8], StringPointer> {
     le_u32(input).map(|(rest, pointer)| (rest, StringPointer::decode(pointer)))
-}
-
-/// Parsed raw binary representation of a word info entry.
-///
-/// word id/ref fields are typed as u32 to avoid type conversion.
-/// crate::dic::word_info::{WordInfoData, WordInfoRefData} will handle those types.
-#[derive(Clone, Debug, Default)]
-pub struct WordInfoRawData {
-    pub pos_id: i16,
-
-    pub headword_strptr: StringPointer,
-    pub reading_form_strptr: StringPointer,
-    pub normalized_form: u32,
-    pub dictionary_form: u32,
-
-    /// bytes length of the index form in utf-8.
-    pub index_form_length: i16,
-    pub c_unit_split_length: i8,
-    pub b_unit_split_length: i8,
-    pub a_unit_split_length: i8,
-    pub word_structure_length: i8,
-    pub synonym_group_ids_length: i8,
-    pub user_data_flag: i8,
-
-    pub c_unit_split: Vec<u32>,
-    pub b_unit_split: Vec<u32>,
-    pub a_unit_split: Vec<u32>,
-    pub word_structure: Vec<u32>,
-    pub synonym_group_ids: Vec<i32>,
-    pub user_data: String,
 }
 
 pub struct WordInfoParser {

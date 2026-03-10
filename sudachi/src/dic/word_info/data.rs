@@ -15,10 +15,10 @@
  */
 
 use crate::dic::lexicon::strings::StringPointer;
-use crate::dic::read::word_info::WordInfoRawData;
 use crate::dic::strings_cache::StringsCache;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::{DictId, WordId, WordRef};
+use crate::dic::word_info::WordInfoRawData;
 use crate::dic::LexiconAccess;
 
 /// wrapper type that indicates inner data are not resolved for the specific lexicon set.
