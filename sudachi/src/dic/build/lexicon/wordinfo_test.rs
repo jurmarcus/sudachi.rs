@@ -113,7 +113,8 @@ fn wordinfo_subset_dic_synonym() {
 
 fn make_data() -> Vec<u8> {
     let mut bldr = DictBuilder::new_system();
-    bldr.read_conn(include_bytes!("../test/matrix_10x10.def")).unwrap();
+    bldr.read_conn(include_bytes!("../test/matrix_10x10.def"))
+        .unwrap();
     bldr.read_lexicon(include_bytes!("data_full_wordinfo.csv"))
         .unwrap();
     bldr.resolve().unwrap();

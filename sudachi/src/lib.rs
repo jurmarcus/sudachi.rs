@@ -35,9 +35,9 @@ pub(crate) mod util;
 
 mod hash;
 pub mod pos;
-pub mod text_normalizer;
 #[cfg(test)]
 pub mod test;
+pub mod text_normalizer;
 
 pub mod prelude {
     pub use crate::{

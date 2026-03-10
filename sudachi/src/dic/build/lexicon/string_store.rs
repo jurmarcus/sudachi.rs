@@ -177,7 +177,10 @@ fn char_boundaries(s: &str) -> Vec<Boundary> {
     let mut result = Vec::with_capacity(s.chars().count() + 1);
     let mut utf16_idx: u32 = 0;
     for (byte_idx, ch) in s.char_indices() {
-        result.push(Boundary { byte_idx, utf16_idx });
+        result.push(Boundary {
+            byte_idx,
+            utf16_idx,
+        });
         utf16_idx += ch.len_utf16() as u32;
     }
     result.push(Boundary {

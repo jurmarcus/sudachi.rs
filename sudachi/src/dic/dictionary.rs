@@ -20,13 +20,13 @@ use std::path::Path;
 use memmap2::Mmap;
 
 use crate::config::Config;
-use crate::dic::{DictionaryAccess, LexiconAccess};
 use crate::dic::binary_loader::BinaryDictionary;
 use crate::dic::character_category::CharacterCategory;
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon::Lexicon;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::storage::{Storage, SudachiDicData};
+use crate::dic::{DictionaryAccess, LexiconAccess};
 use crate::error::{SudachiError, SudachiResult};
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
@@ -85,14 +85,13 @@ impl JapaneseDictionary {
         storage: SudachiDicData,
         chardef: CharacterCategory,
     ) -> SudachiResult<JapaneseDictionary> {
-        let system_binary = BinaryDictionary::load_system(unsafe { storage.system_static_slice() })?;
+        let system_binary =
+            BinaryDictionary::load_system(unsafe { storage.system_static_slice() })?;
 
         let mut grammar = Grammar::from_system_binary(system_binary.grammar)?;
         grammar.set_character_category(chardef);
 
-        let plugins = {
-            Plugins::load(cfg, &mut grammar)?
-        };
+        let plugins = { Plugins::load(cfg, &mut grammar)? };
         if plugins.oov.is_empty() {
             return Err(SudachiError::NoOOVPluginProvided);
         }
@@ -100,7 +99,8 @@ impl JapaneseDictionary {
             p.edit(&mut grammar);
         }
 
-        let lexicon_set = LexiconSet::from_system_binary(system_binary.lexicon, grammar.pos_list.len());
+        let lexicon_set =
+            LexiconSet::from_system_binary(system_binary.lexicon, grammar.pos_list.len());
 
         let mut dic = JapaneseDictionary {
             storage,
@@ -116,7 +116,6 @@ impl JapaneseDictionary {
         }
 
         Ok(dic)
-
     }
 
     /// Creates a dictionary from the specified configuration and storage

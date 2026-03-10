@@ -22,12 +22,11 @@ use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
 use crate::plugin::path_rewrite::PathRewritePlugin;
 
-
-pub trait  LexiconAccess {
-    fn lexicon(&self) -> &LexiconSet<'_>;   
+pub trait LexiconAccess {
+    fn lexicon(&self) -> &LexiconSet<'_>;
 }
 
-impl <T> LexiconAccess for T
+impl<T> LexiconAccess for T
 where
     T: Deref,
     <T as Deref>::Target: LexiconAccess,
@@ -35,12 +34,12 @@ where
     fn lexicon(&self) -> &LexiconSet<'_> {
         <T as Deref>::deref(self).lexicon()
     }
-}   
+}
 
 /// Provides access to dictionary data
 pub trait DictionaryAccess: LexiconAccess {
     fn grammar(&self) -> &Grammar<'_>;
-    
+
     fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>];
     fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>];
     fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>];

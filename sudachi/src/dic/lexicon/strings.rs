@@ -116,7 +116,8 @@ impl StringPointer {
         let additional_length = self.length - base_length;
         let implicit_bit = (1 << Self::MAX_VARIABLE_LENGTH_BITS) >> (13 - additional_length_bits);
         let non_fixed_length = additional_length ^ implicit_bit;
-        let variable_part = non_fixed_length << (16 + Self::MAX_VARIABLE_LENGTH_BITS - additional_length_bits);
+        let variable_part =
+            non_fixed_length << (16 + Self::MAX_VARIABLE_LENGTH_BITS - additional_length_bits);
 
         let offset_part = self.offset >> additional_length_bits.saturating_sub(1);
 
@@ -131,8 +132,8 @@ impl StringPointer {
         let base_value = encoded >> Self::BASE_LENGTH_OFFSET;
         let additional_length_bits = base_value.saturating_sub(Self::MAX_SIMPLE_LENGTH);
         // additional length bits are stored in the following
-        let non_fixed_length =
-            (encoded & 0x07ff_0000) >> (16 + Self::MAX_VARIABLE_LENGTH_BITS - additional_length_bits);
+        let non_fixed_length = (encoded & 0x07ff_0000)
+            >> (16 + Self::MAX_VARIABLE_LENGTH_BITS - additional_length_bits);
         // compute the non-stored first bit which is implicitly one
         let implicit_bit = (1 << Self::MAX_VARIABLE_LENGTH_BITS) >> (13 - additional_length_bits);
         let length = (base_value - additional_length_bits) + (non_fixed_length | implicit_bit);

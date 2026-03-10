@@ -110,7 +110,11 @@ pub struct RawDictResolver<'a> {
 }
 
 impl<'a> RawDictResolver<'a> {
-    pub(crate) fn new(entries: &'a [RawLexiconEntry], line_to_wid: Vec<WordId>, user: bool) -> Self {
+    pub(crate) fn new(
+        entries: &'a [RawLexiconEntry],
+        line_to_wid: Vec<WordId>,
+        user: bool,
+    ) -> Self {
         let mut data: ResolutionCandidateMap<&'a str> = HashMap::default();
 
         let dic_id = if user { 1 } else { 0 };
@@ -236,7 +240,12 @@ mod tests {
             self.by_headword
         }
 
-        fn resolve_inline(&self, _surface: &str, _pos: u16, _reading: Option<&str>) -> Option<WordId> {
+        fn resolve_inline(
+            &self,
+            _surface: &str,
+            _pos: u16,
+            _reading: Option<&str>,
+        ) -> Option<WordId> {
             self.by_inline
         }
     }

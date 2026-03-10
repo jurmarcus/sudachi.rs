@@ -21,10 +21,8 @@ fn split_user_ref_in_legacy_format() {
     let mut sys = DictBuilder::new_system();
     sys.read_conn(MATRIX_10_10).unwrap();
     sys.read_lexicon(
-        concat!(
-            "東京,1,1,2816,東京,名詞,普通名詞,一般,*,*,*,トウキョウ,東京,*,A,*,*,*,*\n"
-        )
-        .as_bytes(),
+        concat!("東京,1,1,2816,東京,名詞,普通名詞,一般,*,*,*,トウキョウ,東京,*,A,*,*,*,*\n")
+            .as_bytes(),
     )
     .unwrap();
     sys.resolve().unwrap();

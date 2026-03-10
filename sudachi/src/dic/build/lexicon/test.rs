@@ -289,8 +289,14 @@ fn read_pos_table_unordered_pos_ids() {
         "0,助詞,接続助詞,*,*,*,*"
     );
     assert_eq!(rdr.read_pos_bytes(pos.as_bytes()).unwrap(), 2);
-    assert_eq!(format!("{:?}", rdr.pos_obj(0).unwrap()), "助詞,接続助詞,*,*,*,*");
-    assert_eq!(format!("{:?}", rdr.pos_obj(1).unwrap()), "名詞,普通名詞,一般,*,*,*");
+    assert_eq!(
+        format!("{:?}", rdr.pos_obj(0).unwrap()),
+        "助詞,接続助詞,*,*,*,*"
+    );
+    assert_eq!(
+        format!("{:?}", rdr.pos_obj(1).unwrap()),
+        "名詞,普通名詞,一般,*,*,*"
+    );
 }
 
 #[test]
@@ -483,7 +489,8 @@ fn resolve_inline_same_dict() {
 #[test]
 fn word_info_rw() {
     let mut bldr = DictBuilder::new_system();
-    bldr.read_conn(include_bytes!("../test/matrix_10x10.def")).unwrap();
+    bldr.read_conn(include_bytes!("../test/matrix_10x10.def"))
+        .unwrap();
     bldr.read_lexicon(include_bytes!("data_kyoto_inline.csv"))
         .unwrap();
     bldr.resolve().unwrap();
@@ -491,7 +498,12 @@ fn word_info_rw() {
     let mut bin = Vec::new();
     bldr.compile(&mut bin).unwrap();
     let dic = LoadedDictionary::load_system(&bin).unwrap();
-    let target = dic.lexicon_set.lookup("京都".as_bytes(), 0).next().unwrap().word_id;
+    let target = dic
+        .lexicon_set
+        .lookup("京都".as_bytes(), 0)
+        .next()
+        .unwrap()
+        .word_id;
     let desc = Description::load(&bin).unwrap();
     let entries = desc.slice(&bin, Block::Entries).unwrap();
     let offset = (target.entry().as_raw() as usize) << WordInfos::WORD_ID_ALIGNMENT_BITS;

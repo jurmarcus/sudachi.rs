@@ -14,8 +14,8 @@
  *  limitations under the License.
  */
 
-mod with_analysis;
 mod legacy;
+mod with_analysis;
 
 use crate::dic::binary_loader::{BinaryDictionary, LoadedDictionary};
 use crate::dic::build::error::{BuildFailure, DicBuildError};
@@ -305,7 +305,11 @@ fn various_word_references_user() {
 
     let user_bin = BinaryDictionary::load_user(&user_data).unwrap();
     let merged = sys.merge_dictionary(user_bin).unwrap();
-    let entry = merged.lexicon_set.lookup("東京府".as_bytes(), 0).next().unwrap();
+    let entry = merged
+        .lexicon_set
+        .lookup("東京府".as_bytes(), 0)
+        .next()
+        .unwrap();
     assert_eq!(entry.word_id.dict().as_raw(), 1);
 }
 

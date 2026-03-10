@@ -92,7 +92,6 @@ impl ToString for Block {
     }
 }
 
-
 /// Information of each blocks in the binary dictionary
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockInfo {
@@ -248,7 +247,11 @@ impl Description {
         &self.blocks
     }
 
-    pub fn slice_or_none<'a>(&self, buf: &'a [u8], block: Block) -> SudachiResult<Option<&'a [u8]>> {
+    pub fn slice_or_none<'a>(
+        &self,
+        buf: &'a [u8],
+        block: Block,
+    ) -> SudachiResult<Option<&'a [u8]>> {
         let block_name = block.to_str();
         match self.blocks.iter().find(|block| block.name() == block_name) {
             Some(block) => {

@@ -131,15 +131,21 @@ impl JoinNumericPlugin {
 
             if begin_idx >= 0 {
                 if parser.done() {
-                    path = self.concat(path, begin_idx as usize, i as usize, &mut parser, resolver)?;
+                    path =
+                        self.concat(path, begin_idx as usize, i as usize, &mut parser, resolver)?;
                     i = begin_idx + 1;
                 } else {
                     let ss = path[i as usize - 1].word_info().normalized_form(resolver);
                     if (parser.error_state == numeric_parser::Error::Comma && ss == ",")
                         || (parser.error_state == numeric_parser::Error::Point && ss == ".")
                     {
-                        path =
-                            self.concat(path, begin_idx as usize, i as usize - 1, &mut parser, resolver)?;
+                        path = self.concat(
+                            path,
+                            begin_idx as usize,
+                            i as usize - 1,
+                            &mut parser,
+                            resolver,
+                        )?;
                         i = begin_idx + 2;
                     }
                 }

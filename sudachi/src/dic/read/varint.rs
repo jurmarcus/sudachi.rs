@@ -88,13 +88,13 @@ fn varint64_slowpath(v0: u64, rest: &[u8]) -> SudachiNomResult<&[u8], u64> {
 
     let (rest, b9) = le_u8(rest)?;
     let b9 = (b9 as u64) & 0xff;
-    if b9 < 0x02 { // only 1 bits are valid here, rest must be 0
+    if b9 < 0x02 {
+        // only 1 bits are valid here, rest must be 0
         Ok((rest, (b9 << 63) | v8))
     } else {
         Err(nom::Err::Failure(SudachiNomError::InvalidVarInt))
     }
 }
-
 
 pub fn varint32(input: &[u8]) -> SudachiNomResult<&[u8], u32> {
     let (rest, v) = varint64(input)?;

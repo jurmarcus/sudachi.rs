@@ -21,12 +21,12 @@ use self::word_id_table::WordIdTable;
 use self::word_infos::WordInfos;
 use self::word_params::WordParams;
 use crate::analysis::stateful_tokenizer::StatefulTokenizer;
-use crate::dic::DictionaryAccess;
 use crate::dic::binary_loader::BinaryLexicon;
 use crate::dic::lexicon::strings::CompactedStrings;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::{EntryId, WordId};
 use crate::dic::word_info::WordInfoRefData;
+use crate::dic::DictionaryAccess;
 use crate::prelude::*;
 
 pub mod strings;
@@ -58,9 +58,7 @@ pub struct Lexicon<'a> {
 impl<'a> Lexicon<'a> {
     const USER_DICT_COST_PER_MORPH: i32 = -20;
 
-    pub fn from_binary(
-        binary_lexicon: BinaryLexicon<'a>,
-    ) -> Self {
+    pub fn from_binary(binary_lexicon: BinaryLexicon<'a>) -> Self {
         Self {
             trie: binary_lexicon.trie,
             word_id_table: binary_lexicon.word_id_table,
@@ -152,7 +150,8 @@ impl<'a> Lexicon<'a> {
             }
             // headword does not requires resolution
             let wi = self.get_word_info(entry_id, InfoSubset::HEADWORD)?;
-            tok.reset().push_str(self.strings.get_string(wi.headword_strptr())?.as_str());
+            tok.reset()
+                .push_str(self.strings.get_string(wi.headword_strptr())?.as_str());
             tok.do_tokenize()?;
             ms.collect_results(&mut tok)?;
             let internal_cost = ms.get_internal_cost();

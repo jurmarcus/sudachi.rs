@@ -322,10 +322,10 @@ pub fn concat_nodes(
         pos_id,
         index_form_length as i16,
         WordId::oov(pos_id as u32),
-        headword, 
+        headword,
         reading_form,
         normalized_form,
-        dictionary_form
+        dictionary_form,
     );
 
     let inner = Node::new(
@@ -380,12 +380,7 @@ pub fn concat_oov_nodes(
         wid = WordId::new(wid.dict().as_raw(), EntryId::MAX);
     }
 
-    let new_wi = WordInfo::new_oov(
-        pos_id,
-        index_form_length as i16,
-        wid,
-        headword
-    );
+    let new_wi = WordInfo::new_oov(pos_id, index_form_length as i16, wid, headword);
 
     let inner = Node::new(
         path[begin].begin() as u16,

@@ -20,7 +20,8 @@ use super::varint::varint32;
 pub fn utf8_string(input: &[u8]) -> SudachiNomResult<&[u8], String> {
     let (rest, length) = varint32(input)?;
 
-    let (data, rest) = rest.split_at_checked(length as usize)
+    let (data, rest) = rest
+        .split_at_checked(length as usize)
         .ok_or(nom::Err::Failure(SudachiNomError::Utf8String))?;
 
     match std::str::from_utf8(data) {

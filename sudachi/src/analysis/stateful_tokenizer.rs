@@ -14,18 +14,18 @@
  *  limitations under the License.
  */
 
-use crate::analysis::Mode;
 use crate::analysis::created::CreatedWords;
 use crate::analysis::inner::{Node, NodeIdx};
 use crate::analysis::lattice::Lattice;
 use crate::analysis::node::{LatticeNode, ResultNode};
 use crate::analysis::stateless_tokenizer::{dump_path, split_path};
-use crate::dic::word_info::WordInfo;
-use crate::dic::DictionaryAccess;
+use crate::analysis::Mode;
 use crate::dic::category_type::CategoryType;
 use crate::dic::connect::ConnectionMatrix;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::subset::InfoSubset;
+use crate::dic::word_info::WordInfo;
+use crate::dic::DictionaryAccess;
 use crate::error::{SudachiError, SudachiResult};
 use crate::input_text::InputBuffer;
 use crate::input_text::InputTextIndex;

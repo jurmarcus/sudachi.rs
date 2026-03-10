@@ -234,7 +234,7 @@ impl Lattice {
                     ("(null)", PosData::Bos)
                 } else if r_node.is_oov() {
                     // entry part of OOV word id contains pos_id
-                    let pos_id = r_node.word_id().entry().as_raw() as usize; 
+                    let pos_id = r_node.word_id().entry().as_raw() as usize;
                     (
                         input.curr_slice_c(r_node.begin()..r_node.end()),
                         PosData::Borrow(&grammar.pos_list[pos_id]),

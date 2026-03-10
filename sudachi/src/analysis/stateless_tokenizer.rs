@@ -16,12 +16,12 @@
 
 use std::ops::Deref;
 
-use crate::analysis::{Mode, Tokenize};
 use crate::analysis::mlist::MorphemeList;
 use crate::analysis::node::ResultNode;
 use crate::analysis::stateful_tokenizer::StatefulTokenizer;
-use crate::dic::DictionaryAccess;
+use crate::analysis::{Mode, Tokenize};
 use crate::dic::subset::InfoSubset;
+use crate::dic::DictionaryAccess;
 use crate::error::SudachiResult;
 use crate::input_text::InputBuffer;
 

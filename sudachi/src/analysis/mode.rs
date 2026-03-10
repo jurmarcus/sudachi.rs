@@ -17,7 +17,6 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-
 /// Unit to split text
 ///
 /// Some examples:
@@ -76,4 +75,3 @@ impl Display for Mode {
         f.write_str(repr)
     }
 }
-
