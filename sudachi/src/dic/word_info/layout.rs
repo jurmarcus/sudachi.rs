@@ -15,7 +15,9 @@
  */
 
 pub const ENTRY_INITIAL_OFFSET: usize = 32;
+pub const PARAMS_SIZE: usize = 6;
 pub const FIXED_PART_SIZE: usize = 32;
+pub const WORD_INFO_FIXED_SIZE: usize = FIXED_PART_SIZE - PARAMS_SIZE;
 pub const WORD_ID_ALIGNMENT_BITS: usize = 3;
 pub const WORD_INFO_OFFSET_ALIGNMENT: usize = 1 << WORD_ID_ALIGNMENT_BITS;
 

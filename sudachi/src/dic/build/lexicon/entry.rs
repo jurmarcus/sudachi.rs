@@ -22,7 +22,7 @@ use crate::dic::build::error::{BuildFailure, DicWriteResult};
 use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::word_id::WordId;
-use crate::dic::word_info::layout;
+use crate::dic::word_info::{layout, WordInfoFixedData};
 
 use super::refs::{NormFormValue, WordRef};
 
@@ -140,16 +140,6 @@ impl RawLexiconEntry {
         headword_strptr: StringPointer,
         reading_strptr: StringPointer,
     ) -> DicWriteResult<usize> {
-        let mut size = 0;
-
-        // first 2 bytes in the fixed 32-byte section
-        w.write_all(&self.pos.to_le_bytes())?;
-        size += 2;
-
-        w.write_all(&headword_strptr.encode().to_le_bytes())?;
-        w.write_all(&reading_strptr.encode().to_le_bytes())?;
-        w.write_all(&norm_form_word_id.as_raw().to_le_bytes())?;
-
         let dic_form_word_id = match self.dic_form {
             WordRef::Ref(wid) => wid,
             WordRef::SelfRef => self_word_id,
@@ -157,8 +147,6 @@ impl RawLexiconEntry {
             WordRef::Headword(_) => panic!("dictionary_form must be resolved before writing"),
             WordRef::Inline { .. } => panic!("dictionary_form must be resolved before writing"),
         };
-        w.write_all(&dic_form_word_id.as_raw().to_le_bytes())?;
-        size += 16;
 
         if self.surface.len() > i16::MAX as usize {
             return Err(BuildFailure::InvalidFieldSize {
@@ -167,8 +155,6 @@ impl RawLexiconEntry {
                 field: "index_form_length",
             });
         }
-        w.write_all(&(self.surface.len() as i16).to_le_bytes())?;
-        size += 2;
 
         let c_len = self.len_as_i8(self.splits_c.len(), "splits_c")?;
         let b_len = if self.splits_b == self.splits_c {
@@ -197,13 +183,21 @@ impl RawLexiconEntry {
         }
         let user_data_flag = if user_data_units == 0 { 0i8 } else { 1i8 };
 
-        w.write_all(&c_len.to_le_bytes())?;
-        w.write_all(&b_len.to_le_bytes())?;
-        w.write_all(&a_len.to_le_bytes())?;
-        w.write_all(&ws_len.to_le_bytes())?;
-        w.write_all(&syn_len.to_le_bytes())?;
-        w.write_all(&user_data_flag.to_le_bytes())?;
-        size += 6;
+        let fixed = WordInfoFixedData {
+            pos_id: self.pos as i16,
+            headword_strptr,
+            reading_form_strptr: reading_strptr,
+            normalized_form: norm_form_word_id.as_raw(),
+            dictionary_form: dic_form_word_id.as_raw(),
+            index_form_length: self.surface.len() as i16,
+            c_unit_split_length: c_len,
+            b_unit_split_length: b_len,
+            a_unit_split_length: a_len,
+            word_structure_length: ws_len,
+            synonym_group_ids_length: syn_len,
+            user_data_flag,
+        };
+        let mut size = fixed.write_to(w)?;
 
         size += self.write_word_refs(w, &self.splits_c)?;
         if b_len > 0 {

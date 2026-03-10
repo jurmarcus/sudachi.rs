@@ -17,7 +17,7 @@
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::EntryId;
 use crate::dic::word_info::layout;
-use crate::dic::word_info::{WordInfoParser, WordInfoRefData};
+use crate::dic::word_info::{WordInfoFixedData, WordInfoParser, WordInfoRefData};
 use crate::prelude::*;
 
 pub struct WordInfos<'a> {
@@ -57,29 +57,36 @@ impl<'a> WordInfos<'a> {
     }
 
     fn entry_size_at(&self, offset: usize) -> Option<usize> {
-        let fixed = self.bytes.get(offset..offset + layout::FIXED_PART_SIZE)?;
-        let c_len = fixed[layout::OFFSET_C_UNIT_SPLIT_LENGTH] as i8;
-        let b_len = fixed[layout::OFFSET_B_UNIT_SPLIT_LENGTH] as i8;
-        let a_len = fixed[layout::OFFSET_A_UNIT_SPLIT_LENGTH] as i8;
-        let ws_len = fixed[layout::OFFSET_WORD_STRUCTURE_LENGTH] as i8;
-        let syn_len = fixed[layout::OFFSET_SYNONYM_GROUP_IDS_LENGTH] as i8;
-        let user_data_flag = fixed[layout::OFFSET_USER_DATA_FLAG] as i8;
+        let fixed = WordInfoFixedData::from_entry_bytes(&self.bytes[offset..])?;
 
-        if !layout::is_valid_user_data_flag(user_data_flag) {
+        if !layout::is_valid_user_data_flag(fixed.user_data_flag) {
             return None;
         }
 
         let mut user_data_units = None;
-        if user_data_flag == 1 {
+        if fixed.has_user_data() {
             let user_data_offset = offset
-                + layout::unaligned_size_from_lengths(c_len, b_len, a_len, ws_len, syn_len, None)?;
+                + layout::unaligned_size_from_lengths(
+                    fixed.c_unit_split_length,
+                    fixed.b_unit_split_length,
+                    fixed.a_unit_split_length,
+                    fixed.word_structure_length,
+                    fixed.synonym_group_ids_length,
+                    None,
+                )?;
             let user_len_bytes = self.bytes.get(user_data_offset..user_data_offset + 2)?;
             let user_len = i16::from_le_bytes([user_len_bytes[0], user_len_bytes[1]]);
             user_data_units = Some(user_len);
         }
 
-        let aligned =
-            layout::size_from_lengths(c_len, b_len, a_len, ws_len, syn_len, user_data_units)?;
+        let aligned = layout::size_from_lengths(
+            fixed.c_unit_split_length,
+            fixed.b_unit_split_length,
+            fixed.a_unit_split_length,
+            fixed.word_structure_length,
+            fixed.synonym_group_ids_length,
+            user_data_units,
+        )?;
         self.bytes.get(offset..offset + aligned)?;
         Some(aligned)
     }
