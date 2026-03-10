@@ -21,8 +21,8 @@ use crate::dic::build::error::{BuildFailure, DicWriteResult};
 #[cfg(test)]
 use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
 use crate::dic::lexicon::strings::StringPointer;
-use crate::dic::lexicon::word_infos::WordInfos;
 use crate::dic::word_id::WordId;
+use crate::dic::word_info::layout;
 
 use super::refs::{NormFormValue, WordRef};
 
@@ -49,8 +49,6 @@ pub(crate) struct RawLexiconEntry {
 }
 
 impl RawLexiconEntry {
-    const MIN_ENTRY_SIZE: usize = 32;
-
     pub(super) fn make_phantom(base: &RawLexiconEntry, headword: String) -> Self {
         Self {
             // keep surface empty so this entry is not indexable and only used for reference resolution.
@@ -100,25 +98,31 @@ impl RawLexiconEntry {
     }
 
     pub fn expected_entry_size(&self) -> usize {
-        let mut size = Self::MIN_ENTRY_SIZE;
-        size += self.splits_c.len() * 4;
-        if self.splits_b != self.splits_c {
-            size += self.splits_b.len() * 4;
-        }
-        if self.splits_a != self.splits_b {
-            size += self.splits_a.len() * 4;
-        }
-        if self.word_structure != self.splits_a {
-            size += self.word_structure.len() * 4;
-        }
-        size += self.synonym_groups.len() * 4;
-        if !self.user_data.is_empty() {
-            size += 2 + self.user_data.encode_utf16().count() * 2;
-        }
+        let c_len = self.splits_c.len() as i8;
+        let b_len = if self.splits_b == self.splits_c {
+            -1
+        } else {
+            self.splits_b.len() as i8
+        };
+        let a_len = if self.splits_a == self.splits_b {
+            -1
+        } else {
+            self.splits_a.len() as i8
+        };
+        let ws_len = if self.word_structure == self.splits_a {
+            -1
+        } else {
+            self.word_structure.len() as i8
+        };
+        let syn_len = self.synonym_groups.len() as i8;
+        let user_data_units = if self.user_data.is_empty() {
+            None
+        } else {
+            Some(self.user_data.encode_utf16().count() as i16)
+        };
 
-        // ceiling based on WORD_INFO_OFFSET_ALIGNMENT
-        (size + (WordInfos::WORD_INFO_OFFSET_ALIGNMENT - 1))
-            & !(WordInfos::WORD_INFO_OFFSET_ALIGNMENT - 1)
+        layout::size_from_lengths(c_len, b_len, a_len, ws_len, syn_len, user_data_units)
+            .expect("entry lengths are validated before size computation")
     }
 
     pub fn write_params<W: Write>(&self, w: &mut W) -> DicWriteResult<usize> {
@@ -264,7 +268,9 @@ impl RawLexiconEntry {
         size += u16w.write_empty_if_equal(w, self.norm_form(), self.headword())?;
         let dic_form = match self.dic_form {
             WordRef::Ref(wid) => wid,
-            WordRef::SelfRef => panic!("dictionary_form self reference must be resolved before writing"),
+            WordRef::SelfRef => {
+                panic!("dictionary_form self reference must be resolved before writing")
+            }
             _ => panic!("dictionary_form must be resolved before writing"),
         };
         w.write_all(&dic_form.as_raw().to_le_bytes())?;

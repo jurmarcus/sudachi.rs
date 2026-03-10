@@ -20,6 +20,7 @@ use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::read::error::SudachiNomResult;
 use crate::dic::read::utf16_string::utf16_string;
 use crate::dic::subset::InfoSubset;
+use crate::dic::word_info::layout;
 use crate::error::SudachiResult;
 
 pub fn le_u32_string_pointer(input: &[u8]) -> SudachiNomResult<&[u8], StringPointer> {
@@ -126,17 +127,17 @@ impl WordInfoParser {
     #[inline]
     pub fn embedded_b_unit_split_length(&self) -> usize {
         // when b/a unit split or word structure shares same array to the upper split, it is skipped and unit_split_length is set to -1.
-        std::cmp::max(0, self.info.b_unit_split_length) as usize
+        layout::embedded_len(self.info.b_unit_split_length)
     }
 
     #[inline]
     pub fn embedded_a_unit_split_length(&self) -> usize {
-        std::cmp::max(0, self.info.a_unit_split_length) as usize
+        layout::embedded_len(self.info.a_unit_split_length)
     }
 
     #[inline]
     pub fn embedded_word_structure_length(&self) -> usize {
-        std::cmp::max(0, self.info.word_structure_length) as usize
+        layout::embedded_len(self.info.word_structure_length)
     }
 
     #[inline]

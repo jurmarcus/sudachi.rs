@@ -17,6 +17,7 @@
 use crate::dic::read::word_info::WordInfoParser;
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::EntryId;
+use crate::dic::word_info::layout;
 use crate::dic::word_info::WordInfoRefData;
 use crate::prelude::*;
 
@@ -26,11 +27,11 @@ pub struct WordInfos<'a> {
 
 impl<'a> WordInfos<'a> {
     /// Entries block starts with 32 bytes reserved area.
-    const ENTRIES_INITIAL_OFFSET: usize = 32;
+    const ENTRIES_INITIAL_OFFSET: usize = layout::ENTRY_INITIAL_OFFSET;
     /// The byte size of Word entries in the Entries block are aligned to 8 bytes.
     /// WordId is a offset of the entry in the Entries block, w/o last 3 bits.
-    pub const WORD_ID_ALIGNMENT_BITS: usize = 3;
-    pub const WORD_INFO_OFFSET_ALIGNMENT: usize = 1 << Self::WORD_ID_ALIGNMENT_BITS;
+    pub const WORD_ID_ALIGNMENT_BITS: usize = layout::WORD_ID_ALIGNMENT_BITS;
+    pub const WORD_INFO_OFFSET_ALIGNMENT: usize = layout::WORD_INFO_OFFSET_ALIGNMENT;
 
     pub fn from_bytes(bytes: &'a [u8]) -> WordInfos<'a> {
         WordInfos { bytes }
@@ -64,36 +65,29 @@ impl<'a> WordInfos<'a> {
     }
 
     fn entry_size_at(&self, offset: usize) -> Option<usize> {
-        let fixed = self.bytes.get(offset..offset + 32)?;
-        let c_len = fixed[26] as i8;
-        let b_len = fixed[27] as i8;
-        let a_len = fixed[28] as i8;
-        let ws_len = fixed[29] as i8;
-        let syn_len = fixed[30] as i8;
-        let user_data_flag = fixed[31] as i8;
+        let fixed = self.bytes.get(offset..offset + layout::FIXED_PART_SIZE)?;
+        let c_len = fixed[layout::OFFSET_C_UNIT_SPLIT_LENGTH] as i8;
+        let b_len = fixed[layout::OFFSET_B_UNIT_SPLIT_LENGTH] as i8;
+        let a_len = fixed[layout::OFFSET_A_UNIT_SPLIT_LENGTH] as i8;
+        let ws_len = fixed[layout::OFFSET_WORD_STRUCTURE_LENGTH] as i8;
+        let syn_len = fixed[layout::OFFSET_SYNONYM_GROUP_IDS_LENGTH] as i8;
+        let user_data_flag = fixed[layout::OFFSET_USER_DATA_FLAG] as i8;
 
-        if c_len < 0 || syn_len < 0 || !(user_data_flag == 0 || user_data_flag == 1) {
+        if !layout::is_valid_user_data_flag(user_data_flag) {
             return None;
         }
 
-        let mut size = 32usize;
-        size += 4 * c_len as usize;
-        size += 4 * std::cmp::max(0, b_len) as usize;
-        size += 4 * std::cmp::max(0, a_len) as usize;
-        size += 4 * std::cmp::max(0, ws_len) as usize;
-        size += 4 * syn_len as usize;
-
+        let mut user_data_units = None;
         if user_data_flag == 1 {
-            let user_len_bytes = self.bytes.get(offset + size..offset + size + 2)?;
+            let user_data_offset = offset
+                + layout::unaligned_size_from_lengths(c_len, b_len, a_len, ws_len, syn_len, None)?;
+            let user_len_bytes = self.bytes.get(user_data_offset..user_data_offset + 2)?;
             let user_len = i16::from_le_bytes([user_len_bytes[0], user_len_bytes[1]]);
-            if user_len < 0 {
-                return None;
-            }
-            size += 2 + user_len as usize * 2;
+            user_data_units = Some(user_len);
         }
 
-        let aligned = (size + (Self::WORD_INFO_OFFSET_ALIGNMENT - 1))
-            & !(Self::WORD_INFO_OFFSET_ALIGNMENT - 1);
+        let aligned =
+            layout::size_from_lengths(c_len, b_len, a_len, ws_len, syn_len, user_data_units)?;
         self.bytes.get(offset..offset + aligned)?;
         Some(aligned)
     }
