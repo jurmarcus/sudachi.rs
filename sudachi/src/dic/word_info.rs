@@ -18,6 +18,8 @@
 mod data;
 #[path = "word_info/layout.rs"]
 pub mod layout;
+#[path = "word_info/parse.rs"]
+pub mod parse;
 #[path = "word_info/raw.rs"]
 mod raw;
 
