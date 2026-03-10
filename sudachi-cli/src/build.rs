@@ -225,16 +225,14 @@ fn dump_part(dict: PathBuf, system: Option<PathBuf>, part: String, output: PathB
 }
 
 fn dump_pos<W: Write>(dict: BinaryDictionary, w: &mut W) {
+    w.write_all(b"POS_ID,POS1,POS2,POS3,POS4,POS5,POS6\n")
+        .unwrap();
     for (id, p) in dict.grammar.pos_list.iter().enumerate() {
-        write!(w, "{},", id).unwrap();
-        for (i, e) in p.iter().enumerate() {
-            w.write_all(e.as_bytes()).unwrap();
-            if (i + 1) == p.len() {
-                w.write_all(b"\n").unwrap();
-            } else {
-                w.write_all(b",").unwrap();
-            }
+        write!(w, "{}", id).unwrap();
+        for e in p.iter() {
+            write!(w, ",{}", csv_field(e)).unwrap();
         }
+        w.write_all(b"\n").unwrap();
     }
 }
 
@@ -593,6 +591,23 @@ mod tests {
             .collect()
     }
 
+    fn normalize_pos_source_for_dump(data: &[u8]) -> Vec<Vec<String>> {
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(true)
+            .from_reader(data);
+        let mut rows = Vec::new();
+        rows.push(
+            ["POS_ID", "POS1", "POS2", "POS3", "POS4", "POS5", "POS6"]
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect(),
+        );
+        for rec in rdr.records() {
+            rows.push(rec.unwrap().iter().map(|x| x.to_string()).collect());
+        }
+        rows
+    }
+
     #[test]
     fn dump_word_info_matches_system_csv() {
         let mut bldr = DictBuilder::new_system();
@@ -637,6 +652,36 @@ mod tests {
         let _ = fs::remove_file(system_path);
 
         let expected = normalize_source_csv_for_dump(USER1_CSV);
+        let actual = parse_dump_csv(&dumped);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn dump_pos_matches_canonical_pos_csv() {
+        let pos = concat!(
+            "POS_ID,POS1,POS2,POS3,POS4,POS5,POS6\n",
+            "0,助詞,接続助詞,*,*,*,*\n",
+            "1,名詞,普通名詞,一般,*,*,*\n"
+        );
+        let lex = concat!(
+            "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+            "京都,6,6,5293,京都,1,キョウト,京都,,A,,,,\n"
+        );
+
+        let mut builder = DictBuilder::new_system();
+        builder.read_conn(MATRIX_10_10).unwrap();
+        builder.read_pos(pos.as_bytes()).unwrap();
+        builder.read_lexicon(lex.as_bytes()).unwrap();
+        builder.resolve().unwrap();
+
+        let mut compiled = Vec::new();
+        builder.compile(&mut compiled).unwrap();
+
+        let dict = BinaryDictionary::load_system(&compiled).unwrap();
+        let mut dumped = Vec::new();
+        dump_pos(dict, &mut dumped);
+
+        let expected = normalize_pos_source_for_dump(pos.as_bytes());
         let actual = parse_dump_csv(&dumped);
         assert_eq!(actual, expected);
     }
