@@ -91,6 +91,9 @@ impl JapaneseDictionary {
         let mut grammar = Grammar::from_system_binary(system_binary.grammar)?;
         grammar.set_character_category(chardef);
 
+        let lexicon_set =
+            LexiconSet::from_system_binary(system_binary.lexicon, grammar.pos_list.len());
+
         let plugins = { Plugins::load(cfg, &mut grammar)? };
         if plugins.oov.is_empty() {
             return Err(SudachiError::NoOOVPluginProvided);
@@ -98,9 +101,6 @@ impl JapaneseDictionary {
         for p in plugins.connect_cost.plugins() {
             p.edit(&mut grammar);
         }
-
-        let lexicon_set =
-            LexiconSet::from_system_binary(system_binary.lexicon, grammar.pos_list.len());
 
         let mut dic = JapaneseDictionary {
             storage,
