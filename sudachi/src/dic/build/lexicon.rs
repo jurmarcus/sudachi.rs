@@ -33,8 +33,6 @@ use crate::dic::build::parse::{
     parse_wordid, unescape, unescape_cow, WORD_ID_LITERAL,
 };
 use crate::dic::build::pos::read_pos_bytes as read_pos_csv_bytes;
-#[cfg(test)]
-use crate::dic::build::primitives::Utf16Writer;
 use crate::dic::build::report::{ReportBuilder, Reporter};
 use crate::dic::build::MAX_POS_IDS;
 use crate::dic::grammar::Grammar;

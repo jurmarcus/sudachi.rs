@@ -18,8 +18,6 @@ use std::io::Write;
 
 use crate::analysis::Mode;
 use crate::dic::build::error::{BuildFailure, DicWriteResult};
-#[cfg(test)]
-use crate::dic::build::primitives::{write_u32_array, Utf16Writer};
 use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::word_id::WordId;
 use crate::dic::word_info::{
@@ -81,6 +79,7 @@ impl RawLexiconEntry {
         self.headword.as_deref().unwrap_or_else(|| self.surface())
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn norm_form(&self) -> &str {
         match self.norm_form.as_ref() {
             None => self.headword(),
@@ -242,42 +241,5 @@ impl RawLexiconEntry {
                 field: "user_data",
             }
         })
-    }
-
-    #[cfg(test)]
-    pub fn write_word_info<W: Write>(
-        &self,
-        u16w: &mut Utf16Writer,
-        w: &mut W,
-    ) -> DicWriteResult<usize> {
-        // Keep legacy helper for test fixtures that directly parse raw word_info blobs.
-        let mut size = 0;
-        size += u16w.write(w, self.headword())?;
-        size += u16w.write_len(w, self.surface.len())?;
-        w.write_all(&self.pos.to_le_bytes())?;
-        size += 2;
-        size += u16w.write_empty_if_equal(w, self.norm_form(), self.headword())?;
-        let dic_form = match self.dic_form {
-            WordRef::Ref(wid) => wid,
-            WordRef::SelfRef => {
-                panic!("dictionary_form self reference must be resolved before writing")
-            }
-            _ => panic!("dictionary_form must be resolved before writing"),
-        };
-        w.write_all(&dic_form.as_raw().to_le_bytes())?;
-        size += 4;
-        size += u16w.write_empty_if_equal(w, self.reading(), self.headword())?;
-        size += write_u32_array(w, &self.splits_a)?;
-        size += write_u32_array(w, &self.splits_b)?;
-        let mut ws = Vec::with_capacity(self.word_structure.len());
-        for s in self.word_structure.iter() {
-            match s {
-                WordRef::Ref(wid) => ws.push(*wid),
-                _ => panic!("word_structure refs must be resolved before writing"),
-            }
-        }
-        size += write_u32_array(w, &ws)?;
-        size += write_u32_array(w, &self.synonym_groups)?;
-        Ok(size)
     }
 }

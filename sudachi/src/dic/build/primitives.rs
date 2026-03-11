@@ -14,16 +14,23 @@
  *  limitations under the License.
  */
 
+#[cfg(test)]
 use crate::dic::build::error::BuildFailure::InvalidSize;
+#[cfg(test)]
 use crate::dic::build::error::DicWriteResult;
+#[cfg(test)]
 use crate::dic::build::lexicon::WordRef;
+#[cfg(test)]
 use crate::dic::word_id::WordId;
+#[cfg(test)]
 use std::io::Write;
 
+#[cfg(test)]
 pub struct Utf16Writer {
     buffer: Vec<u8>,
 }
 
+#[cfg(test)]
 impl Utf16Writer {
     pub fn new() -> Self {
         Utf16Writer {
@@ -78,47 +85,35 @@ impl Utf16Writer {
         w.write_all(&self.buffer)?;
         Ok(prefix + self.buffer.len())
     }
-
-    pub fn write_empty_if_equal<W, T1, T2>(
-        &mut self,
-        w: &mut W,
-        data: T1,
-        other: T2,
-    ) -> DicWriteResult<usize>
-    where
-        W: Write,
-        T1: AsRef<str> + PartialEq<T2>,
-    {
-        if data == other {
-            self.write(w, "")
-        } else {
-            self.write(w, data)
-        }
-    }
 }
 
+#[cfg(test)]
 pub(crate) trait ToU32 {
     fn to_u32(&self) -> u32;
 }
 
+#[cfg(test)]
 impl ToU32 for u32 {
     fn to_u32(&self) -> u32 {
         *self
     }
 }
 
+#[cfg(test)]
 impl ToU32 for i32 {
     fn to_u32(&self) -> u32 {
         *self as u32
     }
 }
 
+#[cfg(test)]
 impl ToU32 for WordId {
     fn to_u32(&self) -> u32 {
         self.as_raw()
     }
 }
 
+#[cfg(test)]
 impl ToU32 for WordRef {
     fn to_u32(&self) -> u32 {
         match self {
@@ -131,6 +126,7 @@ impl ToU32 for WordRef {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn write_u32_array<W: Write, T: ToU32>(w: &mut W, data: &[T]) -> DicWriteResult<usize> {
     let len = data.len();
     if len > 127 {
