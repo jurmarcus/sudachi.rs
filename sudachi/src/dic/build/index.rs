@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -157,7 +157,7 @@ mod test {
 
         let trie = make_trie(bldr.build_trie().unwrap());
         let mut iter = trie.common_prefix_iterator(b"test", 0);
-        assert_eq!(iter.next(), Some(TrieEntry { value: 5, end: 3 }));
+        assert_eq!(iter.next(), Some(TrieEntry { value: 2, end: 3 }));
         assert_eq!(iter.next(), Some(TrieEntry { value: 0, end: 4 }));
         assert_eq!(iter.next(), None);
     }

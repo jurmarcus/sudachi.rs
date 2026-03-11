@@ -44,9 +44,6 @@ use crate::error::SudachiResult;
 #[cfg(test)]
 mod test;
 
-#[cfg(test)]
-mod wordinfo_test;
-
 mod entry;
 mod layout;
 mod refs;

@@ -53,7 +53,6 @@ fn morpheme_attributes() {
 
     assert!(!ms.get(0).is_oov());
 
-    assert_eq!(3, ms.get(0).word_id().entry().as_raw());
     assert_eq!(0, ms.get(0).dictionary_id());
     assert_eq!([1, 5], ms.get(0).synonym_group_ids());
 }

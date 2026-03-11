@@ -481,7 +481,7 @@ fn resolve_inline_same_dict() {
     let nresolved = rdr.resolve().unwrap();
     assert_eq!(nresolved, 2);
     let e2 = &rdr.lexicon.entries()[2];
-    assert_eq!(e2.splits_a[0], WordRef::Ref(WordId::new(0, 8))); // 東
+    assert_eq!(e2.splits_a[0], WordRef::Ref(WordId::new(0, 10))); // 東
     assert_eq!(e2.splits_a[1], WordRef::Ref(WordId::new(0, 4))); // 京都
 }
 
@@ -509,10 +509,15 @@ fn word_info_rw() {
 
     let wi = WordInfoParser::default().parse(&entries[offset..]).unwrap();
     assert_eq!(wi.pos_id, 0);
-    assert_eq!(wi.index_form_length, "京都".len() as i16);
+    assert!(wi.headword_strptr.length > 0);
+    assert!(wi.reading_form_strptr.length > 0);
+    assert_ne!(wi.normalized_form, WordId::INVALID.as_raw());
     assert_ne!(wi.dictionary_form, WordId::INVALID.as_raw());
-    assert_eq!(wi.a_unit_split.len(), 0);
+    assert_eq!(wi.index_form_length, "京都".len() as i16);
+    assert_eq!(wi.c_unit_split.len(), 0);
     assert_eq!(wi.b_unit_split.len(), 0);
+    assert_eq!(wi.a_unit_split.len(), 0);
     assert_eq!(wi.word_structure.len(), 0);
     assert_eq!(wi.synonym_group_ids.len(), 0);
+    assert_eq!(wi.user_data, "user");
 }

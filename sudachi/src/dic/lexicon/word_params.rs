@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2025 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,9 +55,6 @@ pub struct WordParams<'a> {
 }
 
 impl<'a> WordParams<'a> {
-    const PARAM_SIZE: usize = 3;
-    const ELEMENT_SIZE: usize = 2 * Self::PARAM_SIZE;
-
     pub fn from_bytes(bytes: &'a [u8]) -> WordParams<'a> {
         Self {
             data: CowArray::from_bytes(bytes, 0, bytes.len() / std::mem::size_of::<u64>()),

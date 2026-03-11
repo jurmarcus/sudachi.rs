@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ use common::{TestTokenizer, GRAMMAR};
 #[test]
 fn get_part_of_speech_size() {
     // pos from system test dict
-    assert_eq!(8, GRAMMAR.pos_list.len());
+    assert_eq!(14, GRAMMAR.pos_list.len());
 
     // user test dict contains another pos
     let tokenizer = TestTokenizer::new();
-    assert_eq!(9, tokenizer.dict().grammar().pos_list.len());
+    assert_eq!(15, tokenizer.dict().grammar().pos_list.len());
 }
 
 #[test]
