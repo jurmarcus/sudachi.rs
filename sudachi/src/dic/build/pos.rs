@@ -19,6 +19,9 @@ use std::borrow::Cow;
 use csv::{StringRecord, Trim};
 use indexmap::map::IndexMap;
 
+use crate::dic::build::csv_schema::{
+    parse_column_name, parse_header_mapping, validate_required_columns, CsvColumn,
+};
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx};
 use crate::dic::build::lexicon::StrPosEntry;
 use crate::dic::build::parse::{parse_i16, unescape};
@@ -38,10 +41,6 @@ enum PosCsvColumn {
 }
 
 impl PosCsvColumn {
-    const fn as_usize(self) -> usize {
-        self as usize
-    }
-
     const fn label(self) -> &'static str {
         match self {
             PosCsvColumn::PosId => "POS_ID",
@@ -55,14 +54,29 @@ impl PosCsvColumn {
     }
 
     fn from_str(data: &str) -> Option<Self> {
-        let mut normalized = String::with_capacity(data.len());
-        for c in data.chars() {
-            if c != '_' {
-                normalized.push(c.to_ascii_lowercase());
-            }
-        }
+        parse_column_name::<Self, 7>(data)
+    }
+}
 
-        match normalized.as_str() {
+impl CsvColumn<7> for PosCsvColumn {
+    fn as_usize(self) -> usize {
+        self as usize
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            PosCsvColumn::PosId => "POS_ID",
+            PosCsvColumn::Pos1 => "POS1",
+            PosCsvColumn::Pos2 => "POS2",
+            PosCsvColumn::Pos3 => "POS3",
+            PosCsvColumn::Pos4 => "POS4",
+            PosCsvColumn::Pos5 => "POS5",
+            PosCsvColumn::Pos6 => "POS6",
+        }
+    }
+
+    fn from_normalized(data: &str) -> Option<Self> {
+        match data {
             "posid" => Some(PosCsvColumn::PosId),
             "pos1" => Some(PosCsvColumn::Pos1),
             "pos2" => Some(PosCsvColumn::Pos2),
@@ -74,6 +88,15 @@ impl PosCsvColumn {
         }
     }
 }
+
+const REQUIRED_COLUMNS: [PosCsvColumn; 6] = [
+    PosCsvColumn::Pos1,
+    PosCsvColumn::Pos2,
+    PosCsvColumn::Pos3,
+    PosCsvColumn::Pos4,
+    PosCsvColumn::Pos5,
+    PosCsvColumn::Pos6,
+];
 
 #[derive(Copy, Clone)]
 enum PosColumnLayout {
@@ -92,31 +115,13 @@ impl PosColumnLayout {
             return Ok((PosColumnLayout::LegacyWithId, false));
         }
 
-        let mut mapping = [-1_i16; 7];
-        for (idx, field) in record.iter().enumerate() {
-            let col = match PosCsvColumn::from_str(field) {
-                Some(c) => c,
-                None => return ctx.err(BuildFailure::NoRawField("INVALID_POS_COLUMN_NAME")),
-            };
-            let prev = &mut mapping[col.as_usize()];
-            if *prev >= 0 {
-                return ctx.err(BuildFailure::NoRawField("DUPLICATED_POS_COLUMN_NAME"));
-            }
-            *prev = idx as i16;
-        }
-
-        for col in [
-            PosCsvColumn::Pos1,
-            PosCsvColumn::Pos2,
-            PosCsvColumn::Pos3,
-            PosCsvColumn::Pos4,
-            PosCsvColumn::Pos5,
-            PosCsvColumn::Pos6,
-        ] {
-            if mapping[col.as_usize()] < 0 {
-                return ctx.err(BuildFailure::NoRawField(col.label()));
-            }
-        }
+        let mapping = parse_header_mapping::<PosCsvColumn, 7>(
+            record,
+            ctx,
+            "INVALID_POS_COLUMN_NAME",
+            "DUPLICATED_POS_COLUMN_NAME",
+        )?;
+        validate_required_columns(&mapping, &REQUIRED_COLUMNS, ctx)?;
 
         Ok((PosColumnLayout::Header(mapping), true))
     }

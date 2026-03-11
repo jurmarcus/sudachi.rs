@@ -33,6 +33,7 @@ use crate::plugin::oov::OovProviderPlugin;
 use crate::plugin::path_rewrite::PathRewritePlugin;
 
 pub(crate) mod conn;
+pub(crate) mod csv_schema;
 pub mod error;
 pub(crate) mod index;
 pub(crate) mod lexicon;

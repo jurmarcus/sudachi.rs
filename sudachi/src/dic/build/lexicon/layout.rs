@@ -18,6 +18,9 @@ use csv::StringRecord;
 use lazy_static::lazy_static;
 use regex::Regex;
 
+use crate::dic::build::csv_schema::{
+    parse_header_mapping, validate_required_columns, CsvColumn,
+};
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx, DicWriteResult};
 use crate::dic::pos::POS_DEPTH;
 use crate::error::SudachiResult;
@@ -55,28 +58,8 @@ pub(super) enum Column {
 }
 
 impl Column {
-    const fn as_usize(self) -> usize {
-        self as usize
-    }
-
     const fn legacy_index(self) -> usize {
         self as usize
-    }
-
-    const fn is_required(self) -> bool {
-        matches!(
-            self,
-            Column::IndexForm
-                | Column::LeftId
-                | Column::RightId
-                | Column::Cost
-                | Column::ReadingForm
-                | Column::NormalizedForm
-                | Column::DictionaryForm
-                | Column::SplitA
-                | Column::SplitB
-                | Column::WordStructure
-        )
     }
 
     pub(super) const fn label(self) -> &'static str {
@@ -105,16 +88,42 @@ impl Column {
             Column::PosId => "POS_ID",
         }
     }
+}
 
-    fn from_str(data: &str) -> Option<Self> {
-        let mut normalized = String::with_capacity(data.len());
-        for c in data.chars() {
-            if c != '_' {
-                normalized.push(c.to_ascii_lowercase());
-            }
+impl CsvColumn<NUM_COLUMNS> for Column {
+    fn as_usize(self) -> usize {
+        self as usize
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Column::IndexForm => "INDEX_FORM",
+            Column::LeftId => "LEFT_ID",
+            Column::RightId => "RIGHT_ID",
+            Column::Cost => "COST",
+            Column::Headword => "HEADWORD",
+            Column::Pos1 => "POS1",
+            Column::Pos2 => "POS2",
+            Column::Pos3 => "POS3",
+            Column::Pos4 => "POS4",
+            Column::Pos5 => "POS5",
+            Column::Pos6 => "POS6",
+            Column::ReadingForm => "READING_FORM",
+            Column::NormalizedForm => "NORMALIZED_FORM",
+            Column::DictionaryForm => "DICTIONARY_FORM",
+            Column::Mode => "MODE",
+            Column::SplitA => "SPLIT_A",
+            Column::SplitB => "SPLIT_B",
+            Column::WordStructure => "WORD_STRUCTURE",
+            Column::SynonymGroups => "SYNONYM_GROUPS",
+            Column::SplitC => "SPLIT_C",
+            Column::UserData => "USER_DATA",
+            Column::PosId => "POS_ID",
         }
+    }
 
-        match normalized.as_str() {
+    fn from_normalized(data: &str) -> Option<Self> {
+        match data {
             "indexform" => Some(Column::IndexForm),
             "leftid" => Some(Column::LeftId),
             "rightid" => Some(Column::RightId),
@@ -151,29 +160,17 @@ const POS_PARTS: [Column; POS_DEPTH] = [
     Column::Pos6,
 ];
 
-const ALL_COLUMNS: [Column; NUM_COLUMNS] = [
+const REQUIRED_COLUMNS: [Column; 10] = [
     Column::IndexForm,
     Column::LeftId,
     Column::RightId,
     Column::Cost,
-    Column::Headword,
-    Column::Pos1,
-    Column::Pos2,
-    Column::Pos3,
-    Column::Pos4,
-    Column::Pos5,
-    Column::Pos6,
     Column::ReadingForm,
     Column::NormalizedForm,
     Column::DictionaryForm,
-    Column::Mode,
     Column::SplitA,
     Column::SplitB,
     Column::WordStructure,
-    Column::SynonymGroups,
-    Column::SplitC,
-    Column::UserData,
-    Column::PosId,
 ];
 
 #[derive(Copy, Clone)]
@@ -195,24 +192,13 @@ impl ColumnLayout {
             }
         }
 
-        let mut mapping = [-1_i16; NUM_COLUMNS];
-        for (idx, field) in record.iter().enumerate() {
-            let col = match Column::from_str(field) {
-                Some(c) => c,
-                None => return ctx.err(BuildFailure::NoRawField("INVALID_COLUMN_NAME")),
-            };
-            let prev = &mut mapping[col.as_usize()];
-            if *prev >= 0 {
-                return ctx.err(BuildFailure::NoRawField("DUPLICATED_COLUMN_NAME"));
-            }
-            *prev = idx as i16;
-        }
-
-        for col in ALL_COLUMNS {
-            if col.is_required() && mapping[col.as_usize()] < 0 {
-                return ctx.err(BuildFailure::NoRawField(col.label()));
-            }
-        }
+        let mapping = parse_header_mapping::<Column, NUM_COLUMNS>(
+            record,
+            ctx,
+            "INVALID_COLUMN_NAME",
+            "DUPLICATED_COLUMN_NAME",
+        )?;
+        validate_required_columns(&mapping, &REQUIRED_COLUMNS, ctx)?;
 
         let pos_parts_found = POS_PARTS
             .iter()
