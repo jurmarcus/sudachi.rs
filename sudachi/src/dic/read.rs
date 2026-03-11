@@ -17,7 +17,6 @@
 pub use self::error::{SudachiNomError, SudachiNomResult};
 
 pub mod error;
-pub(crate) mod u16str;
 pub(crate) mod utf16_string;
 pub(crate) mod utf8_string;
 pub(crate) mod varint;

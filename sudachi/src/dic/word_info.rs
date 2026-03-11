@@ -14,17 +14,11 @@
  * limitations under the License.
  */
 
-#[path = "word_info/binary.rs"]
 mod binary;
-#[path = "word_info/data.rs"]
 mod data;
-#[path = "word_info/infos.rs"]
 mod infos;
-#[path = "word_info/layout.rs"]
 pub mod layout;
-#[path = "word_info/parse.rs"]
 pub mod parse;
-#[path = "word_info/raw.rs"]
 mod raw;
 
 pub(crate) use binary::{parse_i32_array, parse_u32_array, parse_user_data};

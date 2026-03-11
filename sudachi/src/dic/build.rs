@@ -38,7 +38,6 @@ pub(crate) mod index;
 pub(crate) mod lexicon;
 pub(crate) mod parse;
 pub(crate) mod pos;
-pub(crate) mod primitives;
 pub mod report;
 mod resolve;
 #[cfg(test)]
