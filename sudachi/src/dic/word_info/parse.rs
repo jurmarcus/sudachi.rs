@@ -21,6 +21,31 @@ use crate::dic::word_info::{
 };
 use crate::error::SudachiResult;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SplitReadPlan {
+    c_unit_split: bool,
+    b_unit_split: bool,
+    a_unit_split: bool,
+    word_structure: bool,
+}
+
+impl SplitReadPlan {
+    fn from_subset(subset: InfoSubset) -> Self {
+        Self {
+            c_unit_split: subset.intersects(
+                InfoSubset::SPLIT_C
+                    | InfoSubset::SPLIT_B
+                    | InfoSubset::SPLIT_A
+                    | InfoSubset::WORD_STRUCTURE,
+            ),
+            b_unit_split: subset
+                .intersects(InfoSubset::SPLIT_B | InfoSubset::SPLIT_A | InfoSubset::WORD_STRUCTURE),
+            a_unit_split: subset.intersects(InfoSubset::SPLIT_A | InfoSubset::WORD_STRUCTURE),
+            word_structure: subset.contains(InfoSubset::WORD_STRUCTURE),
+        }
+    }
+}
+
 pub struct WordInfoParser {
     info: WordInfoRawData,
     flds: InfoSubset,
@@ -36,6 +61,9 @@ impl Default for WordInfoParser {
 impl WordInfoParser {
     #[inline]
     pub fn subset(flds: InfoSubset) -> WordInfoParser {
+        // normalize() adds the fixed fields required to interpret requested views.
+        // For example, NORMALIZED_FORM/DICTIONARY_FORM require HEADWORD, and split
+        // requests require INDEX_FORM_LENGTH.
         Self {
             info: Default::default(),
             flds: flds.normalize(),
@@ -71,6 +99,76 @@ impl WordInfoParser {
     pub fn parse(mut self, data: &[u8]) -> SudachiResult<WordInfoRawData> {
         let (data, _) = nom::bytes::complete::take(layout::PARAMS_SIZE)(data)?;
         let (data, fixed) = WordInfoFixedData::parse(data)?;
+        let split_plan = SplitReadPlan::from_subset(self.flds);
+        self.copy_fixed_fields(&fixed);
+
+        let (data, c_unit_split) = parse_u32_array(
+            data,
+            self.embedded_c_unit_split_length(),
+            split_plan.c_unit_split,
+        )?;
+        if split_plan.c_unit_split {
+            self.info.c_unit_split = c_unit_split;
+        }
+
+        let (data, b_unit_split) = parse_u32_array(
+            data,
+            self.embedded_b_unit_split_length(),
+            split_plan.b_unit_split,
+        )?;
+        if fixed.b_unit_split_length < 0 {
+            if split_plan.b_unit_split {
+                self.info.b_unit_split = self.info.c_unit_split.clone();
+            }
+        } else if split_plan.b_unit_split {
+            self.info.b_unit_split = b_unit_split;
+        }
+
+        let (data, a_unit_split) = parse_u32_array(
+            data,
+            self.embedded_a_unit_split_length(),
+            split_plan.a_unit_split,
+        )?;
+        if fixed.a_unit_split_length < 0 {
+            if split_plan.a_unit_split {
+                self.info.a_unit_split = self.info.b_unit_split.clone();
+            }
+        } else if split_plan.a_unit_split {
+            self.info.a_unit_split = a_unit_split;
+        }
+
+        let (data, word_structure) = parse_u32_array(
+            data,
+            self.embedded_word_structure_length(),
+            split_plan.word_structure,
+        )?;
+        if fixed.word_structure_length < 0 {
+            if split_plan.word_structure {
+                self.info.word_structure = self.info.a_unit_split.clone();
+            }
+        } else if split_plan.word_structure {
+            self.info.word_structure = word_structure;
+        }
+
+        let (data, synonym_group_ids) = parse_i32_array(
+            data,
+            self.embedded_synonym_group_ids_length(),
+            self.keep_synonym_group_ids(),
+        )?;
+        if self.keep_synonym_group_ids() {
+            self.info.synonym_group_ids = synonym_group_ids;
+        }
+
+        if fixed.has_user_data() {
+            let (_, user_data) = parse_user_data(data, self.keep_user_data())?;
+            if self.keep_user_data() {
+                self.info.user_data = user_data;
+            }
+        }
+        Ok(self.info)
+    }
+
+    fn copy_fixed_fields(&mut self, fixed: &WordInfoFixedData) {
         if self.flds.contains(InfoSubset::POS_ID) {
             self.info.pos_id = fixed.pos_id;
         }
@@ -95,72 +193,16 @@ impl WordInfoParser {
         self.info.word_structure_length = fixed.word_structure_length;
         self.info.synonym_group_ids_length = fixed.synonym_group_ids_length;
         self.info.user_data_flag = fixed.user_data_flag;
+    }
 
-        let need_c = self.flds.intersects(
-            InfoSubset::SPLIT_C
-                | InfoSubset::SPLIT_B
-                | InfoSubset::SPLIT_A
-                | InfoSubset::WORD_STRUCTURE,
-        );
-        let (data, c_unit_split) =
-            parse_u32_array(data, self.embedded_c_unit_split_length(), need_c)?;
-        if need_c {
-            self.info.c_unit_split = c_unit_split;
-        }
+    #[inline]
+    fn keep_synonym_group_ids(&self) -> bool {
+        self.flds.contains(InfoSubset::SYNONYM_GROUP_IDS)
+    }
 
-        let need_b = self
-            .flds
-            .intersects(InfoSubset::SPLIT_B | InfoSubset::SPLIT_A | InfoSubset::WORD_STRUCTURE);
-        let (data, b_unit_split) =
-            parse_u32_array(data, self.embedded_b_unit_split_length(), need_b)?;
-        if fixed.b_unit_split_length < 0 {
-            if need_b {
-                self.info.b_unit_split = self.info.c_unit_split.clone();
-            }
-        } else if need_b {
-            self.info.b_unit_split = b_unit_split;
-        }
-
-        let need_a = self
-            .flds
-            .intersects(InfoSubset::SPLIT_A | InfoSubset::WORD_STRUCTURE);
-        let (data, a_unit_split) =
-            parse_u32_array(data, self.embedded_a_unit_split_length(), need_a)?;
-        if fixed.a_unit_split_length < 0 {
-            if need_a {
-                self.info.a_unit_split = self.info.b_unit_split.clone();
-            }
-        } else if need_a {
-            self.info.a_unit_split = a_unit_split;
-        }
-
-        let need_ws = self.flds.contains(InfoSubset::WORD_STRUCTURE);
-        let (data, word_structure) =
-            parse_u32_array(data, self.embedded_word_structure_length(), need_ws)?;
-        if fixed.word_structure_length < 0 {
-            if need_ws {
-                self.info.word_structure = self.info.a_unit_split.clone();
-            }
-        } else if need_ws {
-            self.info.word_structure = word_structure;
-        }
-
-        let (data, synonym_group_ids) = parse_i32_array(
-            data,
-            self.embedded_synonym_group_ids_length(),
-            self.flds.contains(InfoSubset::SYNONYM_GROUP_IDS),
-        )?;
-        if self.flds.contains(InfoSubset::SYNONYM_GROUP_IDS) {
-            self.info.synonym_group_ids = synonym_group_ids;
-        }
-
-        if fixed.has_user_data() {
-            let (_, user_data) = parse_user_data(data, self.flds.contains(InfoSubset::USER_DATA))?;
-            if self.flds.contains(InfoSubset::USER_DATA) {
-                self.info.user_data = user_data;
-            }
-        }
-        Ok(self.info)
+    #[inline]
+    fn keep_user_data(&self) -> bool {
+        self.flds.contains(InfoSubset::USER_DATA)
     }
 }
 

@@ -43,12 +43,15 @@ impl Default for InfoSubset {
 
 impl InfoSubset {
     pub fn normalize(mut self) -> Self {
-        // need to read surface if reading any of one of these forms
+        // Normalized and dictionary forms are interpreted relative to the
+        // headword string, so parsers need HEADWORD even if callers did not
+        // request it explicitly.
         if self.intersects(InfoSubset::NORMALIZED_FORM | InfoSubset::DICTIONARY_FORM) {
             self |= InfoSubset::HEADWORD;
         }
 
-        // need to have head word length when splitting
+        // Split requests need the index form length because split consumers use
+        // it when materializing the higher-level WordInfo view.
         if self.intersects(InfoSubset::SPLIT_A | InfoSubset::SPLIT_B | InfoSubset::SPLIT_C) {
             self |= InfoSubset::INDEX_FORM_LENGTH;
         }
