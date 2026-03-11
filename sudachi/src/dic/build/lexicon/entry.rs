@@ -243,3 +243,58 @@ impl RawLexiconEntry {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analysis::Mode;
+    use crate::dic::lexicon::strings::StringPointer;
+    use crate::dic::word_info::WordInfoParser;
+
+    #[test]
+    fn writer_output_is_readable_by_parser() {
+        let entry = RawLexiconEntry {
+            left_id: 1,
+            right_id: 2,
+            cost: 3,
+            surface: "東京".to_string(),
+            headword: Some("京都".to_string()),
+            dic_form: WordRef::SelfRef,
+            norm_form: None,
+            pos: 4,
+            splits_a: vec![WordRef::Ref(WordId::new(0, 1)), WordRef::Ref(WordId::new(0, 2))],
+            splits_b: vec![WordRef::Ref(WordId::new(0, 1)), WordRef::Ref(WordId::new(0, 2))],
+            splits_c: vec![WordRef::Ref(WordId::new(0, 1)), WordRef::Ref(WordId::new(0, 2))],
+            reading: Some("キョウト".to_string()),
+            splitting: Mode::B,
+            word_structure: vec![WordRef::Ref(WordId::new(0, 3))],
+            synonym_groups: vec![7, 8],
+            user_data: "meta".to_string(),
+        };
+
+        let mut bytes = vec![0u8; layout::PARAMS_SIZE];
+        let expected_size = entry.expected_entry_size();
+        let written = entry
+            .write_rest(
+                &mut bytes,
+                WordId::new(0, 10),
+                WordId::new(0, 11),
+                StringPointer::unchecked(2, 4),
+                StringPointer::unchecked(4, 8),
+            )
+            .unwrap();
+        assert_eq!(layout::aligned_size(written + layout::PARAMS_SIZE), expected_size);
+
+        let parsed = WordInfoParser::default().parse(&bytes).unwrap();
+        assert_eq!(parsed.pos_id, 4);
+        assert_eq!(parsed.index_form_length, "東京".len() as i16);
+        assert_eq!(parsed.dictionary_form, WordId::new(0, 10).as_raw());
+        assert_eq!(parsed.normalized_form, WordId::new(0, 11).as_raw());
+        assert_eq!(parsed.c_unit_split, vec![WordId::new(0, 1).as_raw(), WordId::new(0, 2).as_raw()]);
+        assert_eq!(parsed.b_unit_split, parsed.c_unit_split);
+        assert_eq!(parsed.a_unit_split, vec![WordId::new(0, 1).as_raw(), WordId::new(0, 2).as_raw()]);
+        assert_eq!(parsed.word_structure, vec![WordId::new(0, 3).as_raw()]);
+        assert_eq!(parsed.synonym_group_ids, vec![7, 8]);
+        assert_eq!(parsed.user_data, "meta");
+    }
+}

@@ -102,3 +102,139 @@ impl<'a> WordInfos<'a> {
         Ok(WordInfoRefData::from_raw(word_info))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dic::lexicon::strings::StringPointer;
+    use crate::dic::word_id::DictId;
+    use crate::dic::word_info::WordInfoVariableData;
+
+    fn sample_fixed() -> WordInfoFixedData {
+        WordInfoFixedData {
+            pos_id: 3,
+            headword_strptr: StringPointer::unchecked(2, 4),
+            reading_form_strptr: StringPointer::unchecked(3, 8),
+            normalized_form: 10,
+            dictionary_form: 11,
+            index_form_length: 6,
+            c_unit_split_length: 2,
+            b_unit_split_length: -1,
+            a_unit_split_length: 1,
+            word_structure_length: -1,
+            synonym_group_ids_length: 2,
+            user_data_flag: 1,
+        }
+    }
+
+    fn make_entry(fixed: &WordInfoFixedData) -> Vec<u8> {
+        let variable = WordInfoVariableData {
+            c_unit_split: &[100, 101],
+            b_unit_split: &[100, 101],
+            a_unit_split: &[200],
+            word_structure: &[200],
+            synonym_group_ids: &[7, 8],
+            user_data: "meta",
+        };
+        let mut bytes = vec![0u8; layout::ENTRY_INITIAL_OFFSET + layout::PARAMS_SIZE];
+        fixed.write_to(&mut bytes).unwrap();
+        variable.write_to(&mut bytes, fixed).unwrap();
+        let aligned = layout::aligned_size(bytes.len());
+        bytes.resize(aligned, 0);
+        bytes
+    }
+
+    #[test]
+    fn rejects_invalid_user_data_flag() {
+        let mut fixed = sample_fixed();
+        fixed.user_data_flag = 2;
+        let bytes = make_entry(&fixed);
+        let infos = WordInfos::from_bytes(&bytes);
+        assert!(infos.entry_size_at(layout::ENTRY_INITIAL_OFFSET).is_none());
+    }
+
+    #[test]
+    fn rejects_truncated_user_data_length() {
+        let fixed = sample_fixed();
+        let mut bytes = make_entry(&fixed);
+        let user_len_offset = layout::ENTRY_INITIAL_OFFSET
+            + layout::unaligned_size_from_lengths(
+                fixed.c_unit_split_length,
+                fixed.b_unit_split_length,
+                fixed.a_unit_split_length,
+                fixed.word_structure_length,
+                fixed.synonym_group_ids_length,
+                None,
+            )
+            .unwrap();
+        bytes.truncate(user_len_offset + 1);
+        let infos = WordInfos::from_bytes(&bytes);
+        assert!(infos.entry_size_at(layout::ENTRY_INITIAL_OFFSET).is_none());
+    }
+
+    #[test]
+    fn rejects_split_payload_shorter_than_length() {
+        let fixed = WordInfoFixedData {
+            user_data_flag: 0,
+            synonym_group_ids_length: 0,
+            word_structure_length: 0,
+            a_unit_split_length: 0,
+            b_unit_split_length: 0,
+            c_unit_split_length: 2,
+            ..sample_fixed()
+        };
+        let mut bytes = vec![0u8; layout::ENTRY_INITIAL_OFFSET + layout::PARAMS_SIZE];
+        fixed.write_to(&mut bytes).unwrap();
+        bytes.extend_from_slice(&10u32.to_le_bytes());
+        let infos = WordInfos::from_bytes(&bytes);
+        assert!(infos.entry_size_at(layout::ENTRY_INITIAL_OFFSET).is_none());
+    }
+
+    #[test]
+    fn parser_and_scanner_agree_on_entry_boundaries() {
+        let first = make_entry(&sample_fixed());
+        let second_fixed = WordInfoFixedData {
+            pos_id: 9,
+            headword_strptr: StringPointer::unchecked(1, 2),
+            reading_form_strptr: StringPointer::unchecked(1, 4),
+            normalized_form: 21,
+            dictionary_form: 22,
+            index_form_length: 3,
+            c_unit_split_length: 1,
+            b_unit_split_length: 0,
+            a_unit_split_length: 0,
+            word_structure_length: 0,
+            synonym_group_ids_length: 0,
+            user_data_flag: 0,
+        };
+        let mut second = vec![0u8; layout::PARAMS_SIZE];
+        second_fixed.write_to(&mut second).unwrap();
+        second.extend_from_slice(&55u32.to_le_bytes());
+        second.resize(layout::aligned_size(second.len()), 0);
+
+        let mut bytes = first.clone();
+        bytes.extend_from_slice(&second);
+
+        let infos = WordInfos::from_bytes(&bytes);
+        let ids = infos.entry_ids_in_order(2).unwrap();
+        assert_eq!(ids[0], EntryId::new(4));
+        let second_offset = WordInfos::entry_id_to_offset(ids[1]);
+        assert_eq!(second_offset, first.len());
+
+        let first_info = infos.get_word_info(ids[0], InfoSubset::all()).unwrap();
+        let second_info = infos.get_word_info(ids[1], InfoSubset::all()).unwrap();
+        assert_eq!(
+            first_info
+                .resolve(DictId::SYSTEM, 0, &[0], InfoSubset::all())
+                .index_form_length(),
+            6
+        );
+        assert_eq!(
+            second_info
+                .resolve(DictId::SYSTEM, 0, &[0], InfoSubset::all())
+                .c_unit_split()
+                .len(),
+            1
+        );
+    }
+}

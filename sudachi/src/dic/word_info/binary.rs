@@ -202,6 +202,7 @@ impl<'a> WordInfoVariableData<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dic::word_info::WordInfoParser;
 
     fn sample_fixed() -> WordInfoFixedData {
         WordInfoFixedData {
@@ -269,5 +270,58 @@ mod tests {
             fixed.synonym_group_ids_length
         );
         assert_eq!(scanned.user_data_flag, fixed.user_data_flag);
+    }
+
+    #[test]
+    fn fixed_and_variable_round_trip_into_raw_data() {
+        let fixed = WordInfoFixedData {
+            pos_id: 15,
+            headword_strptr: StringPointer::unchecked(4, 12),
+            reading_form_strptr: StringPointer::unchecked(5, 18),
+            normalized_form: 123,
+            dictionary_form: 456,
+            index_form_length: 9,
+            c_unit_split_length: 2,
+            b_unit_split_length: 1,
+            a_unit_split_length: 3,
+            word_structure_length: 2,
+            synonym_group_ids_length: 2,
+            user_data_flag: 1,
+        };
+        let variable = WordInfoVariableData {
+            c_unit_split: &[10, 11],
+            b_unit_split: &[20],
+            a_unit_split: &[30, 31, 32],
+            word_structure: &[40, 41],
+            synonym_group_ids: &[7, 8],
+            user_data: "meta",
+        };
+
+        let mut bytes = vec![0u8; layout::PARAMS_SIZE];
+        fixed.write_to(&mut bytes).unwrap();
+        variable.write_to(&mut bytes, &fixed).unwrap();
+
+        let parsed = WordInfoParser::default().parse(&bytes).unwrap();
+        assert_eq!(parsed.pos_id, fixed.pos_id);
+        assert_eq!(parsed.headword_strptr, fixed.headword_strptr);
+        assert_eq!(parsed.reading_form_strptr, fixed.reading_form_strptr);
+        assert_eq!(parsed.normalized_form, fixed.normalized_form);
+        assert_eq!(parsed.dictionary_form, fixed.dictionary_form);
+        assert_eq!(parsed.index_form_length, fixed.index_form_length);
+        assert_eq!(parsed.c_unit_split_length, fixed.c_unit_split_length);
+        assert_eq!(parsed.b_unit_split_length, fixed.b_unit_split_length);
+        assert_eq!(parsed.a_unit_split_length, fixed.a_unit_split_length);
+        assert_eq!(parsed.word_structure_length, fixed.word_structure_length);
+        assert_eq!(
+            parsed.synonym_group_ids_length,
+            fixed.synonym_group_ids_length
+        );
+        assert_eq!(parsed.user_data_flag, fixed.user_data_flag);
+        assert_eq!(parsed.c_unit_split, variable.c_unit_split);
+        assert_eq!(parsed.b_unit_split, variable.b_unit_split);
+        assert_eq!(parsed.a_unit_split, variable.a_unit_split);
+        assert_eq!(parsed.word_structure, variable.word_structure);
+        assert_eq!(parsed.synonym_group_ids, variable.synonym_group_ids);
+        assert_eq!(parsed.user_data, variable.user_data);
     }
 }
