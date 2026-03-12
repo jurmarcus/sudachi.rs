@@ -14,7 +14,7 @@
  *  limitations under the License.
  */
 
-use crate::dic::build::lexicon::{RawLexiconEntry, WordRefResolver};
+use crate::dic::build::lexicon::{ParsedLexiconEntry, ResolvedLexiconEntry, WordRefResolver};
 use crate::dic::subset::InfoSubset;
 use crate::dic::word_id::WordId;
 use crate::dic::word_info::WordInfo;
@@ -25,6 +25,40 @@ use std::collections::HashMap;
 
 // HashMap from surface to (pos_id, reading_form, word-id)s
 type ResolutionCandidateMap<T> = HashMap<T, Vec<(u16, Option<T>, WordId)>, FxBuildHasher>;
+
+pub(crate) trait ResolverEntryView {
+    fn headword(&self) -> &str;
+    fn reading(&self) -> &str;
+    fn pos_id(&self) -> u16;
+}
+
+impl ResolverEntryView for ParsedLexiconEntry {
+    fn headword(&self) -> &str {
+        self.headword()
+    }
+
+    fn reading(&self) -> &str {
+        self.reading()
+    }
+
+    fn pos_id(&self) -> u16 {
+        self.pos
+    }
+}
+
+impl ResolverEntryView for ResolvedLexiconEntry {
+    fn headword(&self) -> &str {
+        self.headword()
+    }
+
+    fn reading(&self) -> &str {
+        self.reading()
+    }
+
+    fn pos_id(&self) -> u16 {
+        self.pos
+    }
+}
 
 /// We can't use trie to resolve splits because it is possible that refs are not in trie
 /// This resolver has to be owning because the dictionary content is lazily loaded and transient
@@ -102,27 +136,29 @@ impl WordRefResolver for BinDictResolver {
     }
 }
 
-pub struct RawDictResolver<'a> {
-    data: ResolutionCandidateMap<&'a str>,
-    entries: &'a [RawLexiconEntry],
+pub struct RawDictResolver {
+    data: ResolutionCandidateMap<String>,
+    headwords: Vec<String>,
     line_to_wid: Vec<WordId>,
     dic_id: u8,
 }
 
-impl<'a> RawDictResolver<'a> {
-    pub(crate) fn new(
-        entries: &'a [RawLexiconEntry],
+impl RawDictResolver {
+    pub(crate) fn new<T: ResolverEntryView>(
+        entries: &[T],
         line_to_wid: Vec<WordId>,
         user: bool,
     ) -> Self {
-        let mut data: ResolutionCandidateMap<&'a str> = HashMap::default();
+        let mut data: ResolutionCandidateMap<String> = HashMap::default();
+        let mut headwords = Vec::with_capacity(entries.len());
 
         let dic_id = if user { 1 } else { 0 };
 
         for (i, e) in entries.iter().enumerate() {
-            let surface: &'a str = e.headword();
-            let reading: &'a str = e.reading();
+            let surface = e.headword().to_owned();
+            let reading = e.reading().to_owned();
             let wid = line_to_wid[i];
+            headwords.push(surface.clone());
 
             let read_opt = if e.headword() == reading {
                 None
@@ -132,19 +168,19 @@ impl<'a> RawDictResolver<'a> {
 
             data.entry(surface)
                 .or_default()
-                .push((e.pos, read_opt, wid));
+                .push((e.pos_id(), read_opt, wid));
         }
 
         Self {
             data,
-            entries,
+            headwords,
             line_to_wid,
             dic_id,
         }
     }
 }
 
-impl WordRefResolver for RawDictResolver<'_> {
+impl WordRefResolver for RawDictResolver {
     fn resolve_by_line_ref(&self, line_ref: WordId) -> Option<WordId> {
         if line_ref.dict().as_raw() != self.dic_id {
             return None;
@@ -163,7 +199,7 @@ impl WordRefResolver for RawDictResolver<'_> {
     fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
         self.data.get(surface).and_then(|data| {
             for (p, rd, wid) in data {
-                if *p == pos && *rd == reading {
+                if *p == pos && rd.as_deref() == reading {
                     return Some(*wid);
                 }
             }
@@ -178,8 +214,8 @@ impl WordRefResolver for RawDictResolver<'_> {
         self.line_to_wid
             .iter()
             .position(|candidate| candidate == &wid)
-            .and_then(|idx| self.entries.get(idx))
-            .map(|e| e.headword().to_string())
+            .and_then(|idx| self.headwords.get(idx))
+            .cloned()
     }
 }
 

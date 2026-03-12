@@ -21,7 +21,7 @@ use std::io::Write;
 use crate::dic::lexicon::strings::StringPointer;
 use crate::error::SudachiResult;
 
-use super::RawLexiconEntry;
+use super::ResolvedLexiconEntry;
 
 /// Compacted string storage for lexicon entries.
 ///
@@ -35,7 +35,7 @@ pub struct StringStore {
 
 impl StringStore {
     /// Collect all required strings from entries and build compacted layout.
-    pub fn from_entries(entries: &[RawLexiconEntry]) -> SudachiResult<Self> {
+    pub fn from_entries(entries: &[ResolvedLexiconEntry]) -> SudachiResult<Self> {
         let mut st = Self {
             strings: HashMap::new(),
             candidates: HashMap::new(),

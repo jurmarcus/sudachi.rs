@@ -248,9 +248,11 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     /// Compile the binary dictionary and write it to the specified sink
     pub fn compile<W: Write>(&mut self, w: &mut W) -> SudachiResult<()> {
         self.check_if_resolved()?;
+        self.lexicon.ensure_resolved_entries()?;
         let report = ReportBuilder::new("validate").read();
         self.lexicon.validate_entries()?;
-        self.reporter.collect(self.lexicon.entries().len(), report);
+        self.reporter
+            .collect(self.lexicon.resolved_entries().len(), report);
 
         let mut buffer = vec![0u8; DICT_BLOCK_SIZE];
         let mut blocks: Vec<BlockInfo> = Vec::with_capacity(6);
@@ -272,7 +274,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         blocks.push(BlockInfo::new(Block::POSTable, start, size));
 
         let (trie, word_id_table) = self.build_index_data()?;
-        let strings = StringStore::from_entries(self.lexicon.entries())?;
+        let strings = StringStore::from_entries(self.lexicon.resolved_entries())?;
 
         self.align_to_block(&mut buffer);
         let start = buffer.len();
@@ -302,7 +304,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         self.align_to_block(&mut buffer);
         let start = buffer.len();
         let mut writer = LexiconWriter::new(
-            self.lexicon.entries(),
+            self.lexicon.resolved_entries(),
             &strings,
             self.user,
             &mut self.reporter,
@@ -310,11 +312,15 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         let size = writer.write(&mut buffer)?;
         blocks.push(BlockInfo::new(Block::Entries, start, size));
 
-        let runtime_costs = self.lexicon.entries().iter().any(|e| e.cost == i16::MIN);
-        let num_total_entries = self.lexicon.entries().len() as u32;
+        let runtime_costs = self
+            .lexicon
+            .resolved_entries()
+            .iter()
+            .any(|e| e.cost == i16::MIN);
+        let num_total_entries = self.lexicon.resolved_entries().len() as u32;
         let num_indexed_entries = self
             .lexicon
-            .entries()
+            .resolved_entries()
             .iter()
             .filter(|e| e.should_index())
             .count() as u32;
@@ -365,7 +371,12 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     fn build_index_data(&mut self) -> SudachiResult<(Vec<u8>, Vec<u8>)> {
         let mut index = IndexBuilder::new();
         let entry_ids = self.lexicon.row_word_ids(0);
-        for (e, wid) in self.lexicon.entries().iter().zip(entry_ids.into_iter()) {
+        for (e, wid) in self
+            .lexicon
+            .resolved_entries()
+            .iter()
+            .zip(entry_ids.into_iter())
+        {
             if e.should_index() {
                 index.add(e.surface(), wid);
             }
@@ -454,22 +465,19 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         Ok(())
     }
 
-    /// this function must only be used in resolve_impl
-    fn unsafe_make_resolver<'a>(&self) -> RawDictResolver<'a> {
+    fn make_resolver(&self) -> RawDictResolver {
         let line_to_wid = self.lexicon.row_word_ids(if self.user { 1 } else { 0 });
-        let resolver = RawDictResolver::new(self.lexicon.entries(), line_to_wid, self.user);
-        // resolver borrows parts of entries, but it does not touch splits
-        // resolve function only modifies splits
-        unsafe { std::mem::transmute(resolver) }
+        RawDictResolver::new(self.lexicon.entries(), line_to_wid, self.user)
     }
 
     fn resolve_impl(&mut self) -> SudachiResult<usize> {
         if !self.lexicon.needs_split_resolution() {
+            self.lexicon.ensure_resolved_entries()?;
             self.resolved = true;
             return Ok(0);
         }
 
-        let this_resolver = self.unsafe_make_resolver();
+        let this_resolver = self.make_resolver();
         let report = ReportBuilder::new("resolve");
 
         let cnt = match self.prebuilt.as_ref() {
