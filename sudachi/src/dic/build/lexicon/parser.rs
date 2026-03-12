@@ -195,13 +195,9 @@ impl LexiconReader {
             headword
         };
 
-        let (dic_form, resolve_dic_form) = rec.ctx.transform(self.parse_dic_form(
-            &dic_form_ref,
-            allow_word_id_ref,
-            effective_headword.as_ref(),
-            pos,
-            reading.as_ref(),
-        ))?;
+        let (dic_form, resolve_dic_form) = rec
+            .ctx
+            .transform(self.parse_dic_form(&dic_form_ref, allow_word_id_ref))?;
         let (norm_form, resolve_norm_form) = rec
             .ctx
             .transform(self.parse_norm_form(&normalized, effective_headword.as_ref()))?;
@@ -331,9 +327,6 @@ impl LexiconReader {
         &mut self,
         data: &str,
         allow_word_id_ref: bool,
-        headword: &str,
-        pos: u16,
-        reading: &str,
     ) -> DicWriteResult<(WordRef, usize)> {
         if data.is_empty() || (allow_word_id_ref && data == "*") {
             return Ok((WordRef::SelfRef, 0));
@@ -343,22 +336,6 @@ impl LexiconReader {
         }
 
         let parsed = self.parse_split(data, allow_word_id_ref)?;
-        if let WordRef::Inline {
-            surface,
-            pos: p,
-            reading: r,
-        } = &parsed
-        {
-            let own_reading = if headword == reading {
-                None
-            } else {
-                Some(reading)
-            };
-            if surface == headword && *p == pos && r.as_deref() == own_reading {
-                return Ok((WordRef::SelfRef, 0));
-            }
-        }
-
         let unresolved = match parsed {
             WordRef::Ref(_) => 0,
             WordRef::SelfRef => 0,

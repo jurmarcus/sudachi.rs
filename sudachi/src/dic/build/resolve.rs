@@ -261,6 +261,26 @@ mod tests {
     use super::*;
     use crate::dic::build::lexicon::WordRef;
 
+    struct TestEntry {
+        headword: &'static str,
+        reading: &'static str,
+        pos_id: u16,
+    }
+
+    impl ResolverEntryView for TestEntry {
+        fn headword(&self) -> &str {
+            self.headword
+        }
+
+        fn reading(&self) -> &str {
+            self.reading
+        }
+
+        fn pos_id(&self) -> u16 {
+            self.pos_id
+        }
+    }
+
     struct StubResolver {
         by_line_ref: Option<WordId>,
         by_headword: Option<WordId>,
@@ -314,6 +334,91 @@ mod tests {
                 reading: None,
             }),
             Some(WordId::new(0, 2))
+        );
+    }
+
+    #[test]
+    fn raw_resolver_resolves_inline_to_first_duplicate_in_csv_order() {
+        let entries = vec![
+            TestEntry {
+                headword: "京都",
+                reading: "キョウト",
+                pos_id: 0,
+            },
+            TestEntry {
+                headword: "京都",
+                reading: "キョウト",
+                pos_id: 0,
+            },
+            TestEntry {
+                headword: "東京",
+                reading: "トウキョウ",
+                pos_id: 0,
+            },
+        ];
+        let line_to_wid = vec![WordId::new(0, 11), WordId::new(0, 27), WordId::new(0, 42)];
+        let resolver = RawDictResolver::new(&entries, line_to_wid.clone(), false);
+
+        assert_eq!(
+            resolver.resolve_inline("京都", 0, Some("キョウト")),
+            Some(line_to_wid[0])
+        );
+    }
+
+    #[test]
+    fn raw_resolver_resolves_headword_to_first_duplicate_in_csv_order() {
+        let entries = vec![
+            TestEntry {
+                headword: "京都",
+                reading: "キョウト",
+                pos_id: 0,
+            },
+            TestEntry {
+                headword: "京都",
+                reading: "キョート",
+                pos_id: 1,
+            },
+            TestEntry {
+                headword: "東京",
+                reading: "トウキョウ",
+                pos_id: 0,
+            },
+        ];
+        let line_to_wid = vec![WordId::new(0, 11), WordId::new(0, 27), WordId::new(0, 42)];
+        let resolver = RawDictResolver::new(&entries, line_to_wid.clone(), false);
+
+        assert_eq!(resolver.resolve_by_headword("京都"), Some(line_to_wid[0]));
+    }
+
+    #[test]
+    fn raw_resolver_resolves_line_refs_in_csv_order() {
+        let entries = vec![
+            TestEntry {
+                headword: "京都",
+                reading: "キョウト",
+                pos_id: 0,
+            },
+            TestEntry {
+                headword: "京都",
+                reading: "キョウト",
+                pos_id: 0,
+            },
+            TestEntry {
+                headword: "東京",
+                reading: "トウキョウ",
+                pos_id: 0,
+            },
+        ];
+        let line_to_wid = vec![WordId::new(0, 11), WordId::new(0, 27), WordId::new(0, 42)];
+        let resolver = RawDictResolver::new(&entries, line_to_wid.clone(), false);
+
+        assert_eq!(
+            resolver.resolve_by_line_ref(WordId::new(0, 0)),
+            Some(line_to_wid[0])
+        );
+        assert_eq!(
+            resolver.resolve_by_line_ref(WordId::new(0, 1)),
+            Some(line_to_wid[1])
         );
     }
 }

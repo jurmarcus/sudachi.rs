@@ -18,9 +18,7 @@ use csv::StringRecord;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::dic::build::csv_schema::{
-    parse_header_mapping, validate_required_columns, CsvColumn,
-};
+use crate::dic::build::csv_schema::{parse_header_mapping, validate_required_columns, CsvColumn};
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx, DicWriteResult};
 use crate::dic::pos::POS_DEPTH;
 use crate::error::SudachiResult;

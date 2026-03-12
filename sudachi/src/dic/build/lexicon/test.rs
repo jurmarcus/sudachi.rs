@@ -243,6 +243,26 @@ fn resolve_header_normalized_form_headword_ref() {
 }
 
 #[test]
+fn parse_dictionary_form_inline_self_reference_is_not_rewritten_to_selfref() {
+    let mut rdr = LexiconReader::new();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "京都,1,1,100,京都,名詞,固有名詞,地名,一般,*,*,キョウト,,,A,,,\n",
+        "京都,1,1,100,京都,名詞,固有名詞,地名,一般,*,*,キョウト,,\"京都,名詞,固有名詞,地名,一般,*,*,キョウト\",A,,,\n"
+    );
+    rdr.read_bytes(data.as_bytes()).unwrap();
+
+    assert_eq!(
+        rdr.entries()[1].dic_form,
+        WordRef::Inline {
+            surface: "京都".to_string(),
+            pos: 0,
+            reading: Some("キョウト".to_string()),
+        }
+    );
+}
+
+#[test]
 fn read_pos_table_and_parse_pos_id_lexicon() {
     let mut rdr = LexiconReader::new();
     let pos = "0,名詞,固有名詞,地名,一般,*,*\n1,名詞,一般,*,*,*,*";

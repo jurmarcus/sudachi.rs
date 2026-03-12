@@ -148,6 +148,24 @@ fn different_headword_resolves_normalized_and_dictionary_form_to_headword() {
 }
 
 #[test]
+fn dictionary_form_inline_self_reference_resolves_to_previous_duplicate() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    let lex = concat!(
+        "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,split_a,split_b,split_c,word_structure,synonym_groups\n",
+        "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,,,,,,,\n",
+        "京都,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,,\"京都,名詞,固有名詞,地名,一般,*,*,キョウト\",,,,,,\n"
+    );
+    assert_eq!(2, bldr.read_lexicon(lex.as_bytes()).unwrap());
+    bldr.resolve().unwrap();
+
+    assert_eq!(
+        bldr.lexicon.entries()[1].dic_form,
+        crate::dic::build::lexicon::WordRef::Ref(crate::dic::word_id::WordId::new(0, 4))
+    );
+}
+
+#[test]
 fn build_system_1word() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
