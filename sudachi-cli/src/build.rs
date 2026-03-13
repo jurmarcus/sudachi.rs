@@ -17,8 +17,9 @@
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, UNIX_EPOCH};
 
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use memmap2::Mmap;
 
 use sudachi::dic::binary_loader::{BinaryDictionary, LoadedDictionary};
@@ -36,6 +37,14 @@ use sudachi::text_normalizer::TextNormalizer;
 enum PosDumpFormat {
     Components,
     Id,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub(crate) enum DumpPart {
+    Description,
+    Matrix,
+    Pos,
+    Winfo,
 }
 
 /// Check that the first argument is a subcommand and the file with the same name does
@@ -88,8 +97,8 @@ pub(crate) enum BuildCli {
     Dump {
         /// target dictionary to dump
         dictionary: PathBuf,
-        /// dump target (matrix, pos, winfo)
-        part: String,
+        /// dump target (description, matrix, pos, winfo)
+        part: DumpPart,
         /// output file
         output: PathBuf,
 
@@ -228,11 +237,11 @@ fn output_file(p: &Path) -> File {
 fn dump_part(
     dict: PathBuf,
     system: Option<PathBuf>,
-    part: String,
+    part: DumpPart,
     output: PathBuf,
     pos_format: PosDumpFormat,
 ) {
-    let file = File::open(dict).expect("open dict failed");
+    let file = File::open(&dict).expect("open dict failed");
     let data = unsafe { Mmap::map(&file) }.expect("mmap dict failed");
     let desc = Description::load(&data).expect("failed to load dictionary description");
     let loaded = if desc.is_system_dictionary() {
@@ -244,13 +253,54 @@ fn dump_part(
     let outf = output_file(&output);
     let mut writer = BufWriter::new(outf);
 
-    match part.as_str() {
-        "pos" => dump_pos(loaded, &mut writer),
-        "matrix" => dump_matrix(loaded, &mut writer),
-        "winfo" => dump_word_info(loaded, system, pos_format, &mut writer).unwrap(),
-        _ => unimplemented!(),
+    match part {
+        DumpPart::Description => dump_description(&dict, &loaded.description, &mut writer).unwrap(),
+        DumpPart::Pos => dump_pos(loaded, &mut writer),
+        DumpPart::Matrix => dump_matrix(loaded, &mut writer),
+        DumpPart::Winfo => dump_word_info(loaded, system, pos_format, &mut writer).unwrap(),
     }
     writer.flush().unwrap();
+}
+
+fn dump_description<W: Write>(path: &Path, desc: &Description, w: &mut W) -> SudachiResult<()> {
+    writeln!(w, "File: {}", path.display())?;
+    if desc.is_system_dictionary() {
+        writeln!(w, "type: system dictionary")?;
+    } else if desc.is_user_dictionary() {
+        writeln!(w, "type: user dictionary")?;
+    } else {
+        writeln!(w, "invalid file")?;
+        return Ok(());
+    }
+
+    writeln!(
+        w,
+        "Creation time: {}",
+        format_unix_timestamp_utc(desc.creation_time())
+    )?;
+    writeln!(w, "Comment: {}", desc.comment())?;
+    writeln!(w, "Signature: {}", desc.signature())?;
+    writeln!(w, "Reference: {}", desc.reference())?;
+    writeln!(w, "Entries total: {}", desc.num_total_entries())?;
+    writeln!(w, "Entries indexed: {}", desc.num_indexed_entries())?;
+    for block in desc.blocks() {
+        writeln!(
+            w,
+            "Block {}: {} - {}",
+            block.name(),
+            block.start(),
+            block.end()
+        )?;
+    }
+    writeln!(w, "Flag isRuntimeCosts: {}", desc.is_runtime_costs())?;
+    Ok(())
+}
+
+fn format_unix_timestamp_utc(duration: Duration) -> String {
+    let datetime = time::OffsetDateTime::from(UNIX_EPOCH + duration);
+    datetime
+        .format(&time::format_description::well_known::Rfc3339)
+        .expect("failed to format dictionary creation time")
 }
 
 fn dump_pos<W: Write>(dict: BinaryDictionary, w: &mut W) {
@@ -840,5 +890,83 @@ mod tests {
         ];
         let actual = parse_dump_csv(&dumped);
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn dump_description_matches_expected_system_format() {
+        let mut builder = DictBuilder::new_system();
+        builder.set_compile_time(UNIX_EPOCH + Duration::from_secs(1));
+        builder.set_description("system comment");
+        builder.read_conn(MATRIX_10_10).unwrap();
+        builder.read_lexicon(SYSTEM_CSV).unwrap();
+        builder.resolve().unwrap();
+
+        let mut compiled = Vec::new();
+        builder.compile(&mut compiled).unwrap();
+
+        let path = Path::new("/tmp/system.dic");
+        let dict = BinaryDictionary::load_system(&compiled).unwrap();
+        let desc = dict.description.clone();
+        let mut dumped = Vec::new();
+        dump_description(path, &desc, &mut dumped).unwrap();
+
+        let mut expected = String::new();
+        expected.push_str(&format!("File: {}\n", path.display()));
+        expected.push_str("type: system dictionary\n");
+        expected.push_str("Creation time: 1970-01-01T00:00:01Z\n");
+        expected.push_str("Comment: system comment\n");
+        expected.push_str(&format!("Signature: {}\n", desc.signature()));
+        expected.push_str("Reference: \n");
+        expected.push_str(&format!("Entries total: {}\n", desc.num_total_entries()));
+        expected.push_str(&format!(
+            "Entries indexed: {}\n",
+            desc.num_indexed_entries()
+        ));
+        for block in desc.blocks() {
+            expected.push_str(&format!(
+                "Block {}: {} - {}\n",
+                block.name(),
+                block.start(),
+                block.end()
+            ));
+        }
+        expected.push_str("Flag isRuntimeCosts: false\n");
+
+        assert_eq!(String::from_utf8(dumped).unwrap(), expected);
+    }
+
+    #[test]
+    fn dump_description_marks_user_dictionary() {
+        let mut sys_builder = DictBuilder::new_system();
+        sys_builder.set_compile_time(UNIX_EPOCH + Duration::from_secs(1));
+        sys_builder.set_description("system comment");
+        sys_builder.read_conn(MATRIX_10_10).unwrap();
+        sys_builder.read_lexicon(SYSTEM_CSV).unwrap();
+        sys_builder.resolve().unwrap();
+        let mut sys_bin = Vec::new();
+        sys_builder.compile(&mut sys_bin).unwrap();
+        let loaded_sys = LoadedDictionary::load_system(&sys_bin).unwrap();
+
+        let mut user_builder = DictBuilder::new_user(&loaded_sys);
+        user_builder.set_compile_time(UNIX_EPOCH + Duration::from_secs(2));
+        user_builder.set_description("user comment");
+        user_builder.read_lexicon(USER1_CSV).unwrap();
+        user_builder.resolve().unwrap();
+        let mut user_bin = Vec::new();
+        user_builder.compile(&mut user_bin).unwrap();
+
+        let path = Path::new("/tmp/user.dic");
+        let dict = BinaryDictionary::load_user(&user_bin).unwrap();
+        let desc = dict.description.clone();
+        let mut dumped = Vec::new();
+        dump_description(path, &desc, &mut dumped).unwrap();
+        let dumped = String::from_utf8(dumped).unwrap();
+
+        assert!(dumped.contains(&format!("File: {}\n", path.display())));
+        assert!(dumped.contains("type: user dictionary\n"));
+        assert!(dumped.contains("Creation time: 1970-01-01T00:00:02Z\n"));
+        assert!(dumped.contains("Comment: user comment\n"));
+        assert!(dumped.contains(&format!("Signature: {}\n", desc.signature())));
+        assert!(dumped.contains(&format!("Reference: {}\n", desc.reference())));
     }
 }
