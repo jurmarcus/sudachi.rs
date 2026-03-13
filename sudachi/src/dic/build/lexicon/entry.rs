@@ -164,6 +164,10 @@ impl ResolvedLexiconEntry {
         }
     }
 
+    pub fn is_phantom(&self) -> bool {
+        self.surface.is_empty()
+    }
+
     pub fn surface(&self) -> &str {
         &self.surface
     }

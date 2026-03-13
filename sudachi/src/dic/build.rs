@@ -42,9 +42,9 @@ pub(crate) mod parse;
 pub(crate) mod pos;
 pub mod report;
 mod resolve;
-mod util;
 #[cfg(test)]
 mod test;
+mod util;
 
 const MAX_POS_IDS: usize = i16::MAX as usize;
 const MAX_DIC_STRING_LEN: usize = i16::MAX as usize;
@@ -168,7 +168,6 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             reporter: Reporter::new(),
         }
     }
-
 }
 
 impl<D: DictionaryAccess + DescriptionAccess> DictBuilder<D> {
@@ -198,7 +197,6 @@ impl<D: DictionaryAccess + DescriptionAccess> DictBuilder<D> {
 }
 
 impl<D: DictionaryAccess> DictBuilder<D> {
-
     /// Set the dictionary compile time to the specified time
     /// instead of current time
     pub fn set_compile_time<T: Into<std::time::SystemTime>>(
@@ -330,12 +328,19 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             .resolved_entries()
             .iter()
             .any(|e| e.cost == i16::MIN);
-        let num_total_entries = self.lexicon.resolved_entries().len() as u32;
+        // phantom entries stay serialized for reference resolution,
+        // but they are excluded from the public entry counts in the description metadata.
+        let num_total_entries = self
+            .lexicon
+            .resolved_entries()
+            .iter()
+            .filter(|e| !e.is_phantom())
+            .count() as u32;
         let num_indexed_entries = self
             .lexicon
             .resolved_entries()
             .iter()
-            .filter(|e| e.should_index())
+            .filter(|e| !e.is_phantom() && e.should_index())
             .count() as u32;
         let description = self.serialize_description(
             &blocks,
@@ -392,6 +397,12 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     fn build_index_data(&mut self) -> SudachiResult<(Vec<u8>, Vec<u8>)> {
         let mut index = IndexBuilder::new();
         let entry_ids = self.lexicon.row_word_ids(0);
+        // Keep non-indexed, non-phantom entries in the word-id table as a
+        // trailing list. This preserves compatibility with the Java
+        // dictionary format, where callers can enumerate all public entries
+        // from WordIdTable even if some of them are intentionally absent from
+        // the trie. Phantom entries stay internal to reference resolution.
+        let mut non_indexed = Vec::new();
         for (e, wid) in self
             .lexicon
             .resolved_entries()
@@ -400,10 +411,12 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         {
             if e.should_index() {
                 index.add(e.surface(), wid);
+            } else if !e.is_phantom() {
+                non_indexed.push(wid);
             }
         }
 
-        let word_id_table = index.build_word_id_table()?;
+        let word_id_table = index.build_word_id_table(&non_indexed)?;
         let trie = index.build_trie()?;
         Ok((trie, word_id_table))
     }

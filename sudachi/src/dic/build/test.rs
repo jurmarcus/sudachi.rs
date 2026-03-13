@@ -192,7 +192,8 @@ fn build_system_sets_default_signature() {
     bldr.set_compile_time(UNIX_EPOCH + Duration::from_secs(1));
     bldr.set_description("abc");
     bldr.read_conn(MATRIX_10_10).unwrap();
-    bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap();
+    bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
+        .unwrap();
 
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
@@ -212,7 +213,8 @@ fn compile_time_before_unix_epoch_fails_with_build_error() {
     let mut bldr = DictBuilder::new_system();
     bldr.set_compile_time(UNIX_EPOCH - Duration::from_secs(1));
     bldr.read_conn(MATRIX_10_10).unwrap();
-    bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap();
+    bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
+        .unwrap();
 
     let mut built = Vec::new();
     claim::assert_matches!(
@@ -245,6 +247,27 @@ fn build_system_3words() {
     assert_eq!(iter.next(), None);
     let info = dic.lexicon().get_word_info(entry.word_id).unwrap();
     assert_eq!(info.headword(&dic), "京都");
+}
+
+#[test]
+fn description_counts_exclude_phantom_entries() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    let data = concat!(
+        "index_form,left_id,right_id,cost,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure\n",
+        "舞台藝術,1,1,2816,名詞,普通名詞,一般,*,*,*,ブタイゲイジュツ,舞台芸術,,A,,,"
+    );
+    bldr.read_lexicon(data.as_bytes()).unwrap();
+    bldr.resolve().unwrap();
+
+    let mut built = Vec::new();
+    bldr.compile(&mut built).unwrap();
+    let dic = BinaryDictionary::load_system(&built).unwrap();
+    let loaded = LoadedDictionary::load_system(&built).unwrap();
+
+    assert_eq!(dic.description.num_total_entries(), 1);
+    assert_eq!(dic.description.num_indexed_entries(), 1);
+    assert_eq!(loaded.lexicon().size(), 1);
 }
 
 #[test]
@@ -315,10 +338,13 @@ fn build_user_sets_reference_to_system_signature() {
     let mut system_bin = Vec::new();
     system.compile(&mut system_bin).unwrap();
     let system_dic = LoadedDictionary::load_system(&system_bin).unwrap();
-    let system_desc = BinaryDictionary::load_system(&system_bin).unwrap().description;
+    let system_desc = BinaryDictionary::load_system(&system_bin)
+        .unwrap()
+        .description;
 
     let mut user = DictBuilder::new_user(&system_dic);
-    user.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap();
+    user.read_lexicon(include_bytes!("test/data_1word.csv"))
+        .unwrap();
 
     let mut user_bin = Vec::new();
     user.compile(&mut user_bin).unwrap();
