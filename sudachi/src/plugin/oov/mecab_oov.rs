@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ use crate::hash::RoMu;
 use crate::input_text::InputBuffer;
 use crate::input_text::InputTextIndex;
 use crate::plugin::oov::OovProviderPlugin;
+use crate::plugin::PluginError;
 use crate::prelude::*;
 
 #[cfg(test)]
@@ -131,16 +132,20 @@ impl MeCabOovPlugin {
 
             let cols: Vec<_> = line.split(',').collect();
             if cols.len() < 10 {
-                return Err(SudachiError::InvalidDataFormat(
-                    i,
-                    format!("Invalid number of columns ({})", line),
+                return Err(SudachiError::PluginError(
+                    PluginError::InvalidDataFormatWithLine {
+                        line: i,
+                        message: format!("Invalid number of columns ({})", line),
+                    },
                 ));
             }
             let category_type: CategoryType = cols[0].parse()?;
             if !categories.contains_key(&category_type) {
-                return Err(SudachiError::InvalidDataFormat(
-                    i,
-                    format!("{} is undefined in char definition", cols[0]),
+                return Err(SudachiError::PluginError(
+                    PluginError::InvalidDataFormatWithLine {
+                        line: i,
+                        message: format!("{} is undefined in char definition", cols[0]),
+                    },
                 ));
             }
 
@@ -152,24 +157,28 @@ impl MeCabOovPlugin {
             };
 
             if oov.left_id as usize > grammar.conn_matrix().num_left() {
-                return Err(SudachiError::InvalidDataFormat(
-                    0,
-                    format!(
-                        "max grammar left_id is {}, was {}",
-                        grammar.conn_matrix().num_left(),
-                        oov.left_id
-                    ),
+                return Err(SudachiError::PluginError(
+                    PluginError::InvalidDataFormatWithLine {
+                        line: i,
+                        message: format!(
+                            "max grammar left_id is {}, was {}",
+                            grammar.conn_matrix().num_left(),
+                            oov.left_id
+                        ),
+                    },
                 ));
             }
 
             if oov.right_id as usize > grammar.conn_matrix().num_right() {
-                return Err(SudachiError::InvalidDataFormat(
-                    0,
-                    format!(
-                        "max grammar right_id is {}, was {}",
-                        grammar.conn_matrix().num_right(),
-                        oov.right_id
-                    ),
+                return Err(SudachiError::PluginError(
+                    PluginError::InvalidDataFormatWithLine {
+                        line: i,
+                        message: format!(
+                            "max grammar right_id is {}, was {}",
+                            grammar.conn_matrix().num_right(),
+                            oov.right_id
+                        ),
+                    },
                 ));
             }
 
@@ -256,7 +265,8 @@ impl OovProviderPlugin for MeCabOovPlugin {
         config: &Config,
         grammar: &mut Grammar,
     ) -> SudachiResult<()> {
-        let settings: PluginSettings = serde_json::from_value(settings.clone())?;
+        let settings: PluginSettings =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
 
         let char_def_path = config.complete_path(
             settings

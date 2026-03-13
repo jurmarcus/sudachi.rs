@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2022-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2022-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@
 use crate::analysis::created::{CreatedWords, HasWord};
 use crate::analysis::node::LatticeNode;
 use crate::analysis::Node;
-use crate::config::{Config, ConfigError};
+use crate::config::Config;
 use crate::dic::grammar::Grammar;
 use crate::dic::word_id::WordId;
 use crate::error::{SudachiError, SudachiResult};
 use crate::input_text::{InputBuffer, InputTextIndex};
 use crate::plugin::oov::OovProviderPlugin;
+use crate::plugin::PluginError;
 use crate::util::check_params::CheckParams;
 use crate::util::user_pos::{UserPosMode, UserPosSupport};
 use regex::{Regex, RegexBuilder};
@@ -82,7 +83,8 @@ impl OovProviderPlugin for RegexOovProvider {
         _config: &Config,
         mut grammar: &mut Grammar,
     ) -> SudachiResult<()> {
-        let mut parsed: RegexProviderConfig = serde_json::from_value(settings.clone())?;
+        let mut parsed: RegexProviderConfig =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
 
         if !parsed.regex.starts_with('^') {
             parsed.regex.insert(0, '^');
@@ -99,7 +101,7 @@ impl OovProviderPlugin for RegexOovProvider {
         match RegexBuilder::new(&parsed.regex).build() {
             Ok(re) => self.regex = Some(re),
             Err(e) => {
-                return Err(SudachiError::ConfigError(ConfigError::InvalidFormat(
+                return Err(SudachiError::PluginError(PluginError::InvalidDataFormat(
                     format!("regex {:?} is invalid: {:?}", &parsed.regex, e),
                 )))
             }

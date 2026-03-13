@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -132,7 +132,8 @@ impl InputTextPlugin for IgnoreYomiganaPlugin {
         _config: &Config,
         grammar: &Grammar,
     ) -> SudachiResult<()> {
-        let settings: PluginSettings = serde_json::from_value(settings.clone())?;
+        let settings: PluginSettings =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
 
         let left_bracket_set = settings.leftBrackets.into_iter().collect();
         let right_bracket_set = settings.rightBrackets.into_iter().collect();

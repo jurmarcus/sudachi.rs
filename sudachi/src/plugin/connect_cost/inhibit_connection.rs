@@ -20,6 +20,7 @@ use serde_json::Value;
 use crate::config::Config;
 use crate::dic::grammar::Grammar;
 use crate::plugin::connect_cost::EditConnectionCostPlugin;
+use crate::plugin::PluginError;
 use crate::prelude::*;
 
 /// A edit connection cost plugin for inhibiting the connections.
@@ -60,7 +61,8 @@ impl EditConnectionCostPlugin for InhibitConnectionPlugin {
         _config: &Config,
         _grammar: &Grammar,
     ) -> SudachiResult<()> {
-        let settings: PluginSettings = serde_json::from_value(settings.clone())?;
+        let settings: PluginSettings =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
         let inhibit_pairs = settings.inhibitPair;
         self.inhibit_pairs = inhibit_pairs;
         Ok(())

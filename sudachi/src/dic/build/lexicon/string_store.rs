@@ -18,6 +18,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::Write;
 
+use crate::dic::build::error::{BuildFailure, DicBuildError};
 use crate::dic::lexicon::strings::StringPointer;
 use crate::error::SudachiResult;
 
@@ -219,7 +220,18 @@ impl StringLayout {
         let alignment = required_alignment(len as u32);
         let offset = self.allocate(len, alignment);
         self.put(offset, s);
-        StringPointer::checked(len as u32, offset as u32).map_err(Into::into)
+        StringPointer::checked(len as u32, offset as u32).map_err(|_| {
+            DicBuildError {
+                file: "<string store>".to_owned(),
+                line: 0,
+                cause: BuildFailure::InvalidStringPointer {
+                    length: len,
+                    offset,
+                    alignment: alignment as usize,
+                },
+            }
+            .into()
+        })
     }
 
     /// Serialize only the used area (`pointer`) as little-endian UTF-16 bytes.

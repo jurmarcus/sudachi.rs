@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ use crate::dic::grammar::Grammar;
 use crate::dic::word_id::WordId;
 use crate::input_text::InputBuffer;
 use crate::plugin::oov::OovProviderPlugin;
+use crate::plugin::PluginError;
 use crate::prelude::*;
 use crate::util::check_params::CheckParams;
 use crate::util::user_pos::{UserPosMode, UserPosSupport};
@@ -56,7 +57,8 @@ impl OovProviderPlugin for SimpleOovPlugin {
         _config: &Config,
         mut grammar: &mut Grammar,
     ) -> SudachiResult<()> {
-        let settings: PluginSettings = serde_json::from_value(settings.clone())?;
+        let settings: PluginSettings =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
 
         self.oov_pos_id = grammar.handle_user_pos(&settings.oovPOS, settings.userPOS)?;
         self.left_id = grammar.check_left_id(settings.leftId)?;

@@ -208,6 +208,23 @@ fn build_system_sets_default_signature() {
 }
 
 #[test]
+fn compile_time_before_unix_epoch_fails_with_build_error() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.set_compile_time(UNIX_EPOCH - Duration::from_secs(1));
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap();
+
+    let mut built = Vec::new();
+    claim::assert_matches!(
+        bldr.compile(&mut built),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::InvalidCompileTime,
+            ..
+        }))
+    );
+}
+
+#[test]
 fn build_system_3words() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,11 +26,12 @@ use serde::Deserialize;
 use serde_json::Value;
 use unicode_normalization::{is_nfkc_quick, IsNormalized, UnicodeNormalization};
 
-use crate::config::{Config, ConfigError};
+use crate::config::Config;
 use crate::dic::grammar::Grammar;
 use crate::hash::RoMu;
 use crate::input_text::{InputBuffer, InputEditor};
 use crate::plugin::input_text::InputTextPlugin;
+use crate::plugin::PluginError;
 use crate::prelude::*;
 
 #[cfg(test)]
@@ -86,9 +87,11 @@ impl DefaultInputTextPlugin {
             // ignored normalize list
             if cols.len() == 1 {
                 if cols[0].chars().count() != 1 {
-                    return Err(SudachiError::InvalidDataFormat(
-                        i,
-                        format!("{} is not character", cols[0]),
+                    return Err(SudachiError::PluginError(
+                        PluginError::InvalidDataFormatWithLine {
+                            line: i,
+                            message: format!("{} is not character", cols[0]),
+                        },
                     ));
                 }
                 ignore_normalize_set.insert(cols[0].chars().next().unwrap());
@@ -97,9 +100,11 @@ impl DefaultInputTextPlugin {
             // replace char list
             if cols.len() == 2 {
                 if replace_char_map.contains_key(cols[0]) {
-                    return Err(SudachiError::InvalidDataFormat(
-                        i,
-                        format!("{} is already defined", cols[0]),
+                    return Err(SudachiError::PluginError(
+                        PluginError::InvalidDataFormatWithLine {
+                            line: i,
+                            message: format!("{} is already defined", cols[0]),
+                        },
                     ));
                 }
                 let first_char = cols[0].chars().next().unwrap();
@@ -110,7 +115,12 @@ impl DefaultInputTextPlugin {
                 replace_char_map.insert(cols[0].to_string(), cols[1].to_string());
                 continue;
             }
-            return Err(SudachiError::InvalidDataFormat(i, "".to_string()));
+            return Err(SudachiError::PluginError(
+                PluginError::InvalidDataFormatWithLine {
+                    line: i,
+                    message: String::new(),
+                },
+            ));
         }
 
         self.ignore_normalize_set = ignore_normalize_set;
@@ -132,7 +142,7 @@ impl DefaultInputTextPlugin {
                 .start_kind(StartKind::Both)
                 .build(keys.clone())
                 .map_err(|e| {
-                    ConfigError::InvalidFormat(format!("failed to parse rewrite.def: {e:?}"))
+                    PluginError::InvalidDataFormat(format!("failed to parse rewrite.def: {e:?}"))
                 })?,
         );
 
@@ -250,7 +260,8 @@ impl InputTextPlugin for DefaultInputTextPlugin {
         config: &Config,
         _grammar: &Grammar,
     ) -> SudachiResult<()> {
-        let settings: PluginSettings = serde_json::from_value(settings.clone())?;
+        let settings: PluginSettings =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
 
         let rewrite_file_path = config.complete_path(
             settings

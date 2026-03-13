@@ -422,12 +422,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         let secs = self
             .compile_time
             .duration_since(UNIX_EPOCH)
-            .map_err(|_| {
-                self.ctx.to_sudachi_err(BuildFailure::InvalidSize {
-                    actual: 0,
-                    expected: 1,
-                })
-            })?
+            .map_err(|_| self.ctx.to_sudachi_err(BuildFailure::InvalidCompileTime))?
             .as_secs();
         out.extend_from_slice(&secs.to_le_bytes());
         let flags = if runtime_costs { 1u64 } else { 0u64 };

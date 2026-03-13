@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,7 +76,8 @@ impl InputTextPlugin for ProlongedSoundMarkPlugin {
         _config: &Config,
         _grammar: &Grammar,
     ) -> SudachiResult<()> {
-        let settings: PluginSettings = serde_json::from_value(settings.clone())?;
+        let settings: PluginSettings =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
 
         let psm_set = settings.prolongedSoundMarks.into_iter().collect();
         let replace_symbol = settings.replacementSymbol;

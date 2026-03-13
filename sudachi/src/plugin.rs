@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,6 +48,9 @@ pub enum PluginError {
 
     #[error("Invalid data format: {0}")]
     InvalidDataFormat(String),
+
+    #[error("Invalid data format at line {line}: {message}")]
+    InvalidDataFormatWithLine { line: usize, message: String },
 }
 
 impl From<LLError> for PluginError {

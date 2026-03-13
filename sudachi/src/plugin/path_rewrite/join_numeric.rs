@@ -27,6 +27,7 @@ use crate::dic::word_info::WordInfoResolver;
 use crate::input_text::InputBuffer;
 use crate::input_text::InputTextIndex;
 use crate::plugin::path_rewrite::PathRewritePlugin;
+use crate::plugin::PluginError;
 use crate::prelude::*;
 
 mod numeric_parser;
@@ -185,7 +186,8 @@ impl PathRewritePlugin for JoinNumericPlugin {
         _config: &Config,
         grammar: &Grammar,
     ) -> SudachiResult<()> {
-        let settings: PluginSettings = serde_json::from_value(settings.clone())?;
+        let settings: PluginSettings =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
 
         // this pos is fixed
         let numeric_pos_string = vec!["名詞", "数詞", "*", "*", "*", "*"];

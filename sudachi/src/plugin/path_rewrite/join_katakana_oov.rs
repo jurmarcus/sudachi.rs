@@ -26,6 +26,7 @@ use crate::dic::word_info::WordInfoResolver;
 use crate::input_text::InputBuffer;
 use crate::input_text::InputTextIndex;
 use crate::plugin::path_rewrite::PathRewritePlugin;
+use crate::plugin::PluginError;
 use crate::prelude::*;
 
 #[cfg(test)]
@@ -132,7 +133,8 @@ impl PathRewritePlugin for JoinKatakanaOovPlugin {
         _config: &Config,
         grammar: &Grammar,
     ) -> SudachiResult<()> {
-        let settings: PluginSettings = serde_json::from_value(settings.clone())?;
+        let settings: PluginSettings =
+            serde_json::from_value(settings.clone()).map_err(PluginError::from)?;
 
         let oov_pos_string: Vec<&str> = settings.oovPOS.iter().map(|s| s.as_str()).collect();
         let oov_pos_id = grammar.get_part_of_speech_id(&oov_pos_string).ok_or(
