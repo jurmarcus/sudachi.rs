@@ -289,13 +289,6 @@ impl<D: DictionaryAccess> DictBuilder<D> {
 
         self.align_to_block(&mut buffer);
         let start = buffer.len();
-        let report = ReportBuilder::new("trie");
-        buffer.write_all(&trie)?;
-        self.reporter.collect(trie.len(), report);
-        blocks.push(BlockInfo::new(Block::TRIEIndex, start, trie.len()));
-
-        self.align_to_block(&mut buffer);
-        let start = buffer.len();
         let report = ReportBuilder::new("word_id table");
         buffer.write_all(&word_id_table)?;
         self.reporter.collect(word_id_table.len(), report);
@@ -304,6 +297,13 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             start,
             word_id_table.len(),
         ));
+
+        self.align_to_block(&mut buffer);
+        let start = buffer.len();
+        let report = ReportBuilder::new("trie");
+        buffer.write_all(&trie)?;
+        self.reporter.collect(trie.len(), report);
+        blocks.push(BlockInfo::new(Block::TRIEIndex, start, trie.len()));
 
         self.align_to_block(&mut buffer);
         let start = buffer.len();
