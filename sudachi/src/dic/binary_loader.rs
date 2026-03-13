@@ -26,7 +26,7 @@ use crate::dic::lexicon::Lexicon;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::pos::PosList;
 use crate::dic::word_info::WordInfos;
-use crate::dic::{DictionaryAccess, LexiconAccess};
+use crate::dic::{DescriptionAccess, DictionaryAccess, LexiconAccess};
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
 use crate::plugin::path_rewrite::PathRewritePlugin;
@@ -161,6 +161,7 @@ impl<'a> BinaryLexicon<'a> {
 ///
 /// This is mostly used for testing purpose.
 pub struct LoadedDictionary<'a> {
+    pub description: Description,
     pub grammar: Grammar<'a>,
     pub lexicon_set: LexiconSet<'a>,
 }
@@ -168,9 +169,11 @@ pub struct LoadedDictionary<'a> {
 impl<'a> LoadedDictionary<'a> {
     /// Convert to Loaded dictionary
     pub fn from_system_binary(binary: BinaryDictionary<'a>) -> SudachiResult<Self> {
+        let description = binary.description;
         let grammar = Grammar::from_system_binary(binary.grammar)?;
         let lexicon_set = LexiconSet::from_system_binary(binary.lexicon, grammar.pos_list.len());
         Ok(LoadedDictionary {
+            description,
             grammar,
             lexicon_set,
         })
@@ -178,6 +181,10 @@ impl<'a> LoadedDictionary<'a> {
 
     pub fn load_system(bytes: &'a [u8]) -> SudachiResult<Self> {
         Self::from_system_binary(BinaryDictionary::load_system(bytes)?)
+    }
+
+    pub fn description(&self) -> &Description {
+        &self.description
     }
 
     pub fn merge_dictionary(mut self, other: BinaryDictionary<'a>) -> SudachiResult<Self> {
@@ -211,5 +218,11 @@ impl DictionaryAccess for LoadedDictionary<'_> {
 
     fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
         &[]
+    }
+}
+
+impl DescriptionAccess for LoadedDictionary<'_> {
+    fn description(&self) -> &Description {
+        &self.description
     }
 }

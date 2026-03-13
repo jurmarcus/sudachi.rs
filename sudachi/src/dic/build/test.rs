@@ -23,6 +23,7 @@ use crate::dic::build::DictBuilder;
 use crate::dic::LexiconAccess;
 use crate::error::SudachiError;
 use std::io::sink;
+use std::time::{Duration, UNIX_EPOCH};
 
 static MATRIX_10_10: &[u8] = include_bytes!("test/matrix_10x10.def");
 static WORDREF_SYSTEM: &[u8] = include_bytes!("test/wordref.csv");
@@ -186,6 +187,27 @@ fn build_system_1word() {
 }
 
 #[test]
+fn build_system_sets_default_signature() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.set_compile_time(UNIX_EPOCH + Duration::from_secs(1));
+    bldr.set_description("abc");
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    bldr.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap();
+
+    let mut built = Vec::new();
+    bldr.compile(&mut built).unwrap();
+    let dic = BinaryDictionary::load_system(&built).unwrap();
+
+    assert_eq!(dic.description.reference(), "");
+    assert_eq!(dic.description.signature().len(), 23);
+    assert!(dic.description.signature()[..14]
+        .chars()
+        .all(|c| c.is_ascii_digit()));
+    assert_eq!(&dic.description.signature()[14..15], "-");
+    assert_eq!(&dic.description.signature()[15..], "00017862");
+}
+
+#[test]
 fn build_system_3words() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -261,6 +283,32 @@ fn build_user_dictionary_crossrefs() {
     assert_eq!(winfo.a_unit_split(), [entry_kan.word_id, entry_to.word_id]);
     assert_eq!(winfo.b_unit_split(), [entry_kan.word_id, entry_to.word_id]);
     assert_eq!(iter.next(), None);
+}
+
+#[test]
+fn build_user_sets_reference_to_system_signature() {
+    let mut system = DictBuilder::new_system();
+    system.set_compile_time(UNIX_EPOCH + Duration::from_secs(1));
+    system.set_description("abc");
+    system.read_conn(MATRIX_10_10).unwrap();
+    system
+        .read_lexicon(include_bytes!("test/data_1word.csv"))
+        .unwrap();
+
+    let mut system_bin = Vec::new();
+    system.compile(&mut system_bin).unwrap();
+    let system_dic = LoadedDictionary::load_system(&system_bin).unwrap();
+    let system_desc = BinaryDictionary::load_system(&system_bin).unwrap().description;
+
+    let mut user = DictBuilder::new_user(&system_dic);
+    user.read_lexicon(include_bytes!("test/data_1word.csv")).unwrap();
+
+    let mut user_bin = Vec::new();
+    user.compile(&mut user_bin).unwrap();
+    let user_desc = BinaryDictionary::load_user(&user_bin).unwrap().description;
+
+    assert_eq!(user_desc.signature(), "");
+    assert_eq!(user_desc.reference(), system_desc.signature());
 }
 
 #[test]

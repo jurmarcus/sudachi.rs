@@ -23,10 +23,11 @@ use crate::dic::build::index::IndexBuilder;
 use crate::dic::build::lexicon::{LexiconWriter, StringStore};
 use crate::dic::build::report::{DictPartReport, ReportBuilder, Reporter};
 use crate::dic::build::resolve::{BinDictResolver, ChainedResolver, RawDictResolver};
+use crate::dic::build::util::default_signature;
 use crate::dic::description::Block;
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon_set::LexiconSet;
-use crate::dic::{DictionaryAccess, LexiconAccess};
+use crate::dic::{DescriptionAccess, DictionaryAccess, LexiconAccess};
 use crate::error::SudachiResult;
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
@@ -41,6 +42,7 @@ pub(crate) mod parse;
 pub(crate) mod pos;
 pub mod report;
 mod resolve;
+mod util;
 #[cfg(test)]
 mod test;
 
@@ -167,6 +169,9 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         }
     }
 
+}
+
+impl<D: DictionaryAccess + DescriptionAccess> DictBuilder<D> {
     /// Creates a new builder for user dictionary
     pub fn new_user(system: D) -> Self {
         let mut bldr = Self::new_empty();
@@ -183,9 +188,16 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             .max()
             .unwrap_or(0);
         bldr.lexicon.set_num_system_words(max_system_entry_plus_one);
+        let signature = system.description().signature();
+        if !signature.is_empty() {
+            bldr.reference = signature.to_owned();
+        }
         bldr.prebuilt = Some(system);
         bldr
     }
+}
+
+impl<D: DictionaryAccess> DictBuilder<D> {
 
     /// Set the dictionary compile time to the specified time
     /// instead of current time
@@ -247,6 +259,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
 
     /// Compile the binary dictionary and write it to the specified sink
     pub fn compile<W: Write>(&mut self, w: &mut W) -> SudachiResult<()> {
+        self.prepare_description_fields();
         self.check_if_resolved()?;
         self.lexicon.ensure_resolved_entries()?;
         let report = ReportBuilder::new("validate").read();
@@ -359,6 +372,14 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             self.reference.clear();
         }
         self.user = user;
+    }
+
+    fn prepare_description_fields(&mut self) {
+        if self.user {
+            self.signature.clear();
+        } else if self.signature.is_empty() {
+            self.signature = default_signature(self.compile_time, &self.description);
+        }
     }
 
     fn align_to_block(&self, buffer: &mut Vec<u8>) {

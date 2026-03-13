@@ -16,6 +16,7 @@
 
 use std::ops::Deref;
 
+use crate::dic::description::Description;
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::plugin::input_text::InputTextPlugin;
@@ -33,6 +34,20 @@ where
 {
     fn lexicon(&self) -> &LexiconSet<'_> {
         <T as Deref>::deref(self).lexicon()
+    }
+}
+
+pub trait DescriptionAccess {
+    fn description(&self) -> &Description;
+}
+
+impl<T> DescriptionAccess for T
+where
+    T: Deref,
+    <T as Deref>::Target: DescriptionAccess,
+{
+    fn description(&self) -> &Description {
+        <T as Deref>::deref(self).description()
     }
 }
 

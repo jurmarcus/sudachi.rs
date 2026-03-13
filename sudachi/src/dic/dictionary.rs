@@ -22,11 +22,12 @@ use memmap2::Mmap;
 use crate::config::Config;
 use crate::dic::binary_loader::BinaryDictionary;
 use crate::dic::character_category::CharacterCategory;
+use crate::dic::description::Description;
 use crate::dic::grammar::Grammar;
 use crate::dic::lexicon::Lexicon;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::storage::{Storage, SudachiDicData};
-use crate::dic::{DictionaryAccess, LexiconAccess};
+use crate::dic::{DescriptionAccess, DictionaryAccess, LexiconAccess};
 use crate::error::{SudachiError, SudachiResult};
 use crate::plugin::input_text::InputTextPlugin;
 use crate::plugin::oov::OovProviderPlugin;
@@ -45,6 +46,7 @@ use crate::plugin::Plugins;
 pub struct JapaneseDictionary {
     storage: SudachiDicData,
     plugins: Plugins,
+    description: Description,
     //'static is a a lie, lifetime is the same with StorageBackend
     _grammar: Grammar<'static>,
     //'static is a a lie, lifetime is the same with StorageBackend
@@ -87,6 +89,7 @@ impl JapaneseDictionary {
     ) -> SudachiResult<JapaneseDictionary> {
         let system_binary =
             BinaryDictionary::load_system(unsafe { storage.system_static_slice() })?;
+        let description = system_binary.description.clone();
 
         let mut grammar = Grammar::from_system_binary(system_binary.grammar)?;
         grammar.set_character_category(chardef);
@@ -105,6 +108,7 @@ impl JapaneseDictionary {
         let mut dic = JapaneseDictionary {
             storage,
             plugins,
+            description,
             _grammar: grammar,
             _lexicon: lexicon_set,
         };
@@ -147,6 +151,10 @@ impl JapaneseDictionary {
         &self._lexicon
     }
 
+    pub fn description(&self) -> &Description {
+        &self.description
+    }
+
     fn merge_user_dictionary(mut self, dictionary_bytes: &'static [u8]) -> SudachiResult<Self> {
         let user_dict = BinaryDictionary::load_user(dictionary_bytes)?;
 
@@ -183,5 +191,11 @@ impl DictionaryAccess for JapaneseDictionary {
 
     fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
         self.plugins.path_rewrite.plugins()
+    }
+}
+
+impl DescriptionAccess for JapaneseDictionary {
+    fn description(&self) -> &Description {
+        &self.description
     }
 }
