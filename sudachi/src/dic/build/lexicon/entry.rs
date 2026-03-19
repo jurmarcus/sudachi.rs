@@ -16,11 +16,15 @@
 
 use crate::analysis::Mode;
 use crate::dic::build::error::{BuildFailure, DicWriteResult};
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::WordRef as DicWordRef;
 use crate::dic::word_info::{layout, WordInfoVariableLayout};
 
-use super::refs::{NormFormValue, WordRef};
+use super::refs::{NormFormValue, ResolvedDicForm, WordRef};
 
+/// Entry parsed from the lexicon CSV.
+///
+/// Internal references such as `dic_form` and `splits_*` are kept as
+/// unresolved `WordRef` values.
 #[derive(Clone)]
 pub(crate) struct ParsedLexiconEntry {
     pub left_id: i16,
@@ -44,12 +48,10 @@ pub(crate) struct ParsedLexiconEntry {
     pub user_data: String,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub(crate) enum ResolvedDicForm {
-    Ref(WordId),
-    SelfRef,
-}
-
+/// Lexicon entry after internal references have been resolved.
+///
+/// This stores the `ParsedLexiconEntry` data with references such as
+/// `dic_form` and `splits_*` resolved to actual DicWordRef.
 pub(crate) struct ResolvedLexiconEntry {
     pub left_id: i16,
     pub right_id: i16,
@@ -59,14 +61,14 @@ pub(crate) struct ResolvedLexiconEntry {
     pub dic_form: ResolvedDicForm,
     pub norm_form: Option<String>,
     pub pos: u16,
-    pub splits_a: Vec<WordId>,
-    pub splits_b: Vec<WordId>,
+    pub splits_a: Vec<DicWordRef>,
+    pub splits_b: Vec<DicWordRef>,
     #[allow(unused)]
-    pub splits_c: Vec<WordId>,
+    pub splits_c: Vec<DicWordRef>,
     pub reading: Option<String>,
     #[allow(unused)]
     pub splitting: Mode,
-    pub word_structure: Vec<WordId>,
+    pub word_structure: Vec<DicWordRef>,
     pub synonym_groups: Vec<u32>,
     #[allow(unused)]
     pub user_data: String,
@@ -302,18 +304,18 @@ mod tests {
             dic_form: ResolvedDicForm::SelfRef,
             norm_form: None,
             pos: 4,
-            splits_a: vec![WordId::new(0, 5), WordId::new(0, 6)],
-            splits_b: vec![WordId::new(0, 7)],
+            splits_a: vec![DicWordRef::new(true, 5), DicWordRef::new(true, 6)],
+            splits_b: vec![DicWordRef::new(true, 7)],
             splits_c: vec![],
             reading: Some("キョウト".to_string()),
             splitting: Mode::B,
-            word_structure: vec![WordId::new(0, 8)],
+            word_structure: vec![DicWordRef::new(true, 8)],
             synonym_groups: vec![10, 11],
             user_data: "meta".to_string(),
         };
 
-        let self_word_id = WordId::new(0, 12);
-        let norm_form_word_id = WordId::new(0, 13);
+        let self_word_id = DicWordRef::new(true, 12);
+        let norm_form_word_id = DicWordRef::new(true, 13);
         let headword = StringPointer::unchecked(2, 0);
         let reading = StringPointer::unchecked(5, 2);
 
@@ -335,10 +337,13 @@ mod tests {
         assert_eq!(wi.normalized_form, norm_form_word_id.as_raw());
         assert_eq!(
             wi.a_unit_split,
-            &[WordId::new(0, 5).as_raw(), WordId::new(0, 6).as_raw()]
+            &[
+                DicWordRef::new(true, 5).as_raw(),
+                DicWordRef::new(true, 6).as_raw()
+            ]
         );
-        assert_eq!(wi.b_unit_split, &[WordId::new(0, 7).as_raw()]);
-        assert_eq!(wi.word_structure, &[WordId::new(0, 8).as_raw()]);
+        assert_eq!(wi.b_unit_split, &[DicWordRef::new(true, 7).as_raw()]);
+        assert_eq!(wi.word_structure, &[DicWordRef::new(true, 8).as_raw()]);
         assert_eq!(wi.synonym_group_ids, &[10, 11]);
         assert_eq!(wi.user_data, "meta");
         assert!(bytes.len() >= written + layout::PARAMS_SIZE);

@@ -20,9 +20,8 @@ use std::io::Write;
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx, DicWriteResult};
 use crate::dic::build::report::{ReportBuilder, Reporter};
 use crate::dic::lexicon::strings::StringPointer;
-use crate::dic::word_id::WordId;
-use crate::dic::word_info::WordInfos;
-use crate::dic::word_info::{WordInfoFixedData, WordInfoVariableData};
+use crate::dic::word_id::WordRef;
+use crate::dic::word_info::{WordInfoFixedData, WordInfoVariableData, WordInfos};
 use crate::error::SudachiResult;
 
 use super::entry::ResolvedLexiconEntry;
@@ -58,12 +57,11 @@ impl<'a> LexiconWriter<'a> {
 
         let rep = ReportBuilder::new("entries");
         let mut offset = LexiconReader::ENTRY_INITIAL_OFFSET;
-        let self_dic_id = if self.user { 1 } else { 0 };
-        let mut headword_to_id = HashMap::with_capacity(self.entries.len());
+        let mut headword_to_ref = HashMap::with_capacity(self.entries.len());
         for e in self.entries {
             let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
-            let wid = WordId::new(self_dic_id, entry_id);
-            headword_to_id.insert(e.headword().to_owned(), wid);
+            let wref = WordRef::new(!self.user, entry_id);
+            headword_to_ref.insert(e.headword().to_owned(), wref);
             offset += e.expected_entry_size();
         }
 
@@ -71,14 +69,14 @@ impl<'a> LexiconWriter<'a> {
         let mut offset = LexiconReader::ENTRY_INITIAL_OFFSET;
         for e in self.entries {
             let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
-            let self_word_id = WordId::new(self_dic_id, entry_id);
-            let norm_form_word_id = match e.norm_form.as_ref() {
-                None => self_word_id,
+            let self_word_ref = WordRef::new(!self.user, entry_id);
+            let norm_form_word_ref = match e.norm_form.as_ref() {
+                None => self_word_ref,
                 Some(headword) => {
                     if headword == e.headword() {
-                        self_word_id
-                    } else if let Some(wid) = headword_to_id.get(headword) {
-                        *wid
+                        self_word_ref
+                    } else if let Some(wref) = headword_to_ref.get(headword) {
+                        *wref
                     } else {
                         return ctx.err(BuildFailure::InvalidSplitWordReference(format!(
                             "normalized_form headword not found: {}",
@@ -92,8 +90,8 @@ impl<'a> LexiconWriter<'a> {
             total += ctx.transform(e.write_params(w))?;
             total += ctx.transform(e.write_rest(
                 w,
-                self_word_id,
-                norm_form_word_id,
+                self_word_ref,
+                norm_form_word_ref,
                 headword_strptr,
                 reading_strptr,
             ))?;
@@ -144,23 +142,23 @@ impl LexiconReader {
             }
 
             match e.dic_form {
-                ResolvedDicForm::Ref(wid) => {
-                    ctx.transform(Self::validate_wid(wid, max_0, max_1, "dic_form"))?;
+                ResolvedDicForm::Ref(wref) => {
+                    ctx.transform(Self::validate_wref(wref, max_0, max_1, "dic_form"))?;
                 }
                 ResolvedDicForm::SelfRef => {}
             }
 
-            for wid in e.splits_a.iter().copied() {
-                ctx.transform(Self::validate_wid(wid, max_0, max_1, "splits_a"))?;
+            for wref in e.splits_a.iter().copied() {
+                ctx.transform(Self::validate_wref(wref, max_0, max_1, "splits_a"))?;
             }
-            for wid in e.splits_b.iter().copied() {
-                ctx.transform(Self::validate_wid(wid, max_0, max_1, "splits_b"))?;
+            for wref in e.splits_b.iter().copied() {
+                ctx.transform(Self::validate_wref(wref, max_0, max_1, "splits_b"))?;
             }
-            for wid in e.splits_c.iter().copied() {
-                ctx.transform(Self::validate_wid(wid, max_0, max_1, "splits_c"))?;
+            for wref in e.splits_c.iter().copied() {
+                ctx.transform(Self::validate_wref(wref, max_0, max_1, "splits_c"))?;
             }
-            for wid in e.word_structure.iter().copied() {
-                ctx.transform(Self::validate_wid(wid, max_0, max_1, "word_structure"))?;
+            for wref in e.word_structure.iter().copied() {
+                ctx.transform(Self::validate_wref(wref, max_0, max_1, "word_structure"))?;
             }
 
             ctx.add_line(1);
@@ -168,27 +166,19 @@ impl LexiconReader {
         Ok(())
     }
 
-    // This only validates that the wid falls within the entry-id range of the target
-    // dictionary. Since wid values are sparse, passing this check does not guarantee
+    // This only validates that the wref falls within the entry-id range of the target
+    // dictionary. Since wref values are sparse, passing this check does not guarantee
     // that the referenced entry actually exists.
-    fn validate_wid(
-        wid: WordId,
+    fn validate_wref(
+        wref: WordRef,
         dic0_max: usize,
         dic1_max: usize,
         label: &'static str,
     ) -> DicWriteResult<()> {
-        let max = match wid.dict().as_raw() {
-            0 => dic0_max,
-            1 => dic1_max,
-            x => {
-                return Err(BuildFailure::InvalidSplit(format!(
-                    "invalid dictionary ID={x} in {label}"
-                )))
-            }
-        };
-        if wid.entry().as_raw() >= max as u32 {
+        let max = if wref.is_system() { dic0_max } else { dic1_max };
+        if wref.entry().as_raw() >= max as u32 {
             return Err(BuildFailure::InvalidFieldSize {
-                actual: wid.entry().as_raw() as _,
+                actual: wref.entry().as_raw() as _,
                 expected: max,
                 field: label,
             });
@@ -244,14 +234,14 @@ impl ResolvedLexiconEntry {
     pub fn write_rest<W: Write>(
         &self,
         w: &mut W,
-        self_word_id: WordId,
-        norm_form_word_id: WordId,
+        self_word_ref: WordRef,
+        norm_form_word_ref: WordRef,
         headword_strptr: StringPointer,
         reading_strptr: StringPointer,
     ) -> DicWriteResult<usize> {
-        let dic_form_word_id = match self.dic_form {
-            ResolvedDicForm::Ref(wid) => wid,
-            ResolvedDicForm::SelfRef => self_word_id,
+        let dic_form_word_ref = match self.dic_form {
+            ResolvedDicForm::Ref(wref) => wref,
+            ResolvedDicForm::SelfRef => self_word_ref,
         };
 
         if self.index_form.len() > i16::MAX as usize {
@@ -268,8 +258,8 @@ impl ResolvedLexiconEntry {
             pos_id: self.pos as i16,
             headword_strptr,
             reading_form_strptr: reading_strptr,
-            normalized_form: norm_form_word_id.as_raw(),
-            dictionary_form: dic_form_word_id.as_raw(),
+            normalized_form: norm_form_word_ref.as_raw(),
+            dictionary_form: dic_form_word_ref.as_raw(),
             index_form_length: self.index_form.len() as i16,
             c_unit_split_length: variable.c_unit_split_length,
             b_unit_split_length: variable.b_unit_split_length,
@@ -279,10 +269,10 @@ impl ResolvedLexiconEntry {
             user_data_flag: variable.user_data_flag,
         };
         let mut size = fixed.write_to(w)?;
-        let c_refs = self.word_ids_to_raw(&self.splits_c);
-        let b_refs = self.word_ids_to_raw(&self.splits_b);
-        let a_refs = self.word_ids_to_raw(&self.splits_a);
-        let ws_refs = self.word_ids_to_raw(&self.word_structure);
+        let c_refs = self.word_refs_to_raw(&self.splits_c);
+        let b_refs = self.word_refs_to_raw(&self.splits_b);
+        let a_refs = self.word_refs_to_raw(&self.splits_a);
+        let ws_refs = self.word_refs_to_raw(&self.word_structure);
         let syns: Vec<i32> = self.synonym_groups.iter().map(|sg| *sg as i32).collect();
         let payload = WordInfoVariableData {
             c_unit_split: &c_refs,
@@ -297,7 +287,7 @@ impl ResolvedLexiconEntry {
         Ok(size)
     }
 
-    fn word_ids_to_raw(&self, refs: &[WordId]) -> Vec<u32> {
-        refs.iter().map(|wid| wid.as_raw()).collect()
+    fn word_refs_to_raw(&self, refs: &[WordRef]) -> Vec<u32> {
+        refs.iter().map(|wref| wref.as_raw()).collect()
     }
 }

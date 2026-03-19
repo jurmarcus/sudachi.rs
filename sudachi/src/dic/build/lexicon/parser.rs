@@ -24,8 +24,8 @@ use memmap2::Mmap;
 use crate::analysis::Mode;
 use crate::dic::build::error::{BuildFailure, DicWriteResult};
 use crate::dic::build::parse::{
-    it_next, none_if_equal, parse_i16, parse_mode, parse_slash_list, parse_u32_list_with_asterisk,
-    parse_wordid, unescape, unescape_cow, WORD_ID_LITERAL,
+    it_next, none_if_equal, parse_i16, parse_legacy_line_ref, parse_mode, parse_slash_list,
+    parse_u32_list_with_asterisk, unescape, unescape_cow, WORD_ID_LITERAL,
 };
 use crate::dic::build::pos::read_pos_bytes as read_pos_csv_bytes;
 use crate::dic::build::MAX_POS_IDS;
@@ -293,7 +293,7 @@ impl LexiconReader {
             if !allow_word_id_ref {
                 return Err(BuildFailure::InvalidSplit(data.to_owned()));
             }
-            Ok(WordRef::LineRef(parse_wordid(data)?))
+            Ok(WordRef::LineRef(parse_legacy_line_ref(data)?))
         } else if data.matches(',').count() == 2 {
             let mut iter = data.splitn(3, ',');
             let headword = it_next(data, &mut iter, "(1) headword", unescape)?;

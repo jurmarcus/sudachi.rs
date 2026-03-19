@@ -23,7 +23,7 @@ use regex::Regex;
 use crate::analysis::Mode;
 use crate::dic::build::error::{BuildFailure, DicWriteResult};
 use crate::dic::build::{MAX_ARRAY_LEN, MAX_DIC_STRING_LEN};
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::WordRef;
 
 #[inline(always)]
 pub fn it_next<'a, I, T, F>(
@@ -86,20 +86,20 @@ pub(crate) fn parse_u32(data: &str) -> DicWriteResult<u32> {
 }
 
 #[inline]
-pub(crate) fn parse_wordid(data: &str) -> DicWriteResult<WordId> {
+pub(crate) fn parse_legacy_line_ref(data: &str) -> DicWriteResult<WordRef> {
     if let Some(stripped) = data.strip_prefix('U') {
-        let wid = parse_wordid_raw(stripped);
-        wid.map(|w| WordId::new(1, w.entry().as_raw()))
+        let wref = parse_legacy_line_ref_raw(stripped);
+        wref.map(|w| WordRef::new(false, w.entry().as_raw()))
     } else {
-        parse_wordid_raw(data)
+        parse_legacy_line_ref_raw(data)
     }
 }
 
 #[inline]
-fn parse_wordid_raw(data: &str) -> DicWriteResult<WordId> {
+fn parse_legacy_line_ref_raw(data: &str) -> DicWriteResult<WordRef> {
     match u32::from_str(data) {
-        Ok(v) => match WordId::checked(0, v) {
-            Ok(id) => Ok(id),
+        Ok(v) => match WordRef::checked(true, v) {
+            Ok(wref) => Ok(wref),
             Err(_) => Err(BuildFailure::InvalidWordId(data.to_owned())),
         },
         Err(_) => Err(BuildFailure::InvalidWordId(data.to_owned())),

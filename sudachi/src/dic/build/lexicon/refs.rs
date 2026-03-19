@@ -14,15 +14,14 @@
  *  limitations under the License.
  */
 
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::WordRef as DicWordRef;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum WordRef {
-    Ref(WordId),
+    Ref(DicWordRef),
     // explicit self-reference used for dictionary_form omission.
     SelfRef,
-    // we use WordId to store system/user flag with line number.
-    LineRef(WordId),
+    LineRef(DicWordRef),
     Headword(String),
     Inline {
         headword: String,
@@ -37,10 +36,16 @@ pub(crate) enum NormFormValue {
     Ref(WordRef),
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum ResolvedDicForm {
+    Ref(DicWordRef),
+    SelfRef,
+}
+
 pub(crate) trait WordRefResolver {
-    fn resolve(&self, unit: &WordRef) -> Option<WordId> {
+    fn resolve(&self, unit: &WordRef) -> Option<DicWordRef> {
         match unit {
-            WordRef::Ref(wid) => Some(*wid),
+            WordRef::Ref(wref) => Some(*wref),
             WordRef::SelfRef => None,
             WordRef::LineRef(line_ref) => self.resolve_by_line_ref(*line_ref),
             WordRef::Headword(headword) => self.resolve_by_headword(headword),
@@ -52,13 +57,13 @@ pub(crate) trait WordRefResolver {
         }
     }
 
-    fn resolve_by_line_ref(&self, line_ref: WordId) -> Option<WordId>;
+    fn resolve_by_line_ref(&self, line_ref: DicWordRef) -> Option<DicWordRef>;
 
-    fn resolve_by_headword(&self, headword: &str) -> Option<WordId>;
+    fn resolve_by_headword(&self, headword: &str) -> Option<DicWordRef>;
 
-    fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>) -> Option<WordId>;
+    fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>) -> Option<DicWordRef>;
 
-    fn resolve_headword(&self, _wid: WordId) -> Option<String> {
+    fn resolve_headword(&self, _wref: DicWordRef) -> Option<String> {
         None
     }
 }

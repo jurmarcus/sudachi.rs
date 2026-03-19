@@ -383,8 +383,8 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     }
 
     fn make_resolver(&self) -> RawDictResolver {
-        let line_to_wid = self.lexicon.row_word_ids(if self.user { 1 } else { 0 });
-        RawDictResolver::new(self.lexicon.entries(), line_to_wid, self.user)
+        let line_to_wref = self.lexicon.row_word_refs(self.user);
+        RawDictResolver::new(self.lexicon.entries(), line_to_wref, self.user)
     }
 
     fn resolve_impl(&mut self) -> SudachiResult<usize> {
@@ -401,9 +401,9 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             Some(d) => {
                 let built_resolver = BinDictResolver::new(d)?;
                 let chained = ChainedResolver::new(built_resolver, this_resolver);
-                self.lexicon.resolve_splits(&chained)
+                self.lexicon.resolve_entries(&chained)
             }
-            None => self.lexicon.resolve_splits(&this_resolver),
+            None => self.lexicon.resolve_entries(&this_resolver),
         };
         let cnt = self.reporter.collect_r(cnt, report);
         match cnt {

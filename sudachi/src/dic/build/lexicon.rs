@@ -42,8 +42,8 @@ mod resolution;
 mod string_store;
 mod writer;
 
-pub(crate) use entry::{ParsedLexiconEntry, ResolvedDicForm, ResolvedLexiconEntry};
-pub(crate) use refs::{NormFormValue, WordRef, WordRefResolver};
+pub(crate) use entry::{ParsedLexiconEntry, ResolvedLexiconEntry};
+pub(crate) use refs::{NormFormValue, ResolvedDicForm, WordRef, WordRefResolver};
 pub use string_store::StringStore;
 pub use writer::LexiconWriter;
 

@@ -15,7 +15,7 @@
  */
 
 use crate::dic::build::error::BuildFailure;
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::{WordId, WordRef as DicWordRef};
 use crate::dic::word_info::WordInfos;
 use crate::error::SudachiResult;
 
@@ -53,7 +53,7 @@ impl LexiconReader {
 
     fn parsed_entry_to_resolved(entry: ParsedLexiconEntry) -> Result<ResolvedLexiconEntry, String> {
         let dic_form = match entry.dic_form {
-            WordRef::Ref(wid) => ResolvedDicForm::Ref(wid),
+            WordRef::Ref(wref) => ResolvedDicForm::Ref(wref),
             WordRef::SelfRef => ResolvedDicForm::SelfRef,
             other => return Err(format!("unresolved dictionary_form: {:?}", other)),
         };
@@ -73,29 +73,29 @@ impl LexiconReader {
             dic_form,
             norm_form,
             pos: entry.pos,
-            splits_a: Self::resolved_word_ids(entry.splits_a)?,
-            splits_b: Self::resolved_word_ids(entry.splits_b)?,
-            splits_c: Self::resolved_word_ids(entry.splits_c)?,
+            splits_a: Self::resolved_word_refs(entry.splits_a)?,
+            splits_b: Self::resolved_word_refs(entry.splits_b)?,
+            splits_c: Self::resolved_word_refs(entry.splits_c)?,
             reading: entry.reading,
             splitting: entry.splitting,
-            word_structure: Self::resolved_word_ids(entry.word_structure)?,
+            word_structure: Self::resolved_word_refs(entry.word_structure)?,
             synonym_groups: entry.synonym_groups,
             user_data: entry.user_data,
         })
     }
 
-    fn resolved_word_ids(values: Vec<WordRef>) -> Result<Vec<WordId>, String> {
+    fn resolved_word_refs(values: Vec<WordRef>) -> Result<Vec<DicWordRef>, String> {
         let mut out = Vec::with_capacity(values.len());
         for value in values {
             match value {
-                WordRef::Ref(wid) => out.push(wid),
+                WordRef::Ref(wref) => out.push(wref),
                 other => return Err(format!("unresolved word reference: {:?}", other)),
             }
         }
         Ok(out)
     }
 
-    pub(crate) fn resolve_splits<R: WordRefResolver>(
+    pub(crate) fn resolve_entries<R: WordRefResolver>(
         &mut self,
         resolver: &R,
     ) -> Result<usize, (String, usize)> {
@@ -124,16 +124,23 @@ impl LexiconReader {
         Ok(total)
     }
 
-    fn has_headword(&self, headword: &str) -> bool {
-        self.parsed_entries.iter().any(|e| e.headword() == headword)
-    }
-
     pub(crate) fn row_word_ids(&self, dic_id: u8) -> Vec<WordId> {
         let mut result = Vec::with_capacity(self.parsed_entries.len());
         let mut offset = Self::ENTRY_INITIAL_OFFSET;
         for e in &self.parsed_entries {
             let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
             result.push(WordId::new(dic_id, entry_id));
+            offset += e.expected_entry_size();
+        }
+        result
+    }
+
+    pub(crate) fn row_word_refs(&self, user: bool) -> Vec<DicWordRef> {
+        let mut result = Vec::with_capacity(self.parsed_entries.len());
+        let mut offset = Self::ENTRY_INITIAL_OFFSET;
+        for e in &self.parsed_entries {
+            let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
+            result.push(DicWordRef::new(!user, entry_id));
             offset += e.expected_entry_size();
         }
         result
@@ -179,7 +186,7 @@ impl LexiconReader {
             index_form: entry.index_form.clone(),
             headword: entry.headword.clone(),
             dic_form: match dic_form {
-                ResolvedDicForm::Ref(wid) => WordRef::Ref(wid),
+                ResolvedDicForm::Ref(wref) => WordRef::Ref(wref),
                 ResolvedDicForm::SelfRef => WordRef::SelfRef,
             },
             norm_form: norm_form.clone().map(NormFormValue::Value),
@@ -216,6 +223,10 @@ impl LexiconReader {
         Ok((parsed, resolved, total, phantom_headword))
     }
 
+    fn has_headword(&self, headword: &str) -> bool {
+        self.parsed_entries.iter().any(|e| e.headword() == headword)
+    }
+
     fn resolve_norm_form<R: WordRefResolver>(
         &self,
         entry: &ParsedLexiconEntry,
@@ -247,13 +258,13 @@ impl LexiconReader {
                 }
             }
             Some(NormFormValue::Ref(word_ref)) => {
-                let wid = resolver
+                let wref = resolver
                     .resolve(word_ref)
                     .ok_or_else(|| self.format_word_ref(word_ref))?;
                 *total += 1;
                 let headword = resolver
-                    .resolve_headword(wid)
-                    .ok_or_else(|| self.format_word_ref(&WordRef::Ref(wid)))?;
+                    .resolve_headword(wref)
+                    .ok_or_else(|| self.format_word_ref(&WordRef::Ref(wref)))?;
                 if headword == entry.headword() {
                     Ok((None, None))
                 } else {
@@ -271,11 +282,11 @@ impl LexiconReader {
     ) -> Result<ResolvedDicForm, WordRef> {
         match word_ref {
             WordRef::SelfRef => Ok(ResolvedDicForm::SelfRef),
-            WordRef::Ref(wid) => Ok(ResolvedDicForm::Ref(*wid)),
+            WordRef::Ref(wref) => Ok(ResolvedDicForm::Ref(*wref)),
             other => {
-                let wid = resolver.resolve(other).ok_or_else(|| other.clone())?;
+                let wref = resolver.resolve(other).ok_or_else(|| other.clone())?;
                 *total += 1;
-                Ok(ResolvedDicForm::Ref(wid))
+                Ok(ResolvedDicForm::Ref(wref))
             }
         }
     }
@@ -285,15 +296,15 @@ impl LexiconReader {
         word_refs: &[WordRef],
         resolver: &R,
         total: &mut usize,
-    ) -> Result<Vec<WordId>, WordRef> {
+    ) -> Result<Vec<DicWordRef>, WordRef> {
         let mut out = Vec::with_capacity(word_refs.len());
         for word_ref in word_refs {
             match word_ref {
-                WordRef::Ref(wid) => out.push(*wid),
+                WordRef::Ref(wref) => out.push(*wref),
                 other => {
-                    let wid = resolver.resolve(other).ok_or_else(|| other.clone())?;
+                    let wref = resolver.resolve(other).ok_or_else(|| other.clone())?;
                     *total += 1;
-                    out.push(wid);
+                    out.push(wref);
                 }
             }
         }
