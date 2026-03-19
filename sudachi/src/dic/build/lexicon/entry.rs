@@ -325,12 +325,7 @@ mod tests {
 
         let mut bytes = vec![0u8; layout::PARAMS_SIZE];
         let written = entry
-            .write_rest(
-                &mut bytes,
-                self_word_id,
-                headword,
-                reading,
-            )
+            .write_rest(&mut bytes, self_word_id, headword, reading)
             .unwrap();
 
         let parser = WordInfoParser::subset(InfoSubset::all());

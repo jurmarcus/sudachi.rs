@@ -57,8 +57,4 @@ pub(crate) trait WordRefResolver {
 
     fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>)
         -> Option<DicWordRef>;
-
-    fn resolve_headword(&self, _wref: DicWordRef) -> Option<String> {
-        None
-    }
 }

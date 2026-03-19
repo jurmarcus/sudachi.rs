@@ -66,7 +66,6 @@ impl ResolverEntryView for ResolvedLexiconEntry {
 /// This resolver has to be owning because the dictionary content is lazily loaded and transient
 pub struct BinDictResolver {
     index: ResolutionCandidateMap<String>,
-    headwords: HashMap<WordRef, String, FxBuildHasher>,
     line_to_wref: Vec<WordRef>,
 }
 
@@ -79,7 +78,6 @@ impl BinDictResolver {
             .map(|wid| WordRef::new(true, wid.entry().as_raw()))
             .collect::<Vec<_>>();
         let mut index: ResolutionCandidateMap<String> = HashMap::default();
-        let mut headwords: HashMap<WordRef, String, FxBuildHasher> = HashMap::default();
         for wid in line_to_wid.iter().copied() {
             let winfo: WordInfo = lex.get_word_info_subset(
                 wid,
@@ -100,12 +98,10 @@ impl BinDictResolver {
                 .entry(headword.clone())
                 .or_default()
                 .push((pos_id, rdfield, wref));
-            headwords.insert(wref, headword);
         }
 
         Ok(Self {
             index,
-            headwords,
             line_to_wref,
         })
     }
@@ -137,16 +133,11 @@ impl WordRefResolver for BinDictResolver {
             None
         })
     }
-
-    fn resolve_headword(&self, wref: WordRef) -> Option<String> {
-        self.headwords.get(&wref).cloned()
-    }
 }
 
 /// Resolver based on a lexicon csv
 pub struct RawDictResolver {
     data: ResolutionCandidateMap<String>,
-    headwords: Vec<String>,
     line_to_wref: Vec<WordRef>,
     user: bool,
 }
@@ -158,13 +149,11 @@ impl RawDictResolver {
         user: bool,
     ) -> Self {
         let mut data: ResolutionCandidateMap<String> = HashMap::default();
-        let mut headwords = Vec::with_capacity(entries.len());
 
         for (i, e) in entries.iter().enumerate() {
             let headword = e.headword().to_owned();
             let reading = e.reading().to_owned();
             let wref = line_to_wref[i];
-            headwords.push(headword.clone());
 
             let read_opt = if e.headword() == reading {
                 None
@@ -179,7 +168,6 @@ impl RawDictResolver {
 
         Self {
             data,
-            headwords,
             line_to_wref,
             user,
         }
@@ -212,17 +200,6 @@ impl WordRefResolver for RawDictResolver {
             None
         })
     }
-
-    fn resolve_headword(&self, wref: WordRef) -> Option<String> {
-        if wref.is_system() == self.user {
-            return None;
-        }
-        self.line_to_wref
-            .iter()
-            .position(|candidate| candidate == &wref)
-            .and_then(|idx| self.headwords.get(idx))
-            .cloned()
-    }
 }
 
 pub(crate) struct ChainedResolver<A, B> {
@@ -253,12 +230,6 @@ impl<A: WordRefResolver, B: WordRefResolver> WordRefResolver for ChainedResolver
         self.a
             .resolve_inline(headword, pos, reading)
             .or_else(|| self.b.resolve_inline(headword, pos, reading))
-    }
-
-    fn resolve_headword(&self, wref: WordRef) -> Option<String> {
-        self.a
-            .resolve_headword(wref)
-            .or_else(|| self.b.resolve_headword(wref))
     }
 }
 
