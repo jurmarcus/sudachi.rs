@@ -121,10 +121,10 @@ impl LexiconReader {
         let mut ctx = DicCompilationCtx::default();
         ctx.set_filename("<entry id>".to_owned());
         ctx.set_line(0);
-        let max_current = self.max_entry_id_plus_one() as usize;
-        let (max_0, max_1) = match self.num_system {
+        let max_current = self.next_entry_id() as usize;
+        let (max_0, max_1) = match self.max_system_entry_id {
             usize::MAX => (max_current, 0),
-            x => (x, max_current),
+            x => (x + 1, max_current),
         };
         for e in self.resolved_entries.iter() {
             if e.left_id >= self.max_left {
@@ -168,6 +168,9 @@ impl LexiconReader {
         Ok(())
     }
 
+    // This only validates that the wid falls within the entry-id range of the target
+    // dictionary. Since wid values are sparse, passing this check does not guarantee
+    // that the referenced entry actually exists.
     fn validate_wid(
         wid: WordId,
         dic0_max: usize,

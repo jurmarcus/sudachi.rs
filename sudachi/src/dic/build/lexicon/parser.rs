@@ -36,6 +36,25 @@ use super::layout::{Column, ColumnLayout, RecordWrapper};
 use super::{LexiconReader, NormFormValue, ParsedLexiconEntry, StrPosEntry, WordRef};
 
 impl LexiconReader {
+    pub fn read_pos_file(&mut self, path: &Path) -> SudachiResult<usize> {
+        let file = File::open(path)?;
+        let map = unsafe { Mmap::map(&file) }?;
+        let filename = path.to_str().unwrap_or("<invalid-utf8>").to_owned();
+        let old_name = self.ctx.set_filename(filename);
+        let res = self.read_pos_bytes(&map);
+        self.ctx.set_filename(old_name);
+        res
+    }
+
+    pub fn read_pos_bytes(&mut self, data: &[u8]) -> SudachiResult<usize> {
+        read_pos_csv_bytes(
+            &mut self.pos,
+            !self.parsed_entries.is_empty(),
+            data,
+            &mut self.ctx,
+        )
+    }
+
     pub fn read_file(&mut self, path: &Path) -> SudachiResult<usize> {
         let file = File::open(path)?;
         let map = unsafe { Mmap::map(&file) }?;
@@ -47,6 +66,8 @@ impl LexiconReader {
     }
 
     pub fn read_bytes(&mut self, data: &[u8]) -> SudachiResult<usize> {
+        // This only parses and stores lexicon csv entries. Cross-entry references
+        // must be resolved later via DictBuilder::resolve() before compilation.
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(false)
             .trim(Trim::None)
@@ -81,27 +102,7 @@ impl LexiconReader {
         Ok(nread)
     }
 
-    pub fn read_pos_file(&mut self, path: &Path) -> SudachiResult<usize> {
-        let file = File::open(path)?;
-        let map = unsafe { Mmap::map(&file) }?;
-        let filename = path.to_str().unwrap_or("<invalid-utf8>").to_owned();
-        let old_name = self.ctx.set_filename(filename);
-        let res = self.read_pos_bytes(&map);
-        self.ctx.set_filename(old_name);
-        res
-    }
-
-    pub fn read_pos_bytes(&mut self, data: &[u8]) -> SudachiResult<usize> {
-        read_pos_csv_bytes(
-            &mut self.pos,
-            !self.parsed_entries.is_empty(),
-            data,
-            &mut self.ctx,
-        )
-    }
-
     fn read_record(&mut self, data: &StringRecord, layout: ColumnLayout) -> SudachiResult<()> {
-        self.invalidate_resolved_entries();
         self.parse_record(data, layout)
             .map(|r| self.parsed_entries.push(r))
     }

@@ -29,6 +29,7 @@ use crate::dic::build::error::DicCompilationCtx;
 use crate::dic::build::MAX_POS_IDS;
 use crate::dic::grammar::Grammar;
 use crate::dic::pos::POS_DEPTH;
+use crate::dic::word_info::WordInfos;
 
 #[cfg(test)]
 mod test;
@@ -119,7 +120,7 @@ pub struct LexiconReader {
     start_pos: usize,
     max_left: i16,
     max_right: i16,
-    num_system: usize,
+    max_system_entry_id: usize,
 }
 
 impl LexiconReader {
@@ -135,7 +136,7 @@ impl LexiconReader {
             start_pos: 0,
             max_left: i16::MAX,
             max_right: i16::MAX,
-            num_system: usize::MAX,
+            max_system_entry_id: usize::MAX,
         }
     }
 
@@ -147,6 +148,13 @@ impl LexiconReader {
         &self.resolved_entries
     }
 
+    pub(crate) fn pos_obj(&self, pos_id: u16) -> Option<&StrPosEntry> {
+        self.pos.get_index(pos_id as usize).map(|(k, v)| {
+            assert_eq!(v, &pos_id);
+            k
+        })
+    }
+
     pub fn needs_split_resolution(&self) -> bool {
         self.unresolved > 0
     }
@@ -154,10 +162,6 @@ impl LexiconReader {
     pub fn set_max_conn_sizes(&mut self, left: i16, right: i16) {
         self.max_left = left;
         self.max_right = right;
-    }
-
-    pub fn set_num_system_words(&mut self, num: usize) {
-        self.num_system = num;
     }
 
     pub fn preload_pos(&mut self, grammar: &Grammar) {
@@ -169,10 +173,15 @@ impl LexiconReader {
         self.start_pos = self.pos.len();
     }
 
-    pub(crate) fn pos_obj(&self, pos_id: u16) -> Option<&StrPosEntry> {
-        self.pos.get_index(pos_id as usize).map(|(k, v)| {
-            assert_eq!(v, &pos_id);
-            k
-        })
+    pub fn set_max_system_entry_id(&mut self, max: usize) {
+        self.max_system_entry_id = max;
+    }
+
+    pub(crate) fn next_entry_id(&self) -> u32 {
+        let mut offset = Self::ENTRY_INITIAL_OFFSET;
+        for e in &self.parsed_entries {
+            offset += e.expected_entry_size();
+        }
+        (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32
     }
 }

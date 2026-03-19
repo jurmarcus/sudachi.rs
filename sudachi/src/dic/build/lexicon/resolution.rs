@@ -139,14 +139,6 @@ impl LexiconReader {
         result
     }
 
-    pub(crate) fn max_entry_id_plus_one(&self) -> u32 {
-        let mut offset = Self::ENTRY_INITIAL_OFFSET;
-        for e in &self.parsed_entries {
-            offset += e.expected_entry_size();
-        }
-        (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32
-    }
-
     fn resolve_entry<R: WordRefResolver>(
         &self,
         entry: ParsedLexiconEntry,

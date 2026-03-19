@@ -250,6 +250,33 @@ fn build_system_3words() {
 }
 
 #[test]
+fn read_lexicon_after_resolve_invalidates_builder_state() {
+    let mut bldr = DictBuilder::new_system();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+    assert_eq!(
+        1,
+        bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
+            .unwrap()
+    );
+    bldr.resolve().unwrap();
+
+    assert_eq!(
+        2,
+        bldr.read_lexicon(include_bytes!("test/data_2words_3w_refs.csv"))
+            .unwrap()
+    );
+
+    let mut sink = Vec::new();
+    claim::assert_matches!(
+        bldr.compile(&mut sink),
+        Err(SudachiError::DictionaryCompilationError(DicBuildError {
+            cause: BuildFailure::UnresolvedSplits,
+            ..
+        }))
+    );
+}
+
+#[test]
 fn description_counts_exclude_phantom_entries() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();

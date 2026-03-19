@@ -175,18 +175,18 @@ impl<D: DictionaryAccess + DescriptionAccess> DictBuilder<D> {
     pub fn new_user(system: D) -> Self {
         let mut bldr = Self::new_empty();
         bldr.set_user(true);
-        bldr.lexicon.preload_pos(system.grammar());
         let cm = system.grammar().conn_matrix();
         bldr.lexicon
             .set_max_conn_sizes(cm.num_left() as _, cm.num_right() as _);
-        let max_system_entry_plus_one = system
+        bldr.lexicon.preload_pos(system.grammar());
+        let max_system_entry_id = system
             .lexicon()
             .system_word_ids_in_order()
             .into_iter()
-            .map(|wid| wid.entry().as_raw() as usize + 1)
+            .map(|wid| wid.entry().as_raw() as usize)
             .max()
-            .unwrap_or(0);
-        bldr.lexicon.set_num_system_words(max_system_entry_plus_one);
+            .unwrap_or(usize::MAX);
+        bldr.lexicon.set_max_system_entry_id(max_system_entry_id);
         let signature = system.description().signature();
         if !signature.is_empty() {
             bldr.reference = signature.to_owned();
@@ -197,8 +197,7 @@ impl<D: DictionaryAccess + DescriptionAccess> DictBuilder<D> {
 }
 
 impl<D: DictionaryAccess> DictBuilder<D> {
-    /// Set the dictionary compile time to the specified time
-    /// instead of current time
+    /// Set the dictionary compile time to the specified time instead of current time
     pub fn set_compile_time<T: Into<std::time::SystemTime>>(
         &mut self,
         time: T,
@@ -211,14 +210,22 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         self.description = description.into()
     }
 
-    /// Read the csv lexicon from either a file or an in-memory buffer
-    pub fn read_lexicon<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<usize> {
+    /// Read the connection matrix from either a file or an in-memory buffer
+    ///
+    /// This API is intended for system dictionary builds.
+    pub fn read_conn<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<()> {
         let report = ReportBuilder::new(data.name()).read();
-        let result = match data.convert() {
-            DataSource::File(p) => self.lexicon.read_file(p),
-            DataSource::Data(d) => self.lexicon.read_bytes(d),
-        };
-        self.reporter.collect_r(result, report)
+        match data.convert() {
+            DataSource::File(p) => self.conn.read_file(p),
+            DataSource::Data(d) => self.conn.read(d),
+        }?;
+        self.lexicon
+            .set_max_conn_sizes(self.conn.left(), self.conn.right());
+        self.reporter.collect(
+            self.conn.left() as usize * self.conn.right() as usize,
+            report,
+        );
+        Ok(())
     }
 
     /// Read POS table csv from either a file or an in-memory buffer.
@@ -239,20 +246,23 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         self.reporter.collect_r(result, report)
     }
 
-    /// Read the connection matrix from either a file or an in-memory buffer
-    pub fn read_conn<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<()> {
+    /// Read the csv lexicon from either a file or an in-memory buffer
+    pub fn read_lexicon<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<usize> {
+        self.lexicon.invalidate_resolved_entries();
+        self.resolved = false;
         let report = ReportBuilder::new(data.name()).read();
-        match data.convert() {
-            DataSource::File(p) => self.conn.read_file(p),
-            DataSource::Data(d) => self.conn.read(d),
-        }?;
-        self.lexicon
-            .set_max_conn_sizes(self.conn.left(), self.conn.right());
-        self.reporter.collect(
-            self.conn.left() as usize * self.conn.right() as usize,
-            report,
-        );
-        Ok(())
+        let result = match data.convert() {
+            DataSource::File(p) => self.lexicon.read_file(p),
+            DataSource::Data(d) => self.lexicon.read_bytes(d),
+        };
+        self.reporter.collect_r(result, report)
+    }
+
+    /// Resolve the dictionary references.
+    ///
+    /// Returns the number of resolved entries
+    pub fn resolve(&mut self) -> SudachiResult<usize> {
+        self.resolve_impl()
     }
 
     /// Compile the binary dictionary and write it to the specified sink
@@ -354,13 +364,6 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         Ok(())
     }
 
-    /// Resolve the dictionary references.
-    ///
-    /// Returns the number of resolved entries
-    pub fn resolve(&mut self) -> SudachiResult<usize> {
-        self.resolve_impl()
-    }
-
     /// Return dictionary build report
     pub fn report(&self) -> &[DictPartReport] {
         self.reporter.reports()
@@ -379,12 +382,60 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         self.user = user;
     }
 
+    fn make_resolver(&self) -> RawDictResolver {
+        let line_to_wid = self.lexicon.row_word_ids(if self.user { 1 } else { 0 });
+        RawDictResolver::new(self.lexicon.entries(), line_to_wid, self.user)
+    }
+
+    fn resolve_impl(&mut self) -> SudachiResult<usize> {
+        if !self.lexicon.needs_split_resolution() {
+            self.lexicon.ensure_resolved_entries()?;
+            self.resolved = true;
+            return Ok(0);
+        }
+
+        let this_resolver = self.make_resolver();
+        let report = ReportBuilder::new("resolve");
+
+        let cnt = match self.prebuilt.as_ref() {
+            Some(d) => {
+                let built_resolver = BinDictResolver::new(d)?;
+                let chained = ChainedResolver::new(built_resolver, this_resolver);
+                self.lexicon.resolve_splits(&chained)
+            }
+            None => self.lexicon.resolve_splits(&this_resolver),
+        };
+        let cnt = self.reporter.collect_r(cnt, report);
+        match cnt {
+            Ok(cnt) => {
+                self.resolved = true;
+                Ok(cnt)
+            }
+            Err((split_info, line)) => Err(DicBuildError {
+                file: "<entries>".to_owned(),
+                line,
+                cause: BuildFailure::InvalidSplitWordReference(split_info),
+            }
+            .into()),
+        }
+    }
+
+    /// Set signature.
+    /// System dictionary has a signature string and user dictionary has empty string.
     fn prepare_description_fields(&mut self) {
         if self.user {
             self.signature.clear();
         } else if self.signature.is_empty() {
             self.signature = default_signature(self.compile_time, &self.description);
         }
+    }
+
+    fn check_if_resolved(&self) -> SudachiResult<()> {
+        if self.lexicon.needs_split_resolution() && !self.resolved {
+            return self.ctx.err(BuildFailure::UnresolvedSplits);
+        }
+
+        Ok(())
     }
 
     fn align_to_block(&self, buffer: &mut Vec<u8>) {
@@ -483,52 +534,6 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             if value == 0 {
                 break;
             }
-        }
-    }
-
-    fn check_if_resolved(&self) -> SudachiResult<()> {
-        if self.lexicon.needs_split_resolution() && !self.resolved {
-            return self.ctx.err(BuildFailure::UnresolvedSplits);
-        }
-
-        Ok(())
-    }
-
-    fn make_resolver(&self) -> RawDictResolver {
-        let line_to_wid = self.lexicon.row_word_ids(if self.user { 1 } else { 0 });
-        RawDictResolver::new(self.lexicon.entries(), line_to_wid, self.user)
-    }
-
-    fn resolve_impl(&mut self) -> SudachiResult<usize> {
-        if !self.lexicon.needs_split_resolution() {
-            self.lexicon.ensure_resolved_entries()?;
-            self.resolved = true;
-            return Ok(0);
-        }
-
-        let this_resolver = self.make_resolver();
-        let report = ReportBuilder::new("resolve");
-
-        let cnt = match self.prebuilt.as_ref() {
-            Some(d) => {
-                let built_resolver = BinDictResolver::new(d)?;
-                let chained = ChainedResolver::new(built_resolver, this_resolver);
-                self.lexicon.resolve_splits(&chained)
-            }
-            None => self.lexicon.resolve_splits(&this_resolver),
-        };
-        let cnt = self.reporter.collect_r(cnt, report);
-        match cnt {
-            Ok(cnt) => {
-                self.resolved = true;
-                Ok(cnt)
-            }
-            Err((split_info, line)) => Err(DicBuildError {
-                file: "<entries>".to_owned(),
-                line,
-                cause: BuildFailure::InvalidSplitWordReference(split_info),
-            }
-            .into()),
         }
     }
 }
