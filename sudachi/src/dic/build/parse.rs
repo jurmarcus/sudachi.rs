@@ -46,8 +46,8 @@ where
     }
 }
 
-pub(crate) fn none_if_equal(surface: &str, data: Cow<str>) -> Option<String> {
-    if surface == data {
+pub(crate) fn none_if_equal(expected: &str, data: Cow<str>) -> Option<String> {
+    if expected == data {
         None
     } else {
         match data {

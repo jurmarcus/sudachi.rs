@@ -210,7 +210,7 @@ impl LexiconReader {
             + resolve_norm_form;
 
         if index_form.is_empty() {
-            return rec.ctx.err(BuildFailure::EmptySurface);
+            return rec.ctx.err(BuildFailure::EmptyIndexForm);
         }
 
         self.ctx = rec.ctx;
@@ -223,7 +223,7 @@ impl LexiconReader {
             norm_form,
             reading: none_if_equal(effective_headword.as_ref(), reading),
             headword: none_if_equal(&index_form, effective_headword),
-            surface: index_form,
+            index_form,
             pos,
             splitting,
             splits_a: split_a,
@@ -296,30 +296,30 @@ impl LexiconReader {
             Ok(WordRef::LineRef(parse_wordid(data)?))
         } else if data.matches(',').count() == 2 {
             let mut iter = data.splitn(3, ',');
-            let surface = it_next(data, &mut iter, "(1) surface", unescape)?;
+            let headword = it_next(data, &mut iter, "(1) headword", unescape)?;
             let pos = it_next(data, &mut iter, "(2) pos-id", parse_i16)?;
             let reading = it_next(data, &mut iter, "(3) reading", unescape_cow)?;
             Ok(WordRef::Inline {
                 pos: pos as u16,
-                reading: none_if_equal(&surface, reading),
-                surface,
+                reading: none_if_equal(&headword, reading),
+                headword,
             })
         } else {
             let mut iter = data.splitn(8, ',');
-            let surface = it_next(data, &mut iter, "(1) surface", unescape)?;
+            let headword = it_next(data, &mut iter, "(1) headword", unescape)?;
             let p1 = it_next(data, &mut iter, "(2) pos-1", unescape_cow)?;
             let p2 = it_next(data, &mut iter, "(3) pos-2", unescape_cow)?;
             let p3 = it_next(data, &mut iter, "(4) pos-3", unescape_cow)?;
             let p4 = it_next(data, &mut iter, "(5) pos-4", unescape_cow)?;
             let p5 = it_next(data, &mut iter, "(6) pos-conj-1", unescape_cow)?;
             let p6 = it_next(data, &mut iter, "(7) pos-conj-2", unescape_cow)?;
-            let reading = it_next(data, &mut iter, "(8) surface", unescape_cow)?;
+            let reading = it_next(data, &mut iter, "(8) reading", unescape_cow)?;
 
             let pos = self.pos_id_of([p1, p2, p3, p4, p5, p6])?;
             Ok(WordRef::Inline {
                 pos,
-                reading: none_if_equal(&surface, reading),
-                surface,
+                reading: none_if_equal(&headword, reading),
+                headword,
             })
         }
     }

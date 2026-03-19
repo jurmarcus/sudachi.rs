@@ -70,8 +70,13 @@ impl StringsCache {
         }
     }
 
-    pub fn new_with_single_string(surface: String) -> Self {
-        StringsCache::new_with_strings(surface.clone(), surface.clone(), surface.clone(), surface)
+    pub fn new_with_single_string(headword: String) -> Self {
+        StringsCache::new_with_strings(
+            headword.clone(),
+            headword.clone(),
+            headword.clone(),
+            headword,
+        )
     }
 }
 

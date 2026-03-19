@@ -68,7 +68,7 @@ impl LexiconReader {
             left_id: entry.left_id,
             right_id: entry.right_id,
             cost: entry.cost,
-            surface: entry.surface,
+            index_form: entry.index_form,
             headword: entry.headword,
             dic_form,
             norm_form,
@@ -176,7 +176,7 @@ impl LexiconReader {
             left_id: entry.left_id,
             right_id: entry.right_id,
             cost: entry.cost,
-            surface: entry.surface.clone(),
+            index_form: entry.index_form.clone(),
             headword: entry.headword.clone(),
             dic_form: match dic_form {
                 ResolvedDicForm::Ref(wid) => WordRef::Ref(wid),
@@ -198,7 +198,7 @@ impl LexiconReader {
             left_id: entry.left_id,
             right_id: entry.right_id,
             cost: entry.cost,
-            surface: entry.surface,
+            index_form: entry.index_form,
             headword: entry.headword,
             dic_form,
             norm_form,
@@ -307,14 +307,14 @@ impl LexiconReader {
             WordRef::LineRef(id) => id.as_raw().to_string(),
             WordRef::Headword(h) => h.clone(),
             WordRef::Inline {
-                surface,
+                headword,
                 pos,
                 reading,
             } => format!(
                 "{},{:?},{}",
-                surface,
+                headword,
                 self.pos_obj(*pos).unwrap(),
-                reading.as_ref().unwrap_or(surface)
+                reading.as_ref().unwrap_or(headword)
             ),
         }
     }

@@ -254,9 +254,9 @@ impl ResolvedLexiconEntry {
             ResolvedDicForm::SelfRef => self_word_id,
         };
 
-        if self.surface.len() > i16::MAX as usize {
+        if self.index_form.len() > i16::MAX as usize {
             return Err(BuildFailure::InvalidFieldSize {
-                actual: self.surface.len(),
+                actual: self.index_form.len(),
                 expected: i16::MAX as usize,
                 field: "index_form_length",
             });
@@ -270,7 +270,7 @@ impl ResolvedLexiconEntry {
             reading_form_strptr: reading_strptr,
             normalized_form: norm_form_word_id.as_raw(),
             dictionary_form: dic_form_word_id.as_raw(),
-            index_form_length: self.surface.len() as i16,
+            index_form_length: self.index_form.len() as i16,
             c_unit_split_length: variable.c_unit_split_length,
             b_unit_split_length: variable.b_unit_split_length,
             a_unit_split_length: variable.a_unit_split_length,

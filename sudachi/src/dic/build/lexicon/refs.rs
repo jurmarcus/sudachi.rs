@@ -25,7 +25,7 @@ pub(crate) enum WordRef {
     LineRef(WordId),
     Headword(String),
     Inline {
-        surface: String,
+        headword: String,
         pos: u16,
         reading: Option<String>,
     },
@@ -45,10 +45,10 @@ pub(crate) trait WordRefResolver {
             WordRef::LineRef(line_ref) => self.resolve_by_line_ref(*line_ref),
             WordRef::Headword(headword) => self.resolve_by_headword(headword),
             WordRef::Inline {
-                surface,
+                headword,
                 pos,
                 reading,
-            } => self.resolve_inline(surface, *pos, reading.as_deref()),
+            } => self.resolve_inline(headword, *pos, reading.as_deref()),
         }
     }
 
@@ -56,7 +56,7 @@ pub(crate) trait WordRefResolver {
 
     fn resolve_by_headword(&self, headword: &str) -> Option<WordId>;
 
-    fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId>;
+    fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>) -> Option<WordId>;
 
     fn resolve_headword(&self, _wid: WordId) -> Option<String> {
         None

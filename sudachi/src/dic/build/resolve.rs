@@ -23,7 +23,7 @@ use crate::error::SudachiResult;
 use crate::util::fxhash::FxBuildHasher;
 use std::collections::HashMap;
 
-// HashMap from surface to (pos_id, reading_form, word-id)s
+// HashMap from headword to (pos_id, reading_form, word-id)s
 type ResolutionCandidateMap<T> = HashMap<T, Vec<(u16, Option<T>, WordId)>, FxBuildHasher>;
 
 pub(crate) trait ResolverEntryView {
@@ -120,8 +120,8 @@ impl WordRefResolver for BinDictResolver {
             .and_then(|v| v.first().map(|(_, _, wid)| *wid))
     }
 
-    fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
-        self.index.get(surface).and_then(|v| {
+    fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
+        self.index.get(headword).and_then(|v| {
             for (p, rd, wid) in v {
                 if *p == pos && reading.eq(&rd.as_deref()) {
                     return Some(*wid);
@@ -155,10 +155,10 @@ impl RawDictResolver {
         let dic_id = if user { 1 } else { 0 };
 
         for (i, e) in entries.iter().enumerate() {
-            let surface = e.headword().to_owned();
+            let headword = e.headword().to_owned();
             let reading = e.reading().to_owned();
             let wid = line_to_wid[i];
-            headwords.push(surface.clone());
+            headwords.push(headword.clone());
 
             let read_opt = if e.headword() == reading {
                 None
@@ -166,7 +166,7 @@ impl RawDictResolver {
                 Some(reading)
             };
 
-            data.entry(surface)
+            data.entry(headword)
                 .or_default()
                 .push((e.pos_id(), read_opt, wid));
         }
@@ -196,8 +196,8 @@ impl WordRefResolver for RawDictResolver {
             .and_then(|v| v.first().map(|(_, _, wid)| *wid))
     }
 
-    fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
-        self.data.get(surface).and_then(|data| {
+    fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
+        self.data.get(headword).and_then(|data| {
             for (p, rd, wid) in data {
                 if *p == pos && rd.as_deref() == reading {
                     return Some(*wid);
@@ -243,10 +243,10 @@ impl<A: WordRefResolver, B: WordRefResolver> WordRefResolver for ChainedResolver
             .or_else(|| self.b.resolve_by_headword(headword))
     }
 
-    fn resolve_inline(&self, surface: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
+    fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>) -> Option<WordId> {
         self.a
-            .resolve_inline(surface, pos, reading)
-            .or_else(|| self.b.resolve_inline(surface, pos, reading))
+            .resolve_inline(headword, pos, reading)
+            .or_else(|| self.b.resolve_inline(headword, pos, reading))
     }
 
     fn resolve_headword(&self, wid: WordId) -> Option<String> {
@@ -298,7 +298,7 @@ mod tests {
 
         fn resolve_inline(
             &self,
-            _surface: &str,
+            _headword: &str,
             _pos: u16,
             _reading: Option<&str>,
         ) -> Option<WordId> {
@@ -329,7 +329,7 @@ mod tests {
         );
         assert_eq!(
             chained.resolve(&WordRef::Inline {
-                surface: "京都".to_string(),
+                headword: "京都".to_string(),
                 pos: 0,
                 reading: None,
             }),

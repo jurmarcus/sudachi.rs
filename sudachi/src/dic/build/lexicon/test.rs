@@ -66,7 +66,7 @@ fn parse_split_inline() {
     assert_eq!(
         splits[1],
         WordRef::Inline {
-            surface: "あ".to_string(),
+            headword: "あ".to_string(),
             pos: 0,
             reading: None
         }
@@ -84,7 +84,7 @@ fn parse_split_inline_pos_id() {
     assert_eq!(
         splits[1],
         WordRef::Inline {
-            surface: "あ".to_string(),
+            headword: "あ".to_string(),
             pos: 0,
             reading: None
         }
@@ -112,7 +112,7 @@ fn parse_kyoto() {
     let entries = rdr.entries();
     assert_eq!(entries.len(), 1);
     let kyoto = &entries[0];
-    assert_eq!("京都", kyoto.surface);
+    assert_eq!("京都", kyoto.index_form);
     assert_eq!(0, kyoto.pos);
     assert_eq!(
         "名詞,固有名詞,地名,一般,*,*",
@@ -144,7 +144,7 @@ fn parse_header_with_pos_id_only() {
     let before = rdr.entries().len();
     rdr.read_bytes(data.as_bytes()).unwrap();
     let kyoto = &rdr.entries()[before];
-    assert_eq!(kyoto.surface, "京都");
+    assert_eq!(kyoto.index_form, "京都");
     assert_eq!(kyoto.pos, 0);
 }
 
@@ -255,7 +255,7 @@ fn parse_dictionary_form_inline_self_reference_is_not_rewritten_to_selfref() {
     assert_eq!(
         rdr.entries()[1].dic_form,
         WordRef::Inline {
-            surface: "京都".to_string(),
+            headword: "京都".to_string(),
             pos: 0,
             reading: Some("キョウト".to_string()),
         }
@@ -451,7 +451,7 @@ fn parse_kyoto_not_enough_fields() {
 }
 
 #[test]
-fn parse_kyoto_ignored_empty_surface() {
+fn parse_kyoto_ignored_empty_index_form() {
     let mut rdr = LexiconReader::new();
     let data = concat!(
         "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
@@ -460,7 +460,7 @@ fn parse_kyoto_ignored_empty_surface() {
     assert_matches!(
         rdr.read_bytes(data.as_bytes()),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::EmptySurface,
+            cause: BuildFailure::EmptyIndexForm,
             line: 2,
             ..
         }))

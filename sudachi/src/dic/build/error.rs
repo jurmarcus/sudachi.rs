@@ -73,8 +73,8 @@ pub enum BuildFailure {
         original: String,
     },
 
-    #[error("Surface can't be empty")]
-    EmptySurface,
+    #[error("IndexForm can't be empty")]
+    EmptyIndexForm,
 
     #[error("Maximum number of POS (2^15-1) exceeded with {0}")]
     PosLimitExceeded(String),

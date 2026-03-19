@@ -26,7 +26,7 @@ pub(crate) struct ParsedLexiconEntry {
     pub left_id: i16,
     pub right_id: i16,
     pub cost: i16,
-    pub surface: String,
+    pub index_form: String,
     pub headword: Option<String>,
     pub dic_form: WordRef,
     pub norm_form: Option<NormFormValue>,
@@ -54,7 +54,7 @@ pub(crate) struct ResolvedLexiconEntry {
     pub left_id: i16,
     pub right_id: i16,
     pub cost: i16,
-    pub surface: String,
+    pub index_form: String,
     pub headword: Option<String>,
     pub dic_form: ResolvedDicForm,
     pub norm_form: Option<String>,
@@ -75,8 +75,8 @@ pub(crate) struct ResolvedLexiconEntry {
 impl ParsedLexiconEntry {
     pub(super) fn make_phantom(base: &ParsedLexiconEntry, headword: String) -> Self {
         Self {
-            // keep surface empty so this entry is not indexable and only used for reference resolution.
-            surface: String::new(),
+            // keep index_form empty so this entry is not indexable and only used for reference resolution.
+            index_form: String::new(),
             headword: Some(headword),
             left_id: -1,
             right_id: -1,
@@ -95,12 +95,14 @@ impl ParsedLexiconEntry {
         }
     }
 
-    pub fn surface(&self) -> &str {
-        &self.surface
+    pub fn index_form(&self) -> &str {
+        &self.index_form
     }
 
     pub fn headword(&self) -> &str {
-        self.headword.as_deref().unwrap_or_else(|| self.surface())
+        self.headword
+            .as_deref()
+            .unwrap_or_else(|| self.index_form())
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
@@ -145,7 +147,7 @@ impl ParsedLexiconEntry {
 impl ResolvedLexiconEntry {
     pub(super) fn make_phantom(base: &ResolvedLexiconEntry, headword: String) -> Self {
         Self {
-            surface: String::new(),
+            index_form: String::new(),
             headword: Some(headword),
             left_id: -1,
             right_id: -1,
@@ -165,15 +167,17 @@ impl ResolvedLexiconEntry {
     }
 
     pub fn is_phantom(&self) -> bool {
-        self.surface.is_empty()
+        self.index_form.is_empty()
     }
 
-    pub fn surface(&self) -> &str {
-        &self.surface
+    pub fn index_form(&self) -> &str {
+        &self.index_form
     }
 
     pub fn headword(&self) -> &str {
-        self.headword.as_deref().unwrap_or_else(|| self.surface())
+        self.headword
+            .as_deref()
+            .unwrap_or_else(|| self.index_form())
     }
 
     #[allow(dead_code)]
@@ -293,7 +297,7 @@ mod tests {
             left_id: 1,
             right_id: 2,
             cost: 3,
-            surface: "東京".to_string(),
+            index_form: "東京".to_string(),
             headword: Some("京都".to_string()),
             dic_form: ResolvedDicForm::SelfRef,
             norm_form: None,

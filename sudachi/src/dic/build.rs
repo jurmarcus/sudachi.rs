@@ -461,7 +461,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             .zip(entry_ids.into_iter())
         {
             if e.should_index() {
-                index.add(e.surface(), wid);
+                index.add(e.index_form(), wid);
             } else if !e.is_phantom() {
                 non_indexed.push(wid);
             }
