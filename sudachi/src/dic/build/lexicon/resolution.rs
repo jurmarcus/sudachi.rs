@@ -14,14 +14,16 @@
  *  limitations under the License.
  */
 
+use std::collections::HashMap;
+
 use crate::dic::build::error::BuildFailure;
 use crate::dic::word_id::{WordId, WordRef as DicWordRef};
 use crate::dic::word_info::WordInfos;
 use crate::error::SudachiResult;
 
 use super::{
-    LexiconReader, NormFormValue, ParsedLexiconEntry, ResolvedDicForm, ResolvedLexiconEntry,
-    WordRef, WordRefResolver,
+    LexiconReader, ParsedLexiconEntry, ResolvedLexiconEntry, ResolvedWordRef, WordRef,
+    WordRefResolver,
 };
 
 impl LexiconReader {
@@ -53,16 +55,14 @@ impl LexiconReader {
 
     fn parsed_entry_to_resolved(entry: ParsedLexiconEntry) -> Result<ResolvedLexiconEntry, String> {
         let dic_form = match entry.dic_form {
-            WordRef::Ref(wref) => ResolvedDicForm::Ref(wref),
-            WordRef::SelfRef => ResolvedDicForm::SelfRef,
+            WordRef::Ref(wref) => ResolvedWordRef::Ref(wref),
+            WordRef::SelfRef => ResolvedWordRef::SelfRef,
             other => return Err(format!("unresolved dictionary_form: {:?}", other)),
         };
         let norm_form = match entry.norm_form {
-            None => None,
-            Some(NormFormValue::Value(v)) => Some(v),
-            Some(NormFormValue::Ref(other)) => {
-                return Err(format!("unresolved normalized_form: {:?}", other))
-            }
+            WordRef::SelfRef => ResolvedWordRef::SelfRef,
+            WordRef::Ref(wref) => ResolvedWordRef::Ref(wref),
+            other => return Err(format!("unresolved normalized_form: {:?}", other)),
         };
         Ok(ResolvedLexiconEntry {
             left_id: entry.left_id,
@@ -98,20 +98,39 @@ impl LexiconReader {
     pub(crate) fn resolve_entries<R: WordRefResolver>(
         &mut self,
         resolver: &R,
+        user: bool,
     ) -> Result<usize, (String, usize)> {
         let mut total = 0;
         let mut resolved_parsed = Vec::with_capacity(self.parsed_entries.len());
         let mut resolved_entries = Vec::with_capacity(self.parsed_entries.len());
         let mut phantom_parsed: Vec<ParsedLexiconEntry> = Vec::new();
         let mut phantom_resolved: Vec<ResolvedLexiconEntry> = Vec::new();
+        let mut phantom_headwords: HashMap<String, DicWordRef> = HashMap::new();
+        let mut next_phantom_offset =
+            (self.next_entry_id() as usize) << WordInfos::WORD_ID_ALIGNMENT_BITS;
         for (line, entry) in self.parsed_entries.iter().cloned().enumerate() {
             let (parsed, resolved, resolved_count, phantom_headword) = self
-                .resolve_entry(entry, resolver, &phantom_parsed)
+                .resolve_entry(
+                    entry,
+                    resolver,
+                    &phantom_headwords,
+                    next_phantom_offset,
+                    user,
+                )
                 .map_err(|split_info| (split_info, line))?;
             total += resolved_count;
             if let Some(headword) = phantom_headword {
                 phantom_parsed.push(ParsedLexiconEntry::make_phantom(&parsed, headword.clone()));
                 phantom_resolved.push(ResolvedLexiconEntry::make_phantom(&resolved, headword));
+                let phantom_ref = DicWordRef::new(
+                    !user,
+                    (next_phantom_offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32,
+                );
+                phantom_headwords.insert(
+                    phantom_parsed.last().unwrap().headword().to_owned(),
+                    phantom_ref,
+                );
+                next_phantom_offset += phantom_parsed.last().unwrap().expected_entry_size();
             }
             resolved_parsed.push(parsed);
             resolved_entries.push(resolved);
@@ -150,7 +169,9 @@ impl LexiconReader {
         &self,
         entry: ParsedLexiconEntry,
         resolver: &R,
-        phantoms: &[ParsedLexiconEntry],
+        phantom_headwords: &HashMap<String, DicWordRef>,
+        next_phantom_offset: usize,
+        user: bool,
     ) -> Result<
         (
             ParsedLexiconEntry,
@@ -161,8 +182,14 @@ impl LexiconReader {
         String,
     > {
         let mut total = 0;
-        let (norm_form, phantom_headword) =
-            self.resolve_norm_form(&entry, resolver, phantoms, &mut total)?;
+        let (norm_form, phantom_headword) = self.resolve_norm_form(
+            &entry,
+            resolver,
+            phantom_headwords,
+            next_phantom_offset,
+            user,
+            &mut total,
+        )?;
         let dic_form = self
             .resolve_dic_form_ref(&entry.dic_form, resolver, &mut total)
             .map_err(|r| self.format_word_ref(&r))?;
@@ -186,10 +213,13 @@ impl LexiconReader {
             index_form: entry.index_form.clone(),
             headword: entry.headword.clone(),
             dic_form: match dic_form {
-                ResolvedDicForm::Ref(wref) => WordRef::Ref(wref),
-                ResolvedDicForm::SelfRef => WordRef::SelfRef,
+                ResolvedWordRef::Ref(wref) => WordRef::Ref(wref),
+                ResolvedWordRef::SelfRef => WordRef::SelfRef,
             },
-            norm_form: norm_form.clone().map(NormFormValue::Value),
+            norm_form: match norm_form {
+                ResolvedWordRef::Ref(wref) => WordRef::Ref(wref),
+                ResolvedWordRef::SelfRef => WordRef::SelfRef,
+            },
             pos: entry.pos,
             splits_a: splits_a.iter().copied().map(WordRef::Ref).collect(),
             splits_b: splits_b.iter().copied().map(WordRef::Ref).collect(),
@@ -223,53 +253,40 @@ impl LexiconReader {
         Ok((parsed, resolved, total, phantom_headword))
     }
 
-    fn has_headword(&self, headword: &str) -> bool {
-        self.parsed_entries.iter().any(|e| e.headword() == headword)
-    }
-
     fn resolve_norm_form<R: WordRefResolver>(
         &self,
         entry: &ParsedLexiconEntry,
         resolver: &R,
-        phantoms: &[ParsedLexiconEntry],
+        phantom_headwords: &HashMap<String, DicWordRef>,
+        next_phantom_offset: usize,
+        user: bool,
         total: &mut usize,
-    ) -> Result<(Option<String>, Option<String>), String> {
-        match entry.norm_form.as_ref() {
-            None => Ok((None, None)),
-            Some(NormFormValue::Value(v)) => Ok((Some(v.clone()), None)),
-            Some(NormFormValue::Ref(WordRef::Headword(headword))) => {
-                if resolver.resolve_by_headword(headword).is_none()
-                    && !self.has_headword(headword)
-                    && !phantoms.iter().any(|p| p.headword() == headword)
+    ) -> Result<(ResolvedWordRef, Option<String>), String> {
+        match &entry.norm_form {
+            WordRef::SelfRef => Ok((ResolvedWordRef::SelfRef, None)),
+            WordRef::Headword(headword) => {
+                *total += 1;
+                if let Some(wref) = resolver
+                    .resolve_by_headword(headword)
+                    .or_else(|| phantom_headwords.get(headword).copied())
                 {
-                    *total += 1;
-                    if headword == entry.headword() {
-                        Ok((None, Some(headword.clone())))
-                    } else {
-                        Ok((Some(headword.clone()), Some(headword.clone())))
-                    }
-                } else {
-                    *total += 1;
-                    if headword == entry.headword() {
-                        Ok((None, None))
-                    } else {
-                        Ok((Some(headword.clone()), None))
-                    }
+                    return Ok((ResolvedWordRef::Ref(wref), None));
                 }
+
+                // If the given string does not found in the resolver/previous entries,
+                // add phantom entry with that headword.
+                let phantom_ref = DicWordRef::new(
+                    !user,
+                    (next_phantom_offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32,
+                );
+                Ok((ResolvedWordRef::Ref(phantom_ref), Some(headword.to_owned())))
             }
-            Some(NormFormValue::Ref(word_ref)) => {
+            word_ref => {
                 let wref = resolver
                     .resolve(word_ref)
                     .ok_or_else(|| self.format_word_ref(word_ref))?;
                 *total += 1;
-                let headword = resolver
-                    .resolve_headword(wref)
-                    .ok_or_else(|| self.format_word_ref(&WordRef::Ref(wref)))?;
-                if headword == entry.headword() {
-                    Ok((None, None))
-                } else {
-                    Ok((Some(headword), None))
-                }
+                Ok((ResolvedWordRef::Ref(wref), None))
             }
         }
     }
@@ -279,14 +296,14 @@ impl LexiconReader {
         word_ref: &WordRef,
         resolver: &R,
         total: &mut usize,
-    ) -> Result<ResolvedDicForm, WordRef> {
+    ) -> Result<ResolvedWordRef, WordRef> {
         match word_ref {
-            WordRef::SelfRef => Ok(ResolvedDicForm::SelfRef),
-            WordRef::Ref(wref) => Ok(ResolvedDicForm::Ref(*wref)),
+            WordRef::SelfRef => Ok(ResolvedWordRef::SelfRef),
+            WordRef::Ref(wref) => Ok(ResolvedWordRef::Ref(*wref)),
             other => {
                 let wref = resolver.resolve(other).ok_or_else(|| other.clone())?;
                 *total += 1;
-                Ok(ResolvedDicForm::Ref(wref))
+                Ok(ResolvedWordRef::Ref(wref))
             }
         }
     }

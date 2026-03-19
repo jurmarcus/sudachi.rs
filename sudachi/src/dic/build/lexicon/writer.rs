@@ -14,7 +14,6 @@
  *  limitations under the License.
  */
 
-use std::collections::HashMap;
 use std::io::Write;
 
 use crate::dic::build::error::{BuildFailure, DicCompilationCtx, DicWriteResult};
@@ -25,7 +24,7 @@ use crate::dic::word_info::{WordInfoFixedData, WordInfoVariableData, WordInfos};
 use crate::error::SudachiResult;
 
 use super::entry::ResolvedLexiconEntry;
-use super::{LexiconReader, ResolvedDicForm, StringStore};
+use super::{LexiconReader, ResolvedWordRef, StringStore};
 
 pub struct LexiconWriter<'a> {
     entries: &'a [ResolvedLexiconEntry],
@@ -56,45 +55,16 @@ impl<'a> LexiconWriter<'a> {
         w.write_all(&[0u8; LexiconReader::ENTRY_INITIAL_OFFSET])?;
 
         let rep = ReportBuilder::new("entries");
-        let mut offset = LexiconReader::ENTRY_INITIAL_OFFSET;
-        let mut headword_to_ref = HashMap::with_capacity(self.entries.len());
-        for e in self.entries {
-            let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
-            let wref = WordRef::new(!self.user, entry_id);
-            headword_to_ref.insert(e.headword().to_owned(), wref);
-            offset += e.expected_entry_size();
-        }
-
         ctx.set_line(0);
         let mut offset = LexiconReader::ENTRY_INITIAL_OFFSET;
         for e in self.entries {
             let entry_id = (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32;
             let self_word_ref = WordRef::new(!self.user, entry_id);
-            let norm_form_word_ref = match e.norm_form.as_ref() {
-                None => self_word_ref,
-                Some(headword) => {
-                    if headword == e.headword() {
-                        self_word_ref
-                    } else if let Some(wref) = headword_to_ref.get(headword) {
-                        *wref
-                    } else {
-                        return ctx.err(BuildFailure::InvalidSplitWordReference(format!(
-                            "normalized_form headword not found: {}",
-                            headword
-                        )));
-                    }
-                }
-            };
             let headword_strptr = self.strings.resolve(e.headword());
             let reading_strptr = self.strings.resolve(e.reading());
             total += ctx.transform(e.write_params(w))?;
-            total += ctx.transform(e.write_rest(
-                w,
-                self_word_ref,
-                norm_form_word_ref,
-                headword_strptr,
-                reading_strptr,
-            ))?;
+            total +=
+                ctx.transform(e.write_rest(w, self_word_ref, headword_strptr, reading_strptr))?;
             let expected_end = offset + e.expected_entry_size();
             if total > expected_end {
                 return ctx.err(BuildFailure::InvalidSize {
@@ -142,10 +112,17 @@ impl LexiconReader {
             }
 
             match e.dic_form {
-                ResolvedDicForm::Ref(wref) => {
+                ResolvedWordRef::Ref(wref) => {
                     ctx.transform(Self::validate_wref(wref, max_0, max_1, "dic_form"))?;
                 }
-                ResolvedDicForm::SelfRef => {}
+                ResolvedWordRef::SelfRef => {}
+            }
+
+            match e.norm_form {
+                ResolvedWordRef::Ref(wref) => {
+                    ctx.transform(Self::validate_wref(wref, max_0, max_1, "norm_form"))?;
+                }
+                ResolvedWordRef::SelfRef => {}
             }
 
             for wref in e.splits_a.iter().copied() {
@@ -235,13 +212,16 @@ impl ResolvedLexiconEntry {
         &self,
         w: &mut W,
         self_word_ref: WordRef,
-        norm_form_word_ref: WordRef,
         headword_strptr: StringPointer,
         reading_strptr: StringPointer,
     ) -> DicWriteResult<usize> {
         let dic_form_word_ref = match self.dic_form {
-            ResolvedDicForm::Ref(wref) => wref,
-            ResolvedDicForm::SelfRef => self_word_ref,
+            ResolvedWordRef::Ref(wref) => wref,
+            ResolvedWordRef::SelfRef => self_word_ref,
+        };
+        let norm_form_word_ref = match self.norm_form {
+            ResolvedWordRef::Ref(wref) => wref,
+            ResolvedWordRef::SelfRef => self_word_ref,
         };
 
         if self.index_form.len() > i16::MAX as usize {

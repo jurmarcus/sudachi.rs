@@ -19,7 +19,7 @@ use crate::dic::word_id::WordRef as DicWordRef;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum WordRef {
     Ref(DicWordRef),
-    // explicit self-reference used for dictionary_form omission.
+    // explicit self-reference used for dictionary_form/normalized_form omission.
     SelfRef,
     LineRef(DicWordRef),
     Headword(String),
@@ -30,14 +30,8 @@ pub(crate) enum WordRef {
     },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) enum NormFormValue {
-    Value(String),
-    Ref(WordRef),
-}
-
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub(crate) enum ResolvedDicForm {
+pub(crate) enum ResolvedWordRef {
     Ref(DicWordRef),
     SelfRef,
 }
@@ -61,7 +55,8 @@ pub(crate) trait WordRefResolver {
 
     fn resolve_by_headword(&self, headword: &str) -> Option<DicWordRef>;
 
-    fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>) -> Option<DicWordRef>;
+    fn resolve_inline(&self, headword: &str, pos: u16, reading: Option<&str>)
+        -> Option<DicWordRef>;
 
     fn resolve_headword(&self, _wref: DicWordRef) -> Option<String> {
         None

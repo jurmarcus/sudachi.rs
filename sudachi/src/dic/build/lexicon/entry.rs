@@ -19,7 +19,7 @@ use crate::dic::build::error::{BuildFailure, DicWriteResult};
 use crate::dic::word_id::WordRef as DicWordRef;
 use crate::dic::word_info::{layout, WordInfoVariableLayout};
 
-use super::refs::{NormFormValue, ResolvedDicForm, WordRef};
+use super::refs::{ResolvedWordRef, WordRef};
 
 /// Entry parsed from the lexicon CSV.
 ///
@@ -33,7 +33,7 @@ pub(crate) struct ParsedLexiconEntry {
     pub index_form: String,
     pub headword: Option<String>,
     pub dic_form: WordRef,
-    pub norm_form: Option<NormFormValue>,
+    pub norm_form: WordRef,
     pub pos: u16,
     pub splits_a: Vec<WordRef>,
     pub splits_b: Vec<WordRef>,
@@ -58,8 +58,8 @@ pub(crate) struct ResolvedLexiconEntry {
     pub cost: i16,
     pub index_form: String,
     pub headword: Option<String>,
-    pub dic_form: ResolvedDicForm,
-    pub norm_form: Option<String>,
+    pub dic_form: ResolvedWordRef,
+    pub norm_form: ResolvedWordRef,
     pub pos: u16,
     pub splits_a: Vec<DicWordRef>,
     pub splits_b: Vec<DicWordRef>,
@@ -86,7 +86,7 @@ impl ParsedLexiconEntry {
             pos: base.pos,
             reading: base.reading.clone(),
             dic_form: base.dic_form.clone(),
-            norm_form: None,
+            norm_form: WordRef::SelfRef,
             splitting: base.splitting,
             splits_a: base.splits_a.clone(),
             splits_b: base.splits_b.clone(),
@@ -109,10 +109,10 @@ impl ParsedLexiconEntry {
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn norm_form(&self) -> &str {
-        match self.norm_form.as_ref() {
-            None => self.headword(),
-            Some(NormFormValue::Value(s)) => s,
-            Some(NormFormValue::Ref(_)) => {
+        match &self.norm_form {
+            WordRef::SelfRef => self.headword(),
+            WordRef::Headword(s) => s,
+            _ => {
                 panic!("normalized_form must be resolved before writing")
             }
         }
@@ -157,7 +157,7 @@ impl ResolvedLexiconEntry {
             pos: base.pos,
             reading: base.reading.clone(),
             dic_form: base.dic_form,
-            norm_form: None,
+            norm_form: ResolvedWordRef::SelfRef,
             splitting: base.splitting,
             splits_a: base.splits_a.clone(),
             splits_b: base.splits_b.clone(),
@@ -184,7 +184,12 @@ impl ResolvedLexiconEntry {
 
     #[allow(dead_code)]
     pub fn norm_form(&self) -> &str {
-        self.norm_form.as_deref().unwrap_or_else(|| self.headword())
+        match self.norm_form {
+            ResolvedWordRef::SelfRef => self.headword(),
+            ResolvedWordRef::Ref(_) => {
+                panic!("normalized_form must be resolved through the serialized word reference")
+            }
+        }
     }
 
     pub fn reading(&self) -> &str {
@@ -301,8 +306,8 @@ mod tests {
             cost: 3,
             index_form: "東京".to_string(),
             headword: Some("京都".to_string()),
-            dic_form: ResolvedDicForm::SelfRef,
-            norm_form: None,
+            dic_form: ResolvedWordRef::SelfRef,
+            norm_form: ResolvedWordRef::Ref(DicWordRef::new(true, 13)),
             pos: 4,
             splits_a: vec![DicWordRef::new(true, 5), DicWordRef::new(true, 6)],
             splits_b: vec![DicWordRef::new(true, 7)],
@@ -315,7 +320,6 @@ mod tests {
         };
 
         let self_word_id = DicWordRef::new(true, 12);
-        let norm_form_word_id = DicWordRef::new(true, 13);
         let headword = StringPointer::unchecked(2, 0);
         let reading = StringPointer::unchecked(5, 2);
 
@@ -324,7 +328,6 @@ mod tests {
             .write_rest(
                 &mut bytes,
                 self_word_id,
-                norm_form_word_id,
                 headword,
                 reading,
             )
@@ -334,7 +337,7 @@ mod tests {
         let wi = parser.parse(&bytes).unwrap();
         assert_eq!(wi.pos_id, 4);
         assert_eq!(wi.dictionary_form, self_word_id.as_raw());
-        assert_eq!(wi.normalized_form, norm_form_word_id.as_raw());
+        assert_eq!(wi.normalized_form, DicWordRef::new(true, 13).as_raw());
         assert_eq!(
             wi.a_unit_split,
             &[

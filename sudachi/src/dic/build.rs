@@ -401,9 +401,9 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             Some(d) => {
                 let built_resolver = BinDictResolver::new(d)?;
                 let chained = ChainedResolver::new(built_resolver, this_resolver);
-                self.lexicon.resolve_entries(&chained)
+                self.lexicon.resolve_entries(&chained, self.user)
             }
-            None => self.lexicon.resolve_entries(&this_resolver),
+            None => self.lexicon.resolve_entries(&this_resolver, self.user),
         };
         let cnt = self.reporter.collect_r(cnt, report);
         match cnt {

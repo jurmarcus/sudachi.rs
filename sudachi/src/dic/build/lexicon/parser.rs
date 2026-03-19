@@ -33,7 +33,7 @@ use crate::dic::pos::POS_DEPTH;
 use crate::error::SudachiResult;
 
 use super::layout::{Column, ColumnLayout, RecordWrapper};
-use super::{LexiconReader, NormFormValue, ParsedLexiconEntry, StrPosEntry, WordRef};
+use super::{LexiconReader, ParsedLexiconEntry, StrPosEntry, WordRef};
 
 impl LexiconReader {
     pub fn read_pos_file(&mut self, path: &Path) -> SudachiResult<usize> {
@@ -199,9 +199,11 @@ impl LexiconReader {
         let (dic_form, resolve_dic_form) = rec
             .ctx
             .transform(self.parse_dic_form(&dic_form_ref, allow_word_id_ref))?;
-        let (norm_form, resolve_norm_form) = rec
-            .ctx
-            .transform(self.parse_norm_form(&normalized, effective_headword.as_ref()))?;
+        let (norm_form, resolve_norm_form) = rec.ctx.transform(self.parse_norm_form(
+            &normalized,
+            effective_headword.as_ref(),
+            layout.is_legacy(),
+        ))?;
         self.unresolved += resolve_a
             + resolve_b
             + resolve_c
@@ -351,21 +353,22 @@ impl LexiconReader {
         &mut self,
         data: &str,
         headword: &str,
-    ) -> DicWriteResult<(Option<NormFormValue>, usize)> {
-        if data.is_empty() || data == "*" {
-            return Ok((None, 0));
+        allow_asterisk: bool,
+    ) -> DicWriteResult<(WordRef, usize)> {
+        if data.is_empty() || (allow_asterisk && data == "*") {
+            return Ok((WordRef::SelfRef, 0));
         }
 
         if data.matches(',').count() == 2 || data.matches(',').count() == 7 {
             let parsed = self.parse_split(data, false)?;
-            return Ok((Some(NormFormValue::Ref(parsed)), 1));
+            return Ok((parsed, 1));
         }
 
         let normalized = unescape(data)?;
         if normalized == headword {
-            Ok((None, 0))
+            Ok((WordRef::SelfRef, 0))
         } else {
-            Ok((Some(NormFormValue::Ref(WordRef::Headword(normalized))), 1))
+            Ok((WordRef::Headword(normalized), 1))
         }
     }
 }

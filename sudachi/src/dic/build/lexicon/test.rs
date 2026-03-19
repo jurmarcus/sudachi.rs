@@ -124,7 +124,7 @@ fn parse_kyoto() {
     assert_eq!("キョウト", kyoto.reading());
     assert_eq!(Some("キョウト"), kyoto.reading.as_deref());
     assert_eq!("京都", kyoto.norm_form());
-    assert_eq!(None, kyoto.norm_form);
+    assert_eq!(WordRef::SelfRef, kyoto.norm_form);
     assert_eq!(Mode::A, kyoto.splitting);
     assert_eq!(0, kyoto.splits_a.len());
     assert_eq!(0, kyoto.splits_b.len());
@@ -224,8 +224,9 @@ fn resolve_header_normalized_form_ref() {
     );
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
+    let refs = bldr.lexicon.row_word_refs(false);
     let e = &bldr.lexicon.entries()[1];
-    assert_eq!(e.norm_form(), "東京");
+    assert_eq!(e.norm_form, WordRef::Ref(refs[0]));
 }
 
 #[test]
@@ -238,8 +239,9 @@ fn resolve_header_normalized_form_headword_ref() {
     );
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
+    let refs = bldr.lexicon.row_word_refs(false);
     let e = &bldr.lexicon.entries()[1];
-    assert_eq!(e.norm_form(), "東京");
+    assert_eq!(e.norm_form, WordRef::Ref(refs[0]));
 }
 
 #[test]
@@ -395,8 +397,9 @@ fn resolve_header_normalized_form_literal_without_target() {
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
     assert_eq!(bldr.lexicon.entries().len(), 2);
+    let refs = bldr.lexicon.row_word_refs(false);
     let e = &bldr.lexicon.entries()[0];
-    assert_eq!(e.norm_form(), "舞台芸術");
+    assert_eq!(e.norm_form, WordRef::Ref(refs[1]));
     let phantom = &bldr.lexicon.entries()[1];
     assert_eq!(phantom.headword(), "舞台芸術");
     assert!(!phantom.should_index());
