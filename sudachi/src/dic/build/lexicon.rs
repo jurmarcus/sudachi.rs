@@ -178,12 +178,4 @@ impl LexiconReader {
         }
         (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32
     }
-
-    pub(crate) fn next_resolved_entry_id(&self) -> u32 {
-        let mut offset = Self::ENTRY_INITIAL_OFFSET;
-        for e in &self.resolved_entries {
-            offset += e.expected_entry_size();
-        }
-        (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32
-    }
 }

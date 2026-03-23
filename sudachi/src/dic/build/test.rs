@@ -14,6 +14,8 @@
  *  limitations under the License.
  */
 
+use std::time::{Duration, UNIX_EPOCH};
+
 mod legacy;
 mod with_analysis;
 
@@ -23,8 +25,6 @@ use crate::dic::build::DictBuilder;
 use crate::dic::word_id::WordRef as DicWordRef;
 use crate::dic::LexiconAccess;
 use crate::error::SudachiError;
-use std::io::sink;
-use std::time::{Duration, UNIX_EPOCH};
 
 static MATRIX_10_10: &[u8] = include_bytes!("test/matrix_10x10.def");
 static WORDREF_SYSTEM: &[u8] = include_bytes!("test/wordref.csv");
@@ -406,31 +406,29 @@ fn fail_matrix_size_validation() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
 
-    bldr.read_lexicon(
-        concat!(
-            "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
-            "京都,10,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
-        )
-        .as_bytes(),
-    )
-    .unwrap();
-    bldr.resolve().unwrap();
-    let mut sink1 = sink();
-    claim::assert_matches!(bldr.compile(&mut sink1), Err(_));
+    claim::assert_matches!(
+        bldr.read_lexicon(
+            concat!(
+                "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+                "京都,10,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
+            )
+            .as_bytes(),
+        ),
+        Err(_)
+    );
 
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
-    bldr.read_lexicon(
-        concat!(
-            "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
-            "京都,5,10,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
-        )
-        .as_bytes(),
-    )
-    .unwrap();
-    bldr.resolve().unwrap();
-    let mut sink2 = sink();
-    claim::assert_matches!(bldr.compile(&mut sink2), Err(_));
+    claim::assert_matches!(
+        bldr.read_lexicon(
+            concat!(
+                "index_form,left_id,right_id,cost,headword,pos1,pos2,pos3,pos4,pos5,pos6,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+                "京都,5,10,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,,A,,,,"
+            )
+            .as_bytes(),
+        ),
+        Err(_)
+    );
 }
 
 #[test]

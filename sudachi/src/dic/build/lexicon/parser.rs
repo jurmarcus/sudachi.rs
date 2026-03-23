@@ -136,19 +136,19 @@ impl LexiconReader {
         let splitting = rec.get_col_or(layout, Column::Mode, Mode::C, parse_mode)?;
         let allow_word_id_ref = layout.is_legacy();
         let allow_asterisk = layout.is_legacy();
-        let split_a = rec.get_col(layout, Column::SplitA, |s| {
+        let splits_a = rec.get_col(layout, Column::SplitA, |s| {
             self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
-        let split_b = rec.get_col(layout, Column::SplitB, |s| {
+        let splits_b = rec.get_col(layout, Column::SplitB, |s| {
             self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
-        let split_c = rec.get_col_or_default(layout, Column::SplitC, |s| {
+        let splits_c = rec.get_col_or_default(layout, Column::SplitC, |s| {
             self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
-        let parts = rec.get_col(layout, Column::WordStructure, |s| {
+        let word_structure = rec.get_col(layout, Column::WordStructure, |s| {
             self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
-        let synonyms = rec.get_col_or_default(layout, Column::SynonymGroups, |s| {
+        let synonym_groups = rec.get_col_or_default(layout, Column::SynonymGroups, |s| {
             parse_u32_list_with_asterisk(s, allow_asterisk)
         })?;
         let user_data = rec.get_col_or_default(layout, Column::UserData, unescape)?;
@@ -184,10 +184,26 @@ impl LexiconReader {
             ));
         };
 
-        if splitting == Mode::A && (!split_a.is_empty() || !split_b.is_empty()) {
+        if splitting == Mode::A && (!splits_a.is_empty() || !splits_b.is_empty()) {
             return rec.ctx.err(BuildFailure::InvalidSplit(
                 "A-mode tokens can't have splits".to_owned(),
             ));
+        }
+
+        if left_id >= self.max_left {
+            return rec.ctx.err(BuildFailure::InvalidFieldSize {
+                actual: left_id as _,
+                expected: self.max_left as _,
+                field: "left_id",
+            });
+        }
+
+        if right_id >= self.max_right {
+            return rec.ctx.err(BuildFailure::InvalidFieldSize {
+                actual: right_id as _,
+                expected: self.max_right as _,
+                field: "right_id",
+            });
         }
 
         let effective_headword: Cow<str> = if headword.is_empty() {
@@ -222,11 +238,11 @@ impl LexiconReader {
             index_form,
             pos,
             splitting,
-            splits_a: split_a,
-            splits_b: split_b,
-            splits_c: split_c,
-            word_structure: parts,
-            synonym_groups: synonyms,
+            splits_a,
+            splits_b,
+            splits_c,
+            word_structure,
+            synonym_groups,
             user_data,
         })
     }
@@ -309,11 +325,7 @@ impl LexiconReader {
         }
     }
 
-    fn parse_dic_form(
-        &mut self,
-        data: &str,
-        allow_word_id_ref: bool,
-    ) -> DicWriteResult<WordRef> {
+    fn parse_dic_form(&mut self, data: &str, allow_word_id_ref: bool) -> DicWriteResult<WordRef> {
         if data.is_empty() || (allow_word_id_ref && data == "*") {
             return Ok(WordRef::SelfRef);
         }

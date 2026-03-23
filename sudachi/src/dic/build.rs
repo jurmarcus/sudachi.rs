@@ -221,7 +221,9 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     ///
     /// This API is intended for system dictionary builds.
     pub fn read_conn<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<()> {
-        self.ensure_grammar_stage("read_conn() must be called before reading lexicon or resolving")?;
+        self.ensure_grammar_stage(
+            "read_conn() must be called before reading lexicon or resolving",
+        )?;
         let report = ReportBuilder::new(data.name()).read();
         match data.convert() {
             DataSource::File(p) => self.conn.read_file(p),
@@ -282,10 +284,6 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     pub fn compile<W: Write>(&mut self, w: &mut W) -> SudachiResult<()> {
         self.prepare_description_fields();
         self.ensure_compile_stage()?;
-        let report = ReportBuilder::new("validate").read();
-        self.lexicon.validate_entries()?;
-        self.reporter
-            .collect(self.lexicon.resolved_entries().len(), report);
 
         let mut buffer = vec![0u8; DICT_BLOCK_SIZE];
         let mut blocks: Vec<BlockInfo> = Vec::with_capacity(6);
