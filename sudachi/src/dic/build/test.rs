@@ -49,6 +49,23 @@ fn read_pos_then_read_lexicon_with_pos_id() {
 }
 
 #[test]
+fn read_pos_then_conn_then_read_lexicon_with_pos_id() {
+    let mut bldr = DictBuilder::new_system();
+    let pos = "0,名詞,固有名詞,地名,一般,*,*\n1,名詞,一般,*,*,*,*";
+    bldr.read_pos(pos.as_bytes()).unwrap();
+    bldr.read_conn(MATRIX_10_10).unwrap();
+
+    let lex = concat!(
+        "index_form,left_id,right_id,cost,headword,pos_id,reading_form,normalized_form,dictionary_form,mode,split_a,split_b,word_structure,synonym_groups\n",
+        "京都,6,6,5293,京都,0,キョウト,京都,,A,,,,"
+    );
+    assert_eq!(1, bldr.read_lexicon(lex.as_bytes()).unwrap());
+    bldr.resolve().unwrap();
+    let mut out = Vec::new();
+    bldr.compile(&mut out).unwrap();
+}
+
+#[test]
 fn read_pos_after_lexicon_fails() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
@@ -58,7 +75,7 @@ fn read_pos_after_lexicon_fails() {
     claim::assert_matches!(
         bldr.read_pos(pos.as_bytes()),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::InvalidSplit(_),
+            cause: BuildFailure::InvalidBuilderState(_),
             ..
         }))
     );
@@ -73,6 +90,7 @@ fn build_grammar() {
         bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
             .unwrap()
     );
+    bldr.resolve().unwrap();
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
     let dic = LoadedDictionary::load_system(&built).unwrap();
@@ -96,6 +114,7 @@ fn build_lexicon_1word() {
         bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
             .unwrap()
     );
+    bldr.resolve().unwrap();
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
     let dic = LoadedDictionary::load_system(&built).unwrap();
@@ -121,6 +140,7 @@ fn omitted_headword_resolves_normalized_and_dictionary_form_to_self() {
         "京都,6,6,5293,,名詞,固有名詞,地名,一般,*,*,キョウト,,,,,,,\n"
     );
     assert_eq!(1, bldr.read_lexicon(lex.as_bytes()).unwrap());
+    bldr.resolve().unwrap();
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
     let dic = LoadedDictionary::load_system(&built).unwrap();
@@ -140,6 +160,7 @@ fn different_headword_resolves_normalized_and_dictionary_form_to_headword() {
         "東京,6,6,5293,京都,名詞,固有名詞,地名,一般,*,*,トウキョウ,,,,,,,\n"
     );
     assert_eq!(1, bldr.read_lexicon(lex.as_bytes()).unwrap());
+    bldr.resolve().unwrap();
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
     let dic = LoadedDictionary::load_system(&built).unwrap();
@@ -177,6 +198,7 @@ fn build_system_1word() {
         bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
             .unwrap()
     );
+    bldr.resolve().unwrap();
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
     let dic = LoadedDictionary::load_system(&built).unwrap();
@@ -196,6 +218,7 @@ fn build_system_sets_default_signature() {
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
         .unwrap();
+    bldr.resolve().unwrap();
 
     let mut built = Vec::new();
     bldr.compile(&mut built).unwrap();
@@ -217,6 +240,7 @@ fn compile_time_before_unix_epoch_fails_with_build_error() {
     bldr.read_conn(MATRIX_10_10).unwrap();
     bldr.read_lexicon(include_bytes!("test/data_1word.csv"))
         .unwrap();
+    bldr.resolve().unwrap();
 
     let mut built = Vec::new();
     claim::assert_matches!(
@@ -252,7 +276,7 @@ fn build_system_3words() {
 }
 
 #[test]
-fn read_lexicon_after_resolve_invalidates_builder_state() {
+fn read_lexicon_after_resolve_fails() {
     let mut bldr = DictBuilder::new_system();
     bldr.read_conn(MATRIX_10_10).unwrap();
     assert_eq!(
@@ -262,17 +286,10 @@ fn read_lexicon_after_resolve_invalidates_builder_state() {
     );
     bldr.resolve().unwrap();
 
-    assert_eq!(
-        2,
-        bldr.read_lexicon(include_bytes!("test/data_2words_3w_refs.csv"))
-            .unwrap()
-    );
-
-    let mut sink = Vec::new();
     claim::assert_matches!(
-        bldr.compile(&mut sink),
+        bldr.read_lexicon(include_bytes!("test/data_2words_3w_refs.csv")),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::UnresolvedSplits,
+            cause: BuildFailure::InvalidBuilderState(_),
             ..
         }))
     );
@@ -363,6 +380,7 @@ fn build_user_sets_reference_to_system_signature() {
     system
         .read_lexicon(include_bytes!("test/data_1word.csv"))
         .unwrap();
+    system.resolve().unwrap();
 
     let mut system_bin = Vec::new();
     system.compile(&mut system_bin).unwrap();
@@ -374,6 +392,7 @@ fn build_user_sets_reference_to_system_signature() {
     let mut user = DictBuilder::new_user(&system_dic);
     user.read_lexicon(include_bytes!("test/data_1word.csv"))
         .unwrap();
+    user.resolve().unwrap();
 
     let mut user_bin = Vec::new();
     user.compile(&mut user_bin).unwrap();
@@ -396,6 +415,7 @@ fn fail_matrix_size_validation() {
         .as_bytes(),
     )
     .unwrap();
+    bldr.resolve().unwrap();
     let mut sink1 = sink();
     claim::assert_matches!(bldr.compile(&mut sink1), Err(_));
 
@@ -409,6 +429,7 @@ fn fail_matrix_size_validation() {
         .as_bytes(),
     )
     .unwrap();
+    bldr.resolve().unwrap();
     let mut sink2 = sink();
     claim::assert_matches!(bldr.compile(&mut sink2), Err(_));
 }

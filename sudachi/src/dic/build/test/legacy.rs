@@ -279,18 +279,17 @@ fn word_id_too_big_dicform_userdic_insystem_in_legacy_format() {
         "京都,5,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*".as_bytes(),
     )
     .unwrap();
+    bldr.resolve().unwrap();
     let mut data = Vec::new();
     bldr.compile(&mut data).unwrap();
     let dic = LoadedDictionary::load_system(&data).unwrap();
     let mut bldr = DictBuilder::new_user(&dic);
     bldr.read_lexicon("東,6,6,5293,東,名詞,一般,*,*,*,*,ヒガシ,*,10,A,*,*,*,*".as_bytes())
         .unwrap();
-    let mut sink = sink();
-
     claim::assert_matches!(
-        bldr.compile(&mut sink),
+        bldr.resolve(),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::UnresolvedSplits,
+            cause: BuildFailure::InvalidSplitWordReference(_),
             ..
         }))
     );
@@ -304,18 +303,17 @@ fn word_id_too_big_dicform_userdic_inuser_in_legacy_format() {
         "京都,5,5,5293,京都,名詞,固有名詞,地名,一般,*,*,キョウト,京都,*,A,*,*,*,*".as_bytes(),
     )
     .unwrap();
+    bldr.resolve().unwrap();
     let mut data = Vec::new();
     bldr.compile(&mut data).unwrap();
     let dic = LoadedDictionary::load_system(&data).unwrap();
     let mut bldr = DictBuilder::new_user(&dic);
     bldr.read_lexicon("東,6,6,5293,東,名詞,一般,*,*,*,*,ヒガシ,*,U15,A,*,*,*,*".as_bytes())
         .unwrap();
-    let mut sink = sink();
-
     claim::assert_matches!(
-        bldr.compile(&mut sink),
+        bldr.resolve(),
         Err(SudachiError::DictionaryCompilationError(DicBuildError {
-            cause: BuildFailure::UnresolvedSplits,
+            cause: BuildFailure::InvalidSplitWordReference(_),
             ..
         }))
     );

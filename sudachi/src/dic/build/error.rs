@@ -105,6 +105,9 @@ pub enum BuildFailure {
 
     #[error("Dictionary compile time must not be earlier than UNIX_EPOCH")]
     InvalidCompileTime,
+
+    #[error("{0}")]
+    InvalidBuilderState(&'static str),
 }
 
 #[derive(Default)]

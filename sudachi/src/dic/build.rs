@@ -106,6 +106,13 @@ impl<'a, const N: usize> AsDataSource<'a> for &'a [u8; N] {
 
 pub enum NoDic {}
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum BuilderStage {
+    Grammar,
+    Lexicon,
+    Resolved,
+}
+
 impl LexiconAccess for NoDic {
     fn lexicon(&self) -> &LexiconSet<'_> {
         panic!("there is no lexicon here")
@@ -140,7 +147,7 @@ pub struct DictBuilder<D> {
     description: String,
     signature: String,
     reference: String,
-    resolved: bool,
+    stage: BuilderStage,
     prebuilt: Option<D>,
     reporter: Reporter,
 }
@@ -163,7 +170,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
             description: String::new(),
             signature: String::new(),
             reference: String::new(),
-            resolved: false,
+            stage: BuilderStage::Grammar,
             prebuilt: None,
             reporter: Reporter::new(),
         }
@@ -214,6 +221,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     ///
     /// This API is intended for system dictionary builds.
     pub fn read_conn<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<()> {
+        self.ensure_grammar_stage("read_conn() must be called before reading lexicon or resolving")?;
         let report = ReportBuilder::new(data.name()).read();
         match data.convert() {
             DataSource::File(p) => self.conn.read_file(p),
@@ -237,6 +245,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
                 "read_pos is not available for user dictionary".to_owned(),
             ));
         }
+        self.ensure_grammar_stage("read_pos() must be called before reading lexicon or resolving")?;
 
         let report = ReportBuilder::new(data.name()).read();
         let result = match data.convert() {
@@ -248,27 +257,31 @@ impl<D: DictionaryAccess> DictBuilder<D> {
 
     /// Read the csv lexicon from either a file or an in-memory buffer
     pub fn read_lexicon<'a, T: AsDataSource<'a> + 'a>(&mut self, data: T) -> SudachiResult<usize> {
-        self.lexicon.invalidate_resolved_entries();
-        self.resolved = false;
+        self.ensure_lexicon_stage()?;
         let report = ReportBuilder::new(data.name()).read();
         let result = match data.convert() {
             DataSource::File(p) => self.lexicon.read_file(p),
             DataSource::Data(d) => self.lexicon.read_bytes(d),
         };
-        self.reporter.collect_r(result, report)
+        let result = self.reporter.collect_r(result, report);
+        if result.is_ok() {
+            self.stage = BuilderStage::Lexicon;
+        }
+        result
     }
 
     /// Resolve the dictionary references.
     ///
     /// Returns the number of resolved entries
     pub fn resolve(&mut self) -> SudachiResult<usize> {
+        self.ensure_resolve_stage()?;
         self.resolve_impl()
     }
 
     /// Compile the binary dictionary and write it to the specified sink
     pub fn compile<W: Write>(&mut self, w: &mut W) -> SudachiResult<()> {
         self.prepare_description_fields();
-        self.check_if_resolved()?;
+        self.ensure_compile_stage()?;
         self.lexicon.ensure_resolved_entries()?;
         let report = ReportBuilder::new("validate").read();
         self.lexicon.validate_entries()?;
@@ -390,7 +403,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     fn resolve_impl(&mut self) -> SudachiResult<usize> {
         if !self.lexicon.needs_split_resolution() {
             self.lexicon.ensure_resolved_entries()?;
-            self.resolved = true;
+            self.stage = BuilderStage::Resolved;
             return Ok(0);
         }
 
@@ -408,7 +421,7 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         let cnt = self.reporter.collect_r(cnt, report);
         match cnt {
             Ok(cnt) => {
-                self.resolved = true;
+                self.stage = BuilderStage::Resolved;
                 Ok(cnt)
             }
             Err((split_info, line)) => Err(DicBuildError {
@@ -430,11 +443,40 @@ impl<D: DictionaryAccess> DictBuilder<D> {
         }
     }
 
-    fn check_if_resolved(&self) -> SudachiResult<()> {
-        if self.lexicon.needs_split_resolution() && !self.resolved {
-            return self.ctx.err(BuildFailure::UnresolvedSplits);
+    fn ensure_grammar_stage(&self, message: &'static str) -> SudachiResult<()> {
+        if self.stage != BuilderStage::Grammar {
+            return self.ctx.err(BuildFailure::InvalidBuilderState(message));
         }
+        Ok(())
+    }
 
+    fn ensure_lexicon_stage(&self) -> SudachiResult<()> {
+        if self.stage == BuilderStage::Resolved {
+            return self.ctx.err(BuildFailure::InvalidBuilderState(
+                "read_lexicon() must be called before resolve()",
+            ));
+        }
+        Ok(())
+    }
+
+    fn ensure_resolve_stage(&self) -> SudachiResult<()> {
+        match self.stage {
+            BuilderStage::Grammar => self.ctx.err(BuildFailure::InvalidBuilderState(
+                "resolve() must be called after reading lexicon",
+            )),
+            BuilderStage::Lexicon => Ok(()),
+            BuilderStage::Resolved => self.ctx.err(BuildFailure::InvalidBuilderState(
+                "resolve() cannot be called more than once",
+            )),
+        }
+    }
+
+    fn ensure_compile_stage(&self) -> SudachiResult<()> {
+        if self.stage != BuilderStage::Resolved {
+            return self.ctx.err(BuildFailure::InvalidBuilderState(
+                "compile() must be called after resolve()",
+            ));
+        }
         Ok(())
     }
 

@@ -27,10 +27,6 @@ use super::{
 };
 
 impl LexiconReader {
-    pub(crate) fn invalidate_resolved_entries(&mut self) {
-        self.resolved_entries.clear();
-    }
-
     pub(crate) fn ensure_resolved_entries(&mut self) -> SudachiResult<()> {
         if !self.resolved_entries.is_empty() || self.parsed_entries.is_empty() {
             return Ok(());
