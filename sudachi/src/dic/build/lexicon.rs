@@ -116,7 +116,6 @@ pub struct LexiconReader {
     ctx: DicCompilationCtx,
     parsed_entries: Vec<ParsedLexiconEntry>,
     resolved_entries: Vec<ResolvedLexiconEntry>,
-    unresolved: usize,
     start_pos: usize,
     max_left: i16,
     max_right: i16,
@@ -132,7 +131,6 @@ impl LexiconReader {
             ctx: DicCompilationCtx::default(),
             parsed_entries: Vec::new(),
             resolved_entries: Vec::new(),
-            unresolved: 0,
             start_pos: 0,
             max_left: i16::MAX,
             max_right: i16::MAX,
@@ -153,10 +151,6 @@ impl LexiconReader {
             assert_eq!(v, &pos_id);
             k
         })
-    }
-
-    pub fn needs_split_resolution(&self) -> bool {
-        self.unresolved > 0
     }
 
     pub fn set_max_conn_sizes(&mut self, left: i16, right: i16) {
@@ -180,6 +174,14 @@ impl LexiconReader {
     pub(crate) fn next_entry_id(&self) -> u32 {
         let mut offset = Self::ENTRY_INITIAL_OFFSET;
         for e in &self.parsed_entries {
+            offset += e.expected_entry_size();
+        }
+        (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32
+    }
+
+    pub(crate) fn next_resolved_entry_id(&self) -> u32 {
+        let mut offset = Self::ENTRY_INITIAL_OFFSET;
+        for e in &self.resolved_entries {
             offset += e.expected_entry_size();
         }
         (offset >> WordInfos::WORD_ID_ALIGNMENT_BITS) as u32

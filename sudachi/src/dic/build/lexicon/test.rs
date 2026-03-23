@@ -30,16 +30,15 @@ mod legacy;
 #[test]
 fn parse_split_empty() {
     let mut rdr = LexiconReader::new();
-    assert_eq!(rdr.parse_splits("", true).unwrap().0.len(), 0);
-    assert_eq!(rdr.parse_splits("*", true).unwrap().0.len(), 0);
+    assert_eq!(rdr.parse_splits("", true).unwrap().len(), 0);
+    assert_eq!(rdr.parse_splits("*", true).unwrap().len(), 0);
 }
 
 #[test]
 fn parse_split_sys_ids() {
     let mut rdr = LexiconReader::new();
-    let (splits, rel) = rdr.parse_splits("0/1/2", true).unwrap();
+    let splits = rdr.parse_splits("0/1/2", true).unwrap();
     assert_eq!(splits.len(), 3);
-    assert_eq!(rel, 3);
     assert_eq!(splits[0], WordRef::LineRef(DicWordRef::new(true, 0)));
     assert_eq!(splits[1], WordRef::LineRef(DicWordRef::new(true, 1)));
     assert_eq!(splits[2], WordRef::LineRef(DicWordRef::new(true, 2)));
@@ -48,9 +47,8 @@ fn parse_split_sys_ids() {
 #[test]
 fn parse_split_user_ids() {
     let mut rdr = LexiconReader::new();
-    let (splits, rel) = rdr.parse_splits("0/U1/2", true).unwrap();
+    let splits = rdr.parse_splits("0/U1/2", true).unwrap();
     assert_eq!(splits.len(), 3);
-    assert_eq!(rel, 3);
     assert_eq!(splits[0], WordRef::LineRef(DicWordRef::new(true, 0)));
     assert_eq!(splits[1], WordRef::LineRef(DicWordRef::new(false, 1)));
     assert_eq!(splits[2], WordRef::LineRef(DicWordRef::new(true, 2)));
@@ -59,9 +57,8 @@ fn parse_split_user_ids() {
 #[test]
 fn parse_split_inline() {
     let mut rdr = LexiconReader::new();
-    let (splits, rel) = rdr.parse_splits("0/あ,0,1,2,3,4,5,あ/2", true).unwrap();
+    let splits = rdr.parse_splits("0/あ,0,1,2,3,4,5,あ/2", true).unwrap();
     assert_eq!(splits.len(), 3);
-    assert_eq!(rel, 3);
     assert_eq!(splits[0], WordRef::LineRef(DicWordRef::new(true, 0)));
     assert_eq!(
         splits[1],
@@ -77,9 +74,8 @@ fn parse_split_inline() {
 #[test]
 fn parse_split_inline_pos_id() {
     let mut rdr = LexiconReader::new();
-    let (splits, rel) = rdr.parse_splits("0/あ,0,あ/2", true).unwrap();
+    let splits = rdr.parse_splits("0/あ,0,あ/2", true).unwrap();
     assert_eq!(splits.len(), 3);
-    assert_eq!(rel, 3);
     assert_eq!(splits[0], WordRef::LineRef(DicWordRef::new(true, 0)));
     assert_eq!(
         splits[1],
@@ -225,8 +221,8 @@ fn resolve_header_normalized_form_ref() {
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
     let refs = bldr.lexicon.row_word_refs(false);
-    let e = &bldr.lexicon.entries()[1];
-    assert_eq!(e.norm_form, WordRef::Ref(refs[0]));
+    let e = &bldr.lexicon.resolved_entries()[1];
+    assert_eq!(e.norm_form, ResolvedWordRef::Ref(refs[0]));
 }
 
 #[test]
@@ -240,8 +236,8 @@ fn resolve_header_normalized_form_headword_ref() {
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
     let refs = bldr.lexicon.row_word_refs(false);
-    let e = &bldr.lexicon.entries()[1];
-    assert_eq!(e.norm_form, WordRef::Ref(refs[0]));
+    let e = &bldr.lexicon.resolved_entries()[1];
+    assert_eq!(e.norm_form, ResolvedWordRef::Ref(refs[0]));
 }
 
 #[test]
@@ -396,11 +392,14 @@ fn resolve_header_normalized_form_literal_without_target() {
     );
     bldr.read_lexicon(data.as_bytes()).unwrap();
     bldr.resolve().unwrap();
-    assert_eq!(bldr.lexicon.entries().len(), 2);
-    let refs = bldr.lexicon.row_word_refs(false);
-    let e = &bldr.lexicon.entries()[0];
-    assert_eq!(e.norm_form, WordRef::Ref(refs[1]));
-    let phantom = &bldr.lexicon.entries()[1];
+    assert_eq!(bldr.lexicon.entries().len(), 1);
+    assert_eq!(bldr.lexicon.resolved_entries().len(), 2);
+    let e = &bldr.lexicon.resolved_entries()[0];
+    assert_eq!(
+        e.norm_form,
+        ResolvedWordRef::Ref(DicWordRef::new(true, bldr.lexicon.next_entry_id()))
+    );
+    let phantom = &bldr.lexicon.resolved_entries()[1];
     assert_eq!(phantom.headword(), "舞台芸術");
     assert!(!phantom.should_index());
 }
@@ -503,9 +502,9 @@ fn resolve_inline_same_dict() {
     assert_eq!(nread, 3);
     let nresolved = rdr.resolve().unwrap();
     assert_eq!(nresolved, 2);
-    let e2 = &rdr.lexicon.entries()[2];
-    assert_eq!(e2.splits_a[0], WordRef::Ref(DicWordRef::new(true, 10))); // 東
-    assert_eq!(e2.splits_a[1], WordRef::Ref(DicWordRef::new(true, 4))); // 京都
+    let e2 = &rdr.lexicon.resolved_entries()[2];
+    assert_eq!(e2.splits_a[0], DicWordRef::new(true, 10)); // 東
+    assert_eq!(e2.splits_a[1], DicWordRef::new(true, 4)); // 京都
 }
 
 #[test]

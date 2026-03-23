@@ -282,7 +282,6 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     pub fn compile<W: Write>(&mut self, w: &mut W) -> SudachiResult<()> {
         self.prepare_description_fields();
         self.ensure_compile_stage()?;
-        self.lexicon.ensure_resolved_entries()?;
         let report = ReportBuilder::new("validate").read();
         self.lexicon.validate_entries()?;
         self.reporter
@@ -401,12 +400,6 @@ impl<D: DictionaryAccess> DictBuilder<D> {
     }
 
     fn resolve_impl(&mut self) -> SudachiResult<usize> {
-        if !self.lexicon.needs_split_resolution() {
-            self.lexicon.ensure_resolved_entries()?;
-            self.stage = BuilderStage::Resolved;
-            return Ok(0);
-        }
-
         let this_resolver = self.make_resolver();
         let report = ReportBuilder::new("resolve");
 

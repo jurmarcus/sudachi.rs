@@ -75,28 +75,6 @@ pub(crate) struct ResolvedLexiconEntry {
 }
 
 impl ParsedLexiconEntry {
-    pub(super) fn make_phantom(base: &ParsedLexiconEntry, headword: String) -> Self {
-        Self {
-            // keep index_form empty so this entry is not indexable and only used for reference resolution.
-            index_form: String::new(),
-            headword: Some(headword),
-            left_id: -1,
-            right_id: -1,
-            cost: i16::MAX,
-            pos: base.pos,
-            reading: base.reading.clone(),
-            dic_form: base.dic_form.clone(),
-            norm_form: WordRef::SelfRef,
-            splitting: base.splitting,
-            splits_a: base.splits_a.clone(),
-            splits_b: base.splits_b.clone(),
-            splits_c: base.splits_c.clone(),
-            word_structure: base.word_structure.clone(),
-            synonym_groups: base.synonym_groups.clone(),
-            user_data: base.user_data.clone(),
-        }
-    }
-
     pub fn index_form(&self) -> &str {
         &self.index_form
     }

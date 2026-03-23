@@ -136,16 +136,16 @@ impl LexiconReader {
         let splitting = rec.get_col_or(layout, Column::Mode, Mode::C, parse_mode)?;
         let allow_word_id_ref = layout.is_legacy();
         let allow_asterisk = layout.is_legacy();
-        let (split_a, resolve_a) = rec.get_col(layout, Column::SplitA, |s| {
+        let split_a = rec.get_col(layout, Column::SplitA, |s| {
             self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
-        let (split_b, resolve_b) = rec.get_col(layout, Column::SplitB, |s| {
+        let split_b = rec.get_col(layout, Column::SplitB, |s| {
             self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
-        let (split_c, resolve_c) = rec.get_col_or_default(layout, Column::SplitC, |s| {
+        let split_c = rec.get_col_or_default(layout, Column::SplitC, |s| {
             self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
-        let (parts, resolve_parts) = rec.get_col(layout, Column::WordStructure, |s| {
+        let parts = rec.get_col(layout, Column::WordStructure, |s| {
             self.parse_splits_with_asterisk(s, allow_word_id_ref, allow_asterisk)
         })?;
         let synonyms = rec.get_col_or_default(layout, Column::SynonymGroups, |s| {
@@ -196,20 +196,14 @@ impl LexiconReader {
             headword
         };
 
-        let (dic_form, resolve_dic_form) = rec
+        let dic_form = rec
             .ctx
             .transform(self.parse_dic_form(&dic_form_ref, allow_word_id_ref))?;
-        let (norm_form, resolve_norm_form) = rec.ctx.transform(self.parse_norm_form(
+        let norm_form = rec.ctx.transform(self.parse_norm_form(
             &normalized,
             effective_headword.as_ref(),
             layout.is_legacy(),
         ))?;
-        self.unresolved += resolve_a
-            + resolve_b
-            + resolve_c
-            + resolve_parts
-            + resolve_dic_form
-            + resolve_norm_form;
 
         if index_form.is_empty() {
             return rec.ctx.err(BuildFailure::EmptyIndexForm);
@@ -259,7 +253,7 @@ impl LexiconReader {
         &mut self,
         data: &str,
         allow_word_id_ref: bool,
-    ) -> DicWriteResult<(Vec<WordRef>, usize)> {
+    ) -> DicWriteResult<Vec<WordRef>> {
         self.parse_splits_with_asterisk(data, allow_word_id_ref, true)
     }
 
@@ -268,26 +262,15 @@ impl LexiconReader {
         data: &str,
         allow_word_id_ref: bool,
         allow_asterisk: bool,
-    ) -> DicWriteResult<(Vec<WordRef>, usize)> {
+    ) -> DicWriteResult<Vec<WordRef>> {
         if data.is_empty() || data == "*" {
             if data == "*" && !allow_asterisk {
                 return Err(BuildFailure::InvalidSplit(data.to_owned()));
             }
-            return Ok((Vec::new(), 0));
+            return Ok(Vec::new());
         }
 
-        parse_slash_list(data, |s| self.parse_split(s, allow_word_id_ref)).map(|splits| {
-            let unresolved = splits
-                .iter()
-                .map(|s| match s {
-                    WordRef::LineRef(_) => 1,
-                    WordRef::Headword(_) => 1,
-                    WordRef::Inline { .. } => 1,
-                    _ => 0,
-                })
-                .sum();
-            (splits, unresolved)
-        })
+        parse_slash_list(data, |s| self.parse_split(s, allow_word_id_ref))
     }
 
     fn parse_split(&mut self, data: &str, allow_word_id_ref: bool) -> DicWriteResult<WordRef> {
@@ -330,23 +313,15 @@ impl LexiconReader {
         &mut self,
         data: &str,
         allow_word_id_ref: bool,
-    ) -> DicWriteResult<(WordRef, usize)> {
+    ) -> DicWriteResult<WordRef> {
         if data.is_empty() || (allow_word_id_ref && data == "*") {
-            return Ok((WordRef::SelfRef, 0));
+            return Ok(WordRef::SelfRef);
         }
         if data == "*" {
             return Err(BuildFailure::InvalidSplit(data.to_owned()));
         }
 
-        let parsed = self.parse_split(data, allow_word_id_ref)?;
-        let unresolved = match parsed {
-            WordRef::Ref(_) => 0,
-            WordRef::SelfRef => 0,
-            WordRef::LineRef(_) => 1,
-            WordRef::Headword(_) => 1,
-            WordRef::Inline { .. } => 1,
-        };
-        Ok((parsed, unresolved))
+        self.parse_split(data, allow_word_id_ref)
     }
 
     fn parse_norm_form(
@@ -354,21 +329,20 @@ impl LexiconReader {
         data: &str,
         headword: &str,
         allow_asterisk: bool,
-    ) -> DicWriteResult<(WordRef, usize)> {
+    ) -> DicWriteResult<WordRef> {
         if data.is_empty() || (allow_asterisk && data == "*") {
-            return Ok((WordRef::SelfRef, 0));
+            return Ok(WordRef::SelfRef);
         }
 
         if data.matches(',').count() == 2 || data.matches(',').count() == 7 {
-            let parsed = self.parse_split(data, false)?;
-            return Ok((parsed, 1));
+            return self.parse_split(data, false);
         }
 
         let normalized = unescape(data)?;
         if normalized == headword {
-            Ok((WordRef::SelfRef, 0))
+            Ok(WordRef::SelfRef)
         } else {
-            Ok((WordRef::Headword(normalized), 1))
+            Ok(WordRef::Headword(normalized))
         }
     }
 }

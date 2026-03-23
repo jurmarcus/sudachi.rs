@@ -19,7 +19,6 @@ mod with_analysis;
 
 use crate::dic::binary_loader::{BinaryDictionary, LoadedDictionary};
 use crate::dic::build::error::{BuildFailure, DicBuildError};
-use crate::dic::build::lexicon::WordRef;
 use crate::dic::build::DictBuilder;
 use crate::dic::word_id::WordRef as DicWordRef;
 use crate::dic::LexiconAccess;
@@ -184,8 +183,8 @@ fn dictionary_form_inline_self_reference_resolves_to_previous_duplicate() {
     bldr.resolve().unwrap();
 
     assert_eq!(
-        bldr.lexicon.entries()[1].dic_form,
-        WordRef::Ref(DicWordRef::new(true, 4))
+        bldr.lexicon.resolved_entries()[1].dic_form,
+        crate::dic::build::lexicon::ResolvedWordRef::Ref(DicWordRef::new(true, 4))
     );
 }
 

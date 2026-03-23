@@ -89,7 +89,7 @@ impl LexiconReader {
         let mut ctx = DicCompilationCtx::default();
         ctx.set_filename("<entry id>".to_owned());
         ctx.set_line(0);
-        let max_current = self.next_entry_id() as usize;
+        let max_current = self.next_resolved_entry_id() as usize;
         let (max_0, max_1) = match self.max_system_entry_id {
             usize::MAX => (max_current, 0),
             x => (x + 1, max_current),

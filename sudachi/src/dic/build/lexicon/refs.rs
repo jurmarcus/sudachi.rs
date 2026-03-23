@@ -18,7 +18,6 @@ use crate::dic::word_id::WordRef as DicWordRef;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum WordRef {
-    Ref(DicWordRef),
     // explicit self-reference used for dictionary_form/normalized_form omission.
     SelfRef,
     LineRef(DicWordRef),
@@ -39,7 +38,6 @@ pub(crate) enum ResolvedWordRef {
 pub(crate) trait WordRefResolver {
     fn resolve(&self, unit: &WordRef) -> Option<DicWordRef> {
         match unit {
-            WordRef::Ref(wref) => Some(*wref),
             WordRef::SelfRef => None,
             WordRef::LineRef(line_ref) => self.resolve_by_line_ref(*line_ref),
             WordRef::Headword(headword) => self.resolve_by_headword(headword),
