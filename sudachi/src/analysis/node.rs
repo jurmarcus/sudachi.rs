@@ -19,9 +19,10 @@ use std::iter::FusedIterator;
 use std::ops::Range;
 
 use crate::analysis::inner::Node;
+use crate::analysis::lattice::Lattice;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::{EntryId, WordId};
+use crate::dic::word_id::WordId;
 use crate::dic::word_info::{WordInfo, WordInfoResolver};
 use crate::input_text::InputBuffer;
 use crate::prelude::*;
@@ -318,10 +319,11 @@ pub fn concat_nodes(
 
     let pos_id = path[begin].word_info().pos_id() as i16;
 
+    let wid = WordId::oov(pos_id as u32);
     let new_wi = WordInfo::new_with_strings(
         pos_id,
         index_form_length as i16,
-        WordId::oov(pos_id as u32),
+        wid,
         headword,
         reading_form,
         normalized_form,
@@ -334,7 +336,7 @@ pub fn concat_nodes(
         u16::MAX,
         u16::MAX,
         i16::MAX,
-        WordId::INVALID,
+        wid,
     );
 
     let node = ResultNode::new(
@@ -356,29 +358,58 @@ pub fn concat_oov_nodes(
     begin: usize,
     end: usize,
     pos_id: u16,
+    text: &InputBuffer,
+    lattice: &Lattice,
     resolver: &dyn WordInfoResolver,
 ) -> SudachiResult<Vec<ResultNode>> {
     if begin >= end {
         return Err(SudachiError::InvalidRange(begin, end));
     }
 
+    let byte_begin = path[begin].begin_bytes as u16;
+    let byte_end = path[end - 1].end_bytes as u16;
+    let node_begin = path[begin].begin();
+    let node_end = path[end - 1].end();
+
+    // Use node in the path if exists.
+    if let Some((existing_node, cost)) = lattice.get_minimum_node(node_begin, node_end) {
+        if !existing_node.is_special_node() {
+            let word_info = if existing_node.is_oov() {
+                let surface = text
+                    .curr_slice_c(existing_node.begin()..existing_node.end())
+                    .to_owned();
+                WordInfo::new_oov(
+                    existing_node.word_id().entry().as_raw() as u16,
+                    surface.len() as i16,
+                    existing_node.word_id(),
+                    surface,
+                )
+            } else {
+                resolver
+                    .lexicon()
+                    .get_word_info_subset(existing_node.word_id(), InfoSubset::all())?
+            };
+            let node =
+                ResultNode::new(existing_node.clone(), cost, byte_begin, byte_end, word_info);
+            path[begin] = node;
+            path.drain(begin + 1..end);
+            return Ok(path);
+        }
+    }
+
+    // concat nodes in the range to compose new oov node
     let capa = path[end - 1].end_bytes() - path[begin].begin_bytes();
 
     let mut headword = String::with_capacity(capa);
     let mut index_form_length = 0;
-    let mut wid = WordId::from_raw(0);
-
     for node in path[begin..end].iter() {
         headword.push_str(node.word_info().headword(&resolver));
         index_form_length += node.word_info().index_form_length();
-        // prioritize oov/user dict-id among merged nodes
-        wid = wid.max(node.word_id());
     }
 
-    // concatenated node should be OOV or have non-existing entry id
-    if !wid.is_oov() {
-        wid = WordId::new(wid.dict().as_raw(), EntryId::MAX);
-    }
+    // Synthetic concatenation in Java's concatenateOov() is always marked as OOV
+    // when we are not reusing an existing lattice node.
+    let wid = WordId::oov(pos_id as u32);
 
     let new_wi = WordInfo::new_oov(pos_id, index_form_length as i16, wid, headword);
 
@@ -394,8 +425,8 @@ pub fn concat_oov_nodes(
     let node = ResultNode::new(
         inner,
         path[end - 1].total_cost,
-        path[begin].begin_bytes,
-        path[end - 1].end_bytes,
+        byte_begin,
+        byte_end,
         new_wi,
     );
 

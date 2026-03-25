@@ -68,7 +68,7 @@ fn part_of_speech() {
         .rewrite(&text, path, &Lattice::default(), &RESOLVER)
         .expect("Failed to rewrite path");
     assert_eq!(1, path.len());
-    assert!(!path[0].is_oov());
+    assert!(path[0].is_oov());
 }
 
 #[test]
@@ -158,14 +158,8 @@ fn build_node(start: usize, end: usize, cost: i32, surface: &str) -> ResultNode 
         3000,
         word_id,
     );
-    ResultNode::new(
-        node,
-        cost,
-        start as u16,
-        end as u16,
-        //
-        WordInfo::new_oov(4, surface.len() as i16, word_id, surface.to_string()),
-    )
+    let word_info = WordInfo::new_oov(4, surface.len() as i16, word_id, surface.to_string());
+    ResultNode::new(node, cost, start as u16, end as u16, word_info)
 }
 
 fn build_node_oov(start: usize, end: usize, cost: i32, surface: &str) -> ResultNode {
@@ -179,13 +173,8 @@ fn build_node_oov(start: usize, end: usize, cost: i32, surface: &str) -> ResultN
         6000,
         word_id,
     );
-    ResultNode::new(
-        node,
-        cost,
-        start as u16,
-        end as u16,
-        WordInfo::new_oov(4, surface.len() as i16, word_id, surface.to_string()),
-    )
+    let word_info = WordInfo::new_oov(4, surface.len() as i16, word_id, surface.to_string());
+    ResultNode::new(node, cost, start as u16, end as u16, word_info)
 }
 
 fn build_text(data: &str) -> InputBuffer {

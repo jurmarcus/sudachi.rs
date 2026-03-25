@@ -70,11 +70,11 @@ impl JoinKatakanaOovPlugin {
         node.num_codepts() < self.min_length
     }
 
-    fn rewrite_gen<T: InputTextIndex>(
+    fn rewrite_gen(
         &self,
-        text: &T,
+        text: &InputBuffer,
         mut path: Vec<ResultNode>,
-        _lattice: &Lattice,
+        lattice: &Lattice,
         resolver: &dyn WordInfoResolver,
     ) -> SudachiResult<Vec<ResultNode>> {
         let mut i = 0;
@@ -115,7 +115,7 @@ impl JoinKatakanaOovPlugin {
             }
 
             if (end - begin) > 1 {
-                path = concat_oov_nodes(path, begin, end, self.oov_pos_id, resolver)?;
+                path = concat_oov_nodes(path, begin, end, self.oov_pos_id, text, lattice, resolver)?;
                 // skip next node, as we already know it is not a joinable katakana
                 i = begin + 1;
             }
