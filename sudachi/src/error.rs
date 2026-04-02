@@ -21,8 +21,10 @@ use thiserror::Error;
 use crate::config::ConfigError;
 use crate::dic::build::error::DicBuildError;
 use crate::dic::character_category::Error as CharacterCategoryError;
+use crate::dic::description::DescriptionError;
 use crate::dic::header::HeaderError;
 use crate::dic::lexicon_set::LexiconSetError;
+use crate::dic::read::error::SudachiNomError;
 use crate::plugin::PluginError;
 
 pub type SudachiResult<T> = Result<T, SudachiError>;
@@ -70,7 +72,10 @@ pub enum SudachiError {
     #[error("Invalid header: {0}")]
     InvalidHeader(#[from] HeaderError),
 
-    #[error("Lecicon error")]
+    #[error("Invalid description: {0}")]
+    InvalidDescription(#[from] DescriptionError),
+
+    #[error("Lexicon error")]
     LexiconSetError(#[from] LexiconSetError),
 
     #[error("Plugin error")]
@@ -87,6 +92,9 @@ pub enum SudachiError {
 
     #[error("Invalid grammar")]
     InvalidDictionaryGrammar,
+
+    #[error("Connection matrix is missing")]
+    ConnectionMatrixMissing,
 
     #[error("Invalid part of speech: {0}")]
     InvalidPartOfSpeech(String),
@@ -128,26 +136,6 @@ impl SudachiError {
                 context: ctx.into(),
             },
         }
-    }
-}
-
-pub type SudachiNomResult<I, O> = nom::IResult<I, O, SudachiNomError<I>>;
-
-/// Custum nom error
-#[derive(Debug, PartialEq)]
-pub enum SudachiNomError<I> {
-    /// Failed to parse utf16 string
-    Utf16String,
-    Nom(I, nom::error::ErrorKind),
-    OutOfBounds(String, usize, usize),
-}
-
-impl<I> nom::error::ParseError<I> for SudachiNomError<I> {
-    fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
-        SudachiNomError::Nom(input, kind)
-    }
-    fn append(_: I, _: nom::error::ErrorKind, other: Self) -> Self {
-        other
     }
 }
 

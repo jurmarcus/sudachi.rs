@@ -120,8 +120,8 @@ impl SurfaceProjection {
             SurfaceProjection::Surface => InfoSubset::empty(),
             SurfaceProjection::Normalized => InfoSubset::NORMALIZED_FORM,
             SurfaceProjection::Reading => InfoSubset::READING_FORM,
-            SurfaceProjection::Dictionary => InfoSubset::DIC_FORM_WORD_ID,
-            SurfaceProjection::DictionaryAndSurface => InfoSubset::DIC_FORM_WORD_ID,
+            SurfaceProjection::Dictionary => InfoSubset::DICTIONARY_FORM,
+            SurfaceProjection::DictionaryAndSurface => InfoSubset::DICTIONARY_FORM,
             SurfaceProjection::NormalizedAndSurface => InfoSubset::NORMALIZED_FORM,
             SurfaceProjection::NormalizedNouns => InfoSubset::NORMALIZED_FORM,
         }

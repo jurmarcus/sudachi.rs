@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,13 +18,14 @@ use crate::analysis::created::CreatedWords;
 use crate::analysis::inner::{Node, NodeIdx};
 use crate::analysis::lattice::Lattice;
 use crate::analysis::node::{LatticeNode, ResultNode};
-use crate::analysis::stateless_tokenizer::{dump_path, split_path, DictionaryAccess};
+use crate::analysis::stateless_tokenizer::{dump_path, split_path};
 use crate::analysis::Mode;
 use crate::dic::category_type::CategoryType;
 use crate::dic::connect::ConnectionMatrix;
-use crate::dic::lexicon::word_infos::WordInfoData;
 use crate::dic::lexicon_set::LexiconSet;
 use crate::dic::subset::InfoSubset;
+use crate::dic::word_info::WordInfo;
+use crate::dic::DictionaryAccess;
 use crate::error::{SudachiError, SudachiResult};
 use crate::input_text::InputBuffer;
 use crate::input_text::InputTextIndex;
@@ -152,7 +153,7 @@ impl<D: DictionaryAccess> StatefulTokenizer<D> {
         };
 
         for plugin in self.dictionary.path_rewrite_plugins() {
-            path = plugin.rewrite(&self.input, path, &self.lattice)?;
+            path = plugin.rewrite(&self.input, path, &self.lattice, self.dictionary.lexicon())?;
         }
 
         path = split_path(&self.dictionary, path, self.mode, self.subset, &self.input)?;
@@ -170,7 +171,7 @@ impl<D: DictionaryAccess> StatefulTokenizer<D> {
 
     /// Resolve the path (as ResultNodes) with the smallest cost
     fn resolve_best_path(&mut self) -> SudachiResult<Vec<ResultNode>> {
-        let lex = self.dictionary.lexicon();
+        let lexset = self.dictionary.lexicon();
         let mut path = self.top_path.take().unwrap_or_default();
         self.lattice.fill_top_path(&mut self.top_path_ids);
         self.top_path_ids.reverse();
@@ -178,14 +179,14 @@ impl<D: DictionaryAccess> StatefulTokenizer<D> {
             let (inner, cost) = self.lattice.node(pid);
             let wi = if inner.word_id().is_oov() {
                 let curr_slice = self.input.curr_slice_c(inner.char_range()).to_owned();
-                WordInfoData {
-                    pos_id: inner.word_id().word() as u16,
-                    surface: curr_slice,
-                    ..Default::default()
-                }
-                .into()
+                WordInfo::new_oov(
+                    inner.word_id().entry().as_raw() as u16,
+                    curr_slice.len() as i16,
+                    inner.word_id(),
+                    curr_slice,
+                )
             } else {
-                lex.get_word_info_subset(inner.word_id(), self.subset)?
+                lexset.get_word_info_subset(inner.word_id(), self.subset)?
             };
 
             let byte_begin = self.input.to_curr_byte_idx(inner.begin());

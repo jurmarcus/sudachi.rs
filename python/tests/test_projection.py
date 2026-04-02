@@ -1,4 +1,4 @@
-#   Copyright (c) 2023 Works Applications Co., Ltd.
+#   Copyright (c) 2023-2026 Works Applications Co., Ltd.
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -12,14 +12,28 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+import json
+import os
 import unittest
 
 from sudachipy import Dictionary
 from sudachipy.config import Config
 
+
 class MyTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        self.dict = Dictionary(config=Config(projection="reading"))
+        config, resource_dir = self.setup_config()
+        config["projection"] = "reading"
+        self.dict = Dictionary(config=json.dumps(
+            config), resource_dir=resource_dir)
+
+    def setup_config(self):
+        resource_dir = os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), 'resources')
+        config_path = os.path.join(resource_dir, 'sudachi_projection.json')
+        with open(config_path) as fi:
+            config = json.load(fi)
+        return config, resource_dir
 
     def test_projection_surface_override(self):
         tok = self.dict.create(projection="surface")

@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Works Applications Co., Ltd.
+# Copyright (c) 2019-2026 Works Applications Co., Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -91,13 +91,6 @@ class TestTokenizer(unittest.TestCase):
         m = self.tokenizer_obj.tokenize('京')[0]
         self.assertTrue(m.dictionary_id() < 0)
 
-    def test_morpheme_word_id(self):
-        m = self.tokenizer_obj.tokenize('京都')[0]
-        self.assertEqual(m.word_id(), 3)
-
-        m = self.tokenizer_obj.tokenize('ぴらる')[0]
-        self.assertEqual(m.word_id(), 2**28 + 0)
-
     def test_morpheme_oov(self):
         m = self.tokenizer_obj.tokenize('京都')[0]
         self.assertEqual(m.is_oov(), False)
@@ -152,11 +145,12 @@ class TestTokenizer(unittest.TestCase):
         ms = self.tokenizer_obj.tokenize('東京都', SplitMode.A)
         self.assertEqual(2, ms.size())
         self.assertEqual(str(ms), '東京 都')
-        self.assertEqual(repr(ms), '<MorphemeList[\n  <Morpheme(東京, 0:2, (0, 5))>,\n  <Morpheme(都, 2:3, (0, 9))>,\n]>')
+        self.assertEqual(repr(
+            ms), '<MorphemeList[\n  <Morpheme(東京, 0:2, (0, 25))>,\n  <Morpheme(都, 2:3, (0, 42))>,\n]>')
         self.assertEqual(str(ms[0]), '東京')
         self.assertEqual(str(ms[1]), '都')
-        self.assertEqual(repr(ms[0]), '<Morpheme(東京, 0:2, (0, 5))>')
-        self.assertEqual(repr(ms[1]), '<Morpheme(都, 2:3, (0, 9))>')
+        self.assertEqual(repr(ms[0]), '<Morpheme(東京, 0:2, (0, 25))>')
+        self.assertEqual(repr(ms[1]), '<Morpheme(都, 2:3, (0, 42))>')
 
 
 if __name__ == '__main__':

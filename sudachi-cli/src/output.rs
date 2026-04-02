@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 
 use std::io::{BufWriter, Write};
 use sudachi::analysis::morpheme::Morpheme;
-use sudachi::analysis::stateless_tokenizer::DictionaryAccess;
 use sudachi::dic::subset::InfoSubset;
+use sudachi::dic::DictionaryAccess;
 
 use sudachi::prelude::{MorphemeList, SudachiResult};
 
@@ -93,9 +93,9 @@ impl<T: DictionaryAccess> SudachiOutput<T> for Simple {
         let mut subset = InfoSubset::POS_ID | InfoSubset::NORMALIZED_FORM;
 
         if self.print_all {
-            subset |= InfoSubset::DIC_FORM_WORD_ID
+            subset |= InfoSubset::DICTIONARY_FORM
                 | InfoSubset::READING_FORM
-                | InfoSubset::SYNONYM_GROUP_ID;
+                | InfoSubset::SYNONYM_GROUP_IDS;
         }
 
         subset

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,20 +15,20 @@
  */
 
 use crate::analysis::node::{LatticeNode, PathCost, ResultNode};
-use crate::analysis::stateless_tokenizer::DictionaryAccess;
-use crate::dic::lexicon::word_infos::WordInfo;
 use crate::dic::word_id::WordId;
+use crate::dic::word_info::{WordInfo, WordInfoResolver};
+use crate::dic::DictionaryAccess;
 use crate::input_text::InputTextIndex;
 use crate::prelude::*;
 use std::cell::Ref;
 
 /// A morpheme (basic semantic unit of language)
-pub struct Morpheme<'a, T> {
-    list: &'a MorphemeList<T>,
+pub struct Morpheme<'a, D> {
+    list: &'a MorphemeList<D>,
     index: usize,
 }
 
-impl<T: DictionaryAccess> Morpheme<'_, T> {
+impl<D: DictionaryAccess> Morpheme<'_, D> {
     /// Returns the part of speech
     pub fn part_of_speech(&self) -> &[String] {
         self.list
@@ -38,23 +38,27 @@ impl<T: DictionaryAccess> Morpheme<'_, T> {
     }
 }
 
-impl<T: DictionaryAccess + Clone> Morpheme<'_, T> {
+impl<D: DictionaryAccess + Clone> Morpheme<'_, D> {
     /// Returns new morpheme list splitting the morpheme with given mode.
     #[deprecated(note = "use split_into", since = "0.6.1")]
-    pub fn split(&self, mode: Mode) -> SudachiResult<MorphemeList<T>> {
+    pub fn split(&self, mode: Mode) -> SudachiResult<MorphemeList<D>> {
         #[allow(deprecated)]
         self.list.split(mode, self.index)
     }
 }
 
-impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
-    pub(crate) fn for_list(list: &'a MorphemeList<T>, index: usize) -> Self {
+impl<'a, D: DictionaryAccess> Morpheme<'a, D> {
+    pub(crate) fn for_list(list: &'a MorphemeList<D>, index: usize) -> Self {
         Morpheme { list, index }
     }
 
     #[inline]
     pub(crate) fn node(&self) -> &ResultNode {
         self.list.node(self.index)
+    }
+
+    fn resolver(&self) -> &dyn WordInfoResolver {
+        self.list.dict().lexicon()
     }
 
     /// Returns the begin index in bytes of the morpheme in the original text
@@ -78,7 +82,7 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     }
 
     /// Returns a substring of the original text which corresponds to the morpheme
-    pub fn surface(&self) -> Ref<str> {
+    pub fn surface(&self) -> Ref<'_, str> {
         let inp = self.list.input();
         Ref::map(inp, |i| i.orig_slice(self.node().bytes_range()))
     }
@@ -91,21 +95,21 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     ///
     /// "Dictionary form" means a word's lemma and "終止形" in Japanese.
     pub fn dictionary_form(&self) -> &str {
-        self.get_word_info().dictionary_form()
+        self.get_word_info().dictionary_form(self.resolver())
     }
 
     /// Returns the normalized form of morpheme
     ///
     /// This method returns the form normalizing inconsistent spellings and inflected forms
     pub fn normalized_form(&self) -> &str {
-        self.get_word_info().normalized_form()
+        self.get_word_info().normalized_form(self.resolver())
     }
 
     /// Returns the reading form of morpheme.
     ///
     /// Returns Japanese syllabaries 'フリガナ' in katakana.
     pub fn reading_form(&self) -> &str {
-        self.get_word_info().reading_form()
+        self.get_word_info().reading_form(self.resolver())
     }
 
     /// Returns if this morpheme is out of vocabulary
@@ -126,11 +130,11 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
         if wid.is_oov() {
             -1
         } else {
-            wid.dic() as i32
+            wid.dict().as_raw() as i32
         }
     }
 
-    pub fn synonym_group_ids(&self) -> &[u32] {
+    pub fn synonym_group_ids(&self) -> &[i32] {
         self.get_word_info().synonym_group_ids()
     }
 
@@ -146,7 +150,7 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     /// Splits morpheme and writes sub-morphemes into the provided list.
     /// The resulting list is _not_ cleared before that.
     /// Returns true if split has produced any elements.
-    pub fn split_into(&self, mode: Mode, out: &mut MorphemeList<T>) -> SudachiResult<bool> {
+    pub fn split_into(&self, mode: Mode, out: &mut MorphemeList<D>) -> SudachiResult<bool> {
         self.list.split_into(mode, self.index, out)
     }
 
@@ -156,7 +160,7 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     }
 }
 
-impl<T: DictionaryAccess> std::fmt::Debug for Morpheme<'_, T> {
+impl<D: DictionaryAccess> std::fmt::Debug for Morpheme<'_, D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Morpheme")
             .field("surface", &self.surface())

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ use std::sync::Arc;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyIterator, PyTuple};
 
-use sudachi::analysis::stateless_tokenizer::DictionaryAccess;
+use sudachi::dic::DictionaryAccess;
 use sudachi::pos::PosMatcher;
 
 use crate::dictionary::PyDicData;

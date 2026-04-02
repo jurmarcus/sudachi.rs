@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ use sudachi::prelude::{Morpheme, MorphemeList};
 use crate::dictionary::{extract_mode, PyDicData, PyDictionary};
 use crate::errors;
 use crate::projection::{MorphemeProjection, PyProjector};
-use crate::word_info::PyWordInfo;
 
 pub(crate) type PyMorphemeList = MorphemeList<Arc<PyDicData>>;
 
@@ -336,31 +335,19 @@ impl PyMorpheme {
     /// Returns the dictionary form.
     #[pyo3(text_signature = "(self, /) -> str")]
     fn dictionary_form<'py>(&'py self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
-        Ok(self
-            .morph(py)
-            .get_word_info()
-            .dictionary_form()
-            .into_pyobject(py)?)
+        Ok(self.morph(py).dictionary_form().into_pyobject(py)?)
     }
 
     /// Returns the normalized form.
     #[pyo3(text_signature = "(self, /) -> str")]
     fn normalized_form<'py>(&'py self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
-        Ok(self
-            .morph(py)
-            .get_word_info()
-            .normalized_form()
-            .into_pyobject(py)?)
+        Ok(self.morph(py).normalized_form().into_pyobject(py)?)
     }
 
     /// Returns the reading form.
     #[pyo3(text_signature = "(self, /) -> str")]
     fn reading_form<'py>(&'py self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
-        Ok(self
-            .morph(py)
-            .get_word_info()
-            .reading_form()
-            .into_pyobject(py)?)
+        Ok(self.morph(py).reading_form().into_pyobject(py)?)
     }
 
     /// Returns sub-morphemes in the provided split mode.
@@ -438,7 +425,7 @@ impl PyMorpheme {
         if word_id.is_oov() {
             -1
         } else {
-            word_id.dic() as i32
+            word_id.dict().as_raw() as i32
         }
     }
 
@@ -448,16 +435,6 @@ impl PyMorpheme {
         let mref = self.morph(py);
         let ids = mref.get_word_info().synonym_group_ids();
         PyList::new(py, ids)
-    }
-
-    /// Returns the word info.
-    ///
-    /// ..deprecated:: v0.6.0
-    ///    Users should not touch the raw WordInfo.
-    #[pyo3(text_signature = "(self, /) -> WordInfo")]
-    fn get_word_info(&self, py: Python) -> PyResult<PyWordInfo> {
-        errors::warn_deprecation(py, c_str!("Users should not touch the raw WordInfo."))?;
-        Ok(self.morph(py).get_word_info().clone().into())
     }
 
     /// Returns morpheme length in codepoints.

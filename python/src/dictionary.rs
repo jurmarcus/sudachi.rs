@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ *  Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -24,13 +24,13 @@ use pyo3::ffi::c_str;
 use pyo3::prelude::*;
 use pyo3::types::{PySet, PyString, PyTuple};
 
-use sudachi::analysis::stateless_tokenizer::DictionaryAccess;
 use sudachi::analysis::Mode;
 use sudachi::config::{Config, ConfigBuilder, SurfaceProjection};
 use sudachi::dic::dictionary::JapaneseDictionary;
 use sudachi::dic::grammar::Grammar;
 use sudachi::dic::lexicon_set::LexiconSet;
 use sudachi::dic::subset::InfoSubset;
+use sudachi::dic::{DictionaryAccess, LexiconAccess};
 use sudachi::plugin::input_text::InputTextPlugin;
 use sudachi::plugin::oov::OovProviderPlugin;
 use sudachi::plugin::path_rewrite::PathRewritePlugin;
@@ -56,10 +56,6 @@ impl DictionaryAccess for PyDicData {
         self.dictionary.grammar()
     }
 
-    fn lexicon(&self) -> &LexiconSet<'_> {
-        self.dictionary.lexicon()
-    }
-
     fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
         self.dictionary.input_text_plugins()
     }
@@ -70,6 +66,12 @@ impl DictionaryAccess for PyDicData {
 
     fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
         self.dictionary.path_rewrite_plugins()
+    }
+}
+
+impl LexiconAccess for PyDicData {
+    fn lexicon(&self) -> &LexiconSet<'_> {
+        self.dictionary.lexicon()
     }
 }
 
@@ -552,15 +554,15 @@ fn parse_field_subset(data: Option<&Bound<PySet>>) -> PyResult<InfoSubset> {
     let mut subset = InfoSubset::empty();
     for elem in data.unwrap().iter() {
         subset |= match elem.str()?.to_str()? {
-            "surface" => InfoSubset::SURFACE,
+            "surface" => InfoSubset::HEADWORD,
             "pos" | "pos_id" => InfoSubset::POS_ID,
             "normalized_form" => InfoSubset::NORMALIZED_FORM,
-            "dictionary_form" => InfoSubset::DIC_FORM_WORD_ID,
+            "dictionary_form" => InfoSubset::DICTIONARY_FORM,
             "reading_form" => InfoSubset::READING_FORM,
             "word_structure" => InfoSubset::WORD_STRUCTURE,
             "split_a" => InfoSubset::SPLIT_A,
             "split_b" => InfoSubset::SPLIT_B,
-            "synonym_group_id" => InfoSubset::SYNONYM_GROUP_ID,
+            "synonym_group_id" => InfoSubset::SYNONYM_GROUP_IDS,
             x => return errors::wrap(Err(format!("Invalid WordInfo field name {}", x))),
         };
     }

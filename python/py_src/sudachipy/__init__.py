@@ -4,7 +4,6 @@ from .sudachipy import (
     SplitMode,
     MorphemeList,
     Morpheme,
-    WordInfo,
     PosMatcher,
 )
 from .config import Config

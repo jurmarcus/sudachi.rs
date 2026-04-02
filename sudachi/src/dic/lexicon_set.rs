@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Works Applications Co., Ltd.
+ * Copyright (c) 2021-2026 Works Applications Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,13 @@
 
 use thiserror::Error;
 
-use crate::dic::lexicon::word_infos::{WordInfo, WordInfoData};
+use crate::dic::binary_loader::BinaryLexicon;
+use crate::dic::lexicon::strings::StringPointer;
 use crate::dic::lexicon::{Lexicon, LexiconEntry, MAX_DICTIONARIES};
 use crate::dic::subset::InfoSubset;
-use crate::dic::word_id::WordId;
+use crate::dic::word_id::{DictId, WordId};
+use crate::dic::word_info::WordInfo;
+use crate::dic::LexiconAccess;
 use crate::prelude::*;
 
 /// Sudachi error
@@ -33,6 +36,9 @@ pub enum LexiconSetError {
 
     #[error("too many user dictionaries")]
     TooManyDictionaries,
+
+    #[error("invalid string pointer of length={0}, offset={1}, alignment={2}")]
+    InvalidStringPointer(usize, usize, usize),
 }
 
 /// Set of Lexicons
@@ -45,11 +51,29 @@ pub struct LexiconSet<'a> {
     num_system_pos: usize,
 }
 
+impl LexiconAccess for LexiconSet<'_> {
+    fn lexicon(&self) -> &LexiconSet<'_> {
+        self
+    }
+}
+
 impl<'a> LexiconSet<'a> {
-    /// Creates a LexiconSet given a lexicon
-    ///
-    /// It is assumed that the passed lexicon is the system dictionary
-    pub fn new(mut system_lexicon: Lexicon, num_system_pos: usize) -> LexiconSet {
+    /// Creates a LexiconSet from a system lexicon
+    pub fn from_system_binary(
+        system_lexicon: BinaryLexicon<'a>,
+        num_system_pos: usize,
+    ) -> LexiconSet<'a> {
+        let mut lexicon = Lexicon::from_binary(system_lexicon);
+        lexicon.set_dic_id(0);
+        LexiconSet {
+            lexicons: vec![lexicon],
+            pos_offsets: vec![0],
+            num_system_pos,
+        }
+    }
+
+    /// Creates a LexiconSet given a system lexicon
+    pub fn new(mut system_lexicon: Lexicon<'a>, num_system_pos: usize) -> LexiconSet<'a> {
         system_lexicon.set_dic_id(0);
         LexiconSet {
             lexicons: vec![system_lexicon],
@@ -107,53 +131,37 @@ impl LexiconSet<'_> {
     /// Only fills a requested subset of fields.
     /// Rest will be of default values (0 or empty).
     pub fn get_word_info_subset(&self, id: WordId, subset: InfoSubset) -> SudachiResult<WordInfo> {
-        let dict_id = id.dic();
-        let mut word_info: WordInfoData = self.lexicons[dict_id as usize]
-            .get_word_info(id.word(), subset)?
-            .into();
+        let dict_id = id.dict();
+        let word_info_data = self.lexicons[dict_id.as_raw() as usize]
+            .get_word_info(id.entry(), subset)?
+            .resolve(dict_id, self.num_system_pos, &self.pos_offsets, subset);
 
-        if subset.contains(InfoSubset::POS_ID) {
-            let pos_id = word_info.pos_id as usize;
-            if dict_id > 0 && pos_id >= self.num_system_pos {
-                // user defined part-of-speech
-                word_info.pos_id =
-                    (pos_id - self.num_system_pos + self.pos_offsets[dict_id as usize]) as u16;
-            }
-        }
-
-        if subset.contains(InfoSubset::SPLIT_A) {
-            Self::update_dict_id(&mut word_info.a_unit_split, dict_id)?;
-        }
-
-        if subset.contains(InfoSubset::SPLIT_B) {
-            Self::update_dict_id(&mut word_info.b_unit_split, dict_id)?;
-        }
-
-        if subset.contains(InfoSubset::WORD_STRUCTURE) {
-            Self::update_dict_id(&mut word_info.word_structure, dict_id)?;
-        }
-
-        Ok(word_info.into())
+        Ok(WordInfo::new(word_info_data, id))
     }
 
     /// Returns word_param for given word_id
     pub fn get_word_param(&self, id: WordId) -> (i16, i16, i16) {
-        let dic_id = id.dic() as usize;
-        self.lexicons[dic_id].get_word_param(id.word())
+        let dict_id = id.dict().as_raw() as usize;
+        self.lexicons[dict_id].get_word_param(id.entry())
     }
 
-    fn update_dict_id(split: &mut Vec<WordId>, dict_id: u8) -> SudachiResult<()> {
-        for id in split.iter_mut() {
-            let cur_dict_id = id.dic();
-            if cur_dict_id > 0 {
-                // update if target word is not in system_dict
-                *id = WordId::checked(dict_id, id.word())?;
-            }
-        }
-        Ok(())
+    #[inline]
+    pub fn get_string(&self, word_id: WordId, strptr: StringPointer) -> SudachiResult<String> {
+        self.lexicons[word_id.dict().as_raw() as usize].get_string(strptr)
     }
 
     pub fn size(&self) -> u32 {
         self.lexicons.iter().fold(0, |acc, lex| acc + lex.size())
+    }
+
+    pub fn system_word_ids_in_order(&self) -> Vec<WordId> {
+        if self.lexicons.is_empty() {
+            return Vec::new();
+        }
+        self.lexicons[0]
+            .entry_ids_in_order()
+            .into_iter()
+            .map(|entry| WordId::from_parts(DictId::SYSTEM, entry))
+            .collect()
     }
 }
