@@ -18,6 +18,14 @@ jobs:
       - name: download dictionary for PGO
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
         run: bash fetch_dictionary.sh "20220519" "core"
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies for version rewrite
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade packaging
       - uses: actions/cache@v4
         with:
           path: |
@@ -31,11 +39,14 @@ jobs:
       - name: Modify version for TestPyPI upload
         run: python ./python/modify_version_for_testpypi.py
       - name: cibuildwheel ${{ matrix.os }}
-        uses: pypa/cibuildwheel@v3.0.0
+        uses: pypa/cibuildwheel@v3.4.0
         with:
           package-dir: python
           output-dir: python/dist
           config-file: "{package}/pyproject.toml"
+          extras: "uv"
+        env:
+          CIBW_BUILD_FRONTEND: "build[uv]"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -56,7 +67,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade setuptools setuptools-rust build
+          python -m pip install --upgrade setuptools setuptools-rust build packaging
       - uses: actions/cache@v4
         with:
           path: |
@@ -122,7 +133,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: Quansight-Labs/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version || matrix.target }}
       - name: Upgrade pip
@@ -153,7 +164,14 @@ jobs:
         # tokenizers for py3.13t, py3.14, py3.14t are not provided yet
         if: ${{ matrix.target == '3.13t' || matrix.target == '3.14' || matrix.target == '3.14t' }}
         working-directory: ./python
-        run: ls tests/test_*.py | grep -v pretokenizer | xargs -I{} python -m unittest {}
+        shell: bash
+        run: |
+          for f in tests/test_*.py; do
+            case "$f" in
+              *pretokenizer*) continue ;;
+            esac
+            python -m unittest "$f"
+          done
       - name: Check that binary works (C mode)
         run: |
           sudachipy .github/data/input.txt -o result-c.txt
