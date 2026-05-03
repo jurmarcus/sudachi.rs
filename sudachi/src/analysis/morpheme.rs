@@ -15,12 +15,14 @@
  */
 
 use crate::analysis::node::{LatticeNode, PathCost, ResultNode};
+use crate::analysis::owned_morpheme::OwnedMorpheme;
 use crate::analysis::stateless_tokenizer::DictionaryAccess;
 use crate::dic::lexicon::word_infos::WordInfo;
 use crate::dic::word_id::WordId;
 use crate::input_text::InputTextIndex;
 use crate::prelude::*;
 use std::cell::Ref;
+use std::ops::Range;
 
 /// A morpheme (basic semantic unit of language)
 pub struct Morpheme<'a, T> {
@@ -169,6 +171,61 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     /// Returns total cost from the beginning of the path
     pub fn total_cost(&self) -> i32 {
         return self.node().total_cost();
+    }
+
+    /// Snapshot this morpheme into an [`OwnedMorpheme`] that escapes the
+    /// borrow on the parent [`MorphemeList`] / dictionary in a single
+    /// allocation.
+    ///
+    /// All string fields (surface, dictionary_form, normalized_form,
+    /// reading_form, and each POS component) are packed into one
+    /// `Box<str>` arena with byte-range indices. This collapses the naive
+    /// 5+ per-field `to_owned()` pattern into one allocation per morpheme.
+    ///
+    /// Use when you need owned data — building search index tokens,
+    /// caching morphemes, sending across threads, surviving a tokenizer
+    /// `reset()`. Don't use when borrowed access via [`Morpheme`] suffices.
+    pub fn into_owned(&self) -> OwnedMorpheme {
+        let surface = self.surface();
+        let dict_form = self.dictionary_form();
+        let norm_form = self.normalized_form();
+        let reading = self.reading_form();
+        let pos = self.part_of_speech();
+
+        let pos_total: usize = pos.iter().map(String::len).sum();
+        let total =
+            surface.len() + dict_form.len() + norm_form.len() + reading.len() + pos_total;
+
+        let mut arena = String::with_capacity(total);
+
+        let push = |arena: &mut String, s: &str| -> Range<u32> {
+            let start = arena.len() as u32;
+            arena.push_str(s);
+            start..arena.len() as u32
+        };
+
+        let surface_r = push(&mut arena, &surface);
+        let dict_r = push(&mut arena, dict_form);
+        let norm_r = push(&mut arena, norm_form);
+        let reading_r = push(&mut arena, reading);
+        let pos_ranges: Vec<Range<u32>> = pos.iter().map(|p| push(&mut arena, p)).collect();
+
+        let wid = self.word_id();
+        OwnedMorpheme {
+            arena: arena.into_boxed_str(),
+            surface: surface_r,
+            dictionary_form: dict_r,
+            normalized_form: norm_r,
+            reading_form: reading_r,
+            pos: pos_ranges,
+            pos_id: self.part_of_speech_id(),
+            word_id: wid.as_raw(),
+            is_oov: wid.is_oov(),
+            begin_bytes: self.begin(),
+            end_bytes: self.end(),
+            begin_chars: self.begin_c(),
+            end_chars: self.end_c(),
+        }
     }
 }
 

@@ -27,10 +27,12 @@ pub mod lattice;
 pub mod mlist;
 pub mod morpheme;
 pub mod node;
+pub mod owned_morpheme;
 pub mod stateful_tokenizer;
 pub mod stateless_tokenizer;
 
 pub use inner::Node;
+pub use owned_morpheme::OwnedMorpheme;
 
 /// Unit to split text
 ///

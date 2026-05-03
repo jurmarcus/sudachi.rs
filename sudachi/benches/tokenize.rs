@@ -93,6 +93,51 @@ fn bench_batch_short(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_morpheme_escape(c: &mut Criterion) {
+    let dict = load_dict();
+    let tokenizer = StatelessTokenizer::new(Arc::clone(&dict));
+    let lists: Vec<_> = MEDIUM_PASSAGES
+        .iter()
+        .map(|p| tokenizer.tokenize(p, Mode::C, false).unwrap())
+        .collect();
+
+    let total_morphemes: usize = lists.iter().map(|l| l.len()).sum();
+    let mut group = c.benchmark_group("morpheme_escape");
+    group.throughput(Throughput::Elements(total_morphemes as u64));
+
+    group.bench_function("into_owned", |b| {
+        b.iter(|| {
+            let mut out = Vec::with_capacity(total_morphemes);
+            for l in &lists {
+                for m in l.iter() {
+                    out.push(m.into_owned());
+                }
+            }
+            black_box(out);
+        });
+    });
+
+    group.bench_function("naive_5_clones", |b| {
+        b.iter(|| {
+            let mut out = Vec::with_capacity(total_morphemes);
+            for l in &lists {
+                for m in l.iter() {
+                    out.push((
+                        m.surface().to_string(),
+                        m.dictionary_form().to_owned(),
+                        m.normalized_form().to_owned(),
+                        m.reading_form().to_owned(),
+                        m.part_of_speech().to_vec(),
+                    ));
+                }
+            }
+            black_box(out);
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_stateless_short,
@@ -100,5 +145,6 @@ criterion_group!(
     bench_medium,
     bench_long_doc,
     bench_batch_short,
+    bench_morpheme_escape,
 );
 criterion_main!(benches);

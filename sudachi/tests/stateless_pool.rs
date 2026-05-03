@@ -113,6 +113,49 @@ fn tokenize_batch_matches_per_call_results() {
 }
 
 #[test]
+fn into_owned_round_trips_all_fields() {
+    let tok = make_tokenizer();
+    let list = tok.tokenize("東京都に行きます", Mode::C, false).unwrap();
+    assert!(list.len() > 0);
+    for m in list.iter() {
+        let owned = m.into_owned();
+        // String fields
+        assert_eq!(*m.surface(), *owned.surface());
+        assert_eq!(m.dictionary_form(), owned.dictionary_form());
+        assert_eq!(m.normalized_form(), owned.normalized_form());
+        assert_eq!(m.reading_form(), owned.reading_form());
+        // POS components match in order
+        let borrowed_pos: Vec<&str> = m.part_of_speech().iter().map(String::as_str).collect();
+        let owned_pos: Vec<&str> = owned.part_of_speech().collect();
+        assert_eq!(borrowed_pos, owned_pos);
+        // Numeric fields
+        assert_eq!(m.part_of_speech_id(), owned.part_of_speech_id());
+        assert_eq!(m.is_oov(), owned.is_oov());
+        // Spans
+        assert_eq!(m.begin(), owned.begin());
+        assert_eq!(m.end(), owned.end());
+        assert_eq!(m.begin_c(), owned.begin_c());
+        assert_eq!(m.end_c(), owned.end_c());
+    }
+}
+
+#[test]
+fn into_owned_survives_after_list_drop() {
+    let tok = make_tokenizer();
+    let captured_surfaces: Vec<String>;
+    let owned: Vec<_> = {
+        let list = tok.tokenize("東京都に行きます", Mode::C, false).unwrap();
+        captured_surfaces = list.iter().map(|m| m.surface().to_string()).collect();
+        list.iter().map(|m| m.into_owned()).collect()
+        // list dropped here
+    };
+    assert!(!owned.is_empty());
+    let surfaces_after: Vec<&str> = owned.iter().map(|o| o.surface()).collect();
+    let captured_refs: Vec<&str> = captured_surfaces.iter().map(String::as_str).collect();
+    assert_eq!(surfaces_after, captured_refs);
+}
+
+#[test]
 fn pool_distinguishes_two_dictionaries_in_same_thread() {
     // Two separate JapaneseDictionary instances → two separate pool entries
     // (different lexicon pointers), both reachable from the same thread.
