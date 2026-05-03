@@ -84,6 +84,35 @@ fn pool_isolates_per_thread() {
 }
 
 #[test]
+fn tokenize_batch_returns_one_result_per_input() {
+    let tok = make_tokenizer();
+    let inputs = ["今日", "明日", "昨日", "東京都", "京都市"];
+    let results = tok.tokenize_batch(&inputs, Mode::C, false).unwrap();
+    assert_eq!(results.len(), inputs.len());
+    for r in &results {
+        assert!(!r.is_empty());
+    }
+}
+
+#[test]
+fn tokenize_batch_matches_per_call_results() {
+    let tok = make_tokenizer();
+    let inputs = ["今日", "明日", "昨日"];
+    let batched = tok.tokenize_batch(&inputs, Mode::C, false).unwrap();
+    let one_by_one: Vec<_> = inputs
+        .iter()
+        .map(|s| tok.tokenize(s, Mode::C, false).unwrap())
+        .collect();
+    assert_eq!(batched.len(), one_by_one.len());
+    for (b, s) in batched.iter().zip(one_by_one.iter()) {
+        assert_eq!(b.len(), s.len());
+        for i in 0..b.len() {
+            assert_eq!(b.get(i).word_id(), s.get(i).word_id());
+        }
+    }
+}
+
+#[test]
 fn pool_distinguishes_two_dictionaries_in_same_thread() {
     // Two separate JapaneseDictionary instances → two separate pool entries
     // (different lexicon pointers), both reachable from the same thread.

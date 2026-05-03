@@ -78,11 +78,27 @@ fn bench_long_doc(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_batch_short(c: &mut Criterion) {
+    let dict = load_dict();
+    let tokenizer = StatelessTokenizer::new(Arc::clone(&dict));
+    let mut group = c.benchmark_group("stateless");
+    group.throughput(Throughput::Elements(SHORT_SENTENCES.len() as u64));
+    group.bench_function("batch_short_x5", |b| {
+        b.iter(|| {
+            let _ = tokenizer
+                .tokenize_batch(black_box(SHORT_SENTENCES), Mode::C, false)
+                .unwrap();
+        });
+    });
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_stateless_short,
     bench_stateful_hot,
     bench_medium,
-    bench_long_doc
+    bench_long_doc,
+    bench_batch_short,
 );
 criterion_main!(benches);
