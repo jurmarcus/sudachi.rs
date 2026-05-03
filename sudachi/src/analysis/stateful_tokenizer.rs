@@ -91,6 +91,18 @@ impl<D: DictionaryAccess> StatefulTokenizer<D> {
         self.mode
     }
 
+    /// Return the current [`InfoSubset`].
+    pub fn subset(&self) -> InfoSubset {
+        self.subset
+    }
+
+    /// Borrow the current [`InputBuffer`]. Useful for callers (e.g. the
+    /// multi-mode pooled wrapper) that need to clone or inspect the
+    /// already-built input.
+    pub fn input(&self) -> &InputBuffer {
+        &self.input
+    }
+
     /// Analyzer will read only following [`WordInfo`] field subset
     pub fn set_subset(&mut self, subset: InfoSubset) -> InfoSubset {
         let mode_subset = match self.mode {
@@ -120,16 +132,45 @@ impl<D: DictionaryAccess> StatefulTokenizer<D> {
     /// Perform the actual tokenization so the analysis result will be available
     /// for consumption
     pub fn do_tokenize(&mut self) -> SudachiResult<()> {
+        let mode = self.mode;
+        match self.do_tokenize_post_rewrite()? {
+            None => {
+                // Empty input — nothing to split. Leave top_path as it was
+                // (likely Some(empty Vec) from the previous reset()).
+                Ok(())
+            }
+            Some(path) => {
+                let path = split_path(&self.dictionary, path, mode, self.subset, &self.input)?;
+
+                if self.debug {
+                    println!("=== After Rewriting:");
+                    dump_path(&path);
+                    println!("===");
+                }
+
+                self.top_path = Some(path);
+                Ok(())
+            }
+        }
+    }
+
+    /// Run the mode-independent tokenization prefix: input rewrite, lattice
+    /// build, best-path resolve, and path-rewrite plugins. Returns the
+    /// post-rewrite path on success, or `None` if the input was empty.
+    ///
+    /// This is the shared core used by [`do_tokenize`] and
+    /// [`do_tokenize_modes`]. Splits ([`split_path`]) are mode-specific
+    /// and applied separately by each caller.
+    fn do_tokenize_post_rewrite(&mut self) -> SudachiResult<Option<Vec<ResultNode>>> {
         self.input.start_build()?;
         self.rewrite_input()?;
         self.input.build(self.dictionary.grammar())?;
 
         if self.input.current().is_empty() {
-            return Ok(());
+            return Ok(None);
         }
 
         let debug = self.debug;
-
         if debug {
             println!("=== Input dump:\n{}", self.input.current());
         }
@@ -142,30 +183,71 @@ impl<D: DictionaryAccess> StatefulTokenizer<D> {
             let mut writer = std::io::stdout();
             self.lattice
                 .dump(&self.input, dict.grammar(), dict.lexicon(), &mut writer)?;
-        };
+        }
 
         let mut path = self.resolve_best_path()?;
 
         if debug {
             println!("=== Before Rewriting:");
             dump_path(&path);
-        };
+        }
 
         for plugin in self.dictionary.path_rewrite_plugins() {
             path = plugin.rewrite(&self.input, path, &self.lattice)?;
         }
 
-        path = split_path(&self.dictionary, path, self.mode, self.subset, &self.input)?;
+        Ok(Some(path))
+    }
 
-        if debug {
-            println!("=== After Rewriting:");
-            dump_path(&path);
-            println!("===");
+    /// Tokenize the current input at multiple modes from a single shared
+    /// lattice build.
+    ///
+    /// Returns a Vec of paths, one per requested mode, in the same order
+    /// as `modes`. Each path is the result of running [`split_path`] for
+    /// that mode against the shared post-rewrite path.
+    ///
+    /// Saves roughly N-1 redundant input-rewrites + lattice builds +
+    /// best-path resolves + path-rewrite plugin invocations compared to
+    /// calling [`do_tokenize`] N times. Does **not** modify
+    /// [`Self::top_path`]; the next [`do_tokenize`] call will work
+    /// normally.
+    pub fn do_tokenize_modes(
+        &mut self,
+        modes: &[Mode],
+    ) -> SudachiResult<Vec<Vec<ResultNode>>> {
+        // Ensure subset contains the SPLIT bits required by every requested
+        // mode so split_path has the data it needs for each.
+        for &m in modes {
+            self.subset |= match m {
+                Mode::A => InfoSubset::SPLIT_A,
+                Mode::B => InfoSubset::SPLIT_B,
+                Mode::C => InfoSubset::empty(),
+            };
+        }
+        let base = match self.do_tokenize_post_rewrite()? {
+            None => return Ok(vec![Vec::new(); modes.len()]),
+            Some(p) => p,
         };
 
-        self.top_path = Some(path);
-
-        Ok(())
+        // Hold base in an Option so we can move it on the final iteration
+        // and only clone for earlier iterations.
+        let mut base = Some(base);
+        let mut out = Vec::with_capacity(modes.len());
+        let last = modes.len().saturating_sub(1);
+        for (i, &mode) in modes.iter().enumerate() {
+            let path = if i == last {
+                base.take().expect("base must be present until the last iteration")
+            } else {
+                base.as_ref().expect("base set above").clone()
+            };
+            let split = split_path(&self.dictionary, path, mode, self.subset, &self.input)?;
+            out.push(split);
+        }
+        // Restore top_path to a usable empty Vec for the next call.
+        if self.top_path.is_none() {
+            self.top_path = Some(Vec::new());
+        }
+        Ok(out)
     }
 
     /// Resolve the path (as ResultNodes) with the smallest cost

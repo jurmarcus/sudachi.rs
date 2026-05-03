@@ -93,6 +93,30 @@ fn bench_batch_short(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_multi_mode_b_c(c: &mut Criterion) {
+    let dict = load_dict();
+    let tokenizer = StatelessTokenizer::new(Arc::clone(&dict));
+    let s = MEDIUM_PASSAGES[0];
+    let mut group = c.benchmark_group("multi_mode");
+
+    group.bench_function("two_calls_b_then_c", |b| {
+        b.iter(|| {
+            let _ = tokenizer.tokenize(black_box(s), Mode::B, false).unwrap();
+            let _ = tokenizer.tokenize(black_box(s), Mode::C, false).unwrap();
+        });
+    });
+
+    group.bench_function("multi_b_c", |b| {
+        b.iter(|| {
+            let _ = tokenizer
+                .tokenize_multi_mode(black_box(s), &[Mode::B, Mode::C], false)
+                .unwrap();
+        });
+    });
+
+    group.finish();
+}
+
 fn bench_morpheme_escape(c: &mut Criterion) {
     let dict = load_dict();
     let tokenizer = StatelessTokenizer::new(Arc::clone(&dict));
@@ -145,6 +169,7 @@ criterion_group!(
     bench_medium,
     bench_long_doc,
     bench_batch_short,
+    bench_multi_mode_b_c,
     bench_morpheme_escape,
 );
 criterion_main!(benches);

@@ -172,6 +172,82 @@ where
             Ok(out)
         })
     }
+
+    /// Tokenize one input at multiple modes from a single shared lattice
+    /// build.
+    ///
+    /// For consumers that need both `Mode::B` and `Mode::C` results from
+    /// the same input (search-style indexing), this avoids the second
+    /// full tokenize call. Returns `Vec<MorphemeList<T>>` in the order
+    /// matching `modes`.
+    ///
+    /// Internally builds the shared post-rewrite path once and applies
+    /// `split_path` per mode. Each returned `MorphemeList` owns a clone
+    /// of the input buffer, so all `N` lists are independently usable
+    /// after this call returns.
+    ///
+    /// ```no_run
+    /// # use std::sync::Arc;
+    /// # use sudachi::analysis::stateless_tokenizer::StatelessTokenizer;
+    /// # use sudachi::analysis::Mode;
+    /// # use sudachi::dic::dictionary::JapaneseDictionary;
+    /// # let dict: Arc<JapaneseDictionary> = unimplemented!();
+    /// let t = StatelessTokenizer::new(dict);
+    /// let results = t.tokenize_multi_mode("選挙管理委員会", &[Mode::B, Mode::C], false).unwrap();
+    /// let b_result = &results[0];
+    /// let c_result = &results[1];
+    /// ```
+    pub fn tokenize_multi_mode(
+        &self,
+        input: &str,
+        modes: &[Mode],
+        enable_debug: bool,
+    ) -> SudachiResult<Vec<MorphemeList<T>>> {
+        if modes.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Use the first mode as the initial pool tokenizer mode; do_tokenize_modes
+        // sets the mode per split internally.
+        let first_mode = modes[0];
+        let key = (
+            self.dict.lexicon() as *const _ as usize,
+            TypeId::of::<StatefulTokenizer<T>>(),
+        );
+        POOL.with(|pool_cell| {
+            let mut pool = pool_cell.borrow_mut();
+            let entry = pool.entry(key).or_insert_with(|| {
+                Box::new(StatefulTokenizer::create(
+                    self.dict.clone(),
+                    enable_debug,
+                    first_mode,
+                ))
+            });
+            let tok: &mut StatefulTokenizer<T> = entry
+                .downcast_mut::<StatefulTokenizer<T>>()
+                .expect("pool entry type mismatch (TypeId-keyed; should be impossible)");
+
+            tok.reset().push_str(input);
+            tok.set_mode(first_mode);
+            // do_tokenize_modes ORs in the SPLIT bits for each mode and runs
+            // the shared prefix once, then split_path per mode.
+            let paths = tok.do_tokenize_modes(modes)?;
+            let subset = tok.subset();
+
+            // Build N MorphemeLists. The tokenizer's input buffer stays in
+            // the pool for reuse on the next call, so each list owns a clone.
+            let input_buf = tok.input();
+            let mut out = Vec::with_capacity(paths.len());
+            for path in paths {
+                out.push(MorphemeList::from_components(
+                    self.dict.clone(),
+                    input_buf.clone(),
+                    path,
+                    subset,
+                ));
+            }
+            Ok(out)
+        })
+    }
 }
 
 impl<T> Tokenize for StatelessTokenizer<T>

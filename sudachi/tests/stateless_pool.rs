@@ -156,6 +156,57 @@ fn into_owned_survives_after_list_drop() {
 }
 
 #[test]
+fn tokenize_multi_mode_b_c_matches_per_mode_calls() {
+    let tok = make_tokenizer();
+    let s = "東京都に行きます";
+    let multi = tok
+        .tokenize_multi_mode(s, &[Mode::B, Mode::C], false)
+        .unwrap();
+    assert_eq!(multi.len(), 2);
+    let single_b = tok.tokenize(s, Mode::B, false).unwrap();
+    let single_c = tok.tokenize(s, Mode::C, false).unwrap();
+    assert_eq!(multi[0].len(), single_b.len());
+    assert_eq!(multi[1].len(), single_c.len());
+    for i in 0..multi[0].len() {
+        assert_eq!(multi[0].get(i).word_id(), single_b.get(i).word_id());
+    }
+    for i in 0..multi[1].len() {
+        assert_eq!(multi[1].get(i).word_id(), single_c.get(i).word_id());
+    }
+}
+
+#[test]
+fn tokenize_multi_mode_a_b_c_returns_three() {
+    let tok = make_tokenizer();
+    let multi = tok
+        .tokenize_multi_mode("東京都", &[Mode::A, Mode::B, Mode::C], false)
+        .unwrap();
+    assert_eq!(multi.len(), 3);
+    // Mode::A typically produces ≥ Mode::B nodes ≥ Mode::C nodes for
+    // multi-component compounds; relax to "monotone non-decreasing".
+    assert!(multi[0].len() >= multi[1].len());
+    assert!(multi[1].len() >= multi[2].len());
+}
+
+#[test]
+fn tokenize_multi_mode_empty_modes_returns_empty() {
+    let tok = make_tokenizer();
+    let multi = tok.tokenize_multi_mode("foo", &[], false).unwrap();
+    assert!(multi.is_empty());
+}
+
+#[test]
+fn tokenize_multi_mode_empty_input_returns_empty_lists() {
+    let tok = make_tokenizer();
+    let multi = tok
+        .tokenize_multi_mode("", &[Mode::B, Mode::C], false)
+        .unwrap();
+    assert_eq!(multi.len(), 2);
+    assert!(multi[0].is_empty());
+    assert!(multi[1].is_empty());
+}
+
+#[test]
 fn pool_distinguishes_two_dictionaries_in_same_thread() {
     // Two separate JapaneseDictionary instances → two separate pool entries
     // (different lexicon pointers), both reachable from the same thread.
