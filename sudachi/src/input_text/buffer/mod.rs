@@ -289,18 +289,21 @@ impl InputBuffer {
 // RO Accessors
 impl InputBuffer {
     /// Borrow original data
+    #[inline]
     pub fn original(&self) -> &str {
         debug_assert_ne!(self.state, BufferState::Clean);
         &self.original
     }
 
     /// Borrow modified data
+    #[inline]
     pub fn current(&self) -> &str {
         debug_assert_ne!(self.state, BufferState::Clean);
         &self.modified
     }
 
     /// Borrow array of current characters
+    #[inline]
     pub fn current_chars(&self) -> &[char] {
         debug_assert_ne!(self.state, BufferState::Clean);
         debug_assert_eq!(self.modified.is_empty(), self.mod_chars.is_empty());
@@ -308,6 +311,7 @@ impl InputBuffer {
     }
 
     /// Returns byte offsets of current chars
+    #[inline]
     pub fn curr_byte_offsets(&self) -> &[usize] {
         debug_assert_eq!(self.state, BufferState::RO);
         let len = self.mod_c2b.len();
@@ -316,12 +320,14 @@ impl InputBuffer {
 
     /// Get index of the current byte in original sentence
     /// Bytes not on character boundaries are not supported
+    #[inline]
     pub fn get_original_index(&self, index: usize) -> usize {
         debug_assert!(self.modified.is_char_boundary(index));
         self.m2o[index]
     }
 
     /// Mod Char Idx -> Orig Byte Idx
+    #[inline]
     pub fn to_orig_byte_idx(&self, index: usize) -> usize {
         debug_assert_ne!(self.state, BufferState::Clean);
         let byte_idx = self.mod_c2b[index];
@@ -329,6 +335,7 @@ impl InputBuffer {
     }
 
     /// Mod Char Idx -> Orig Char Idx
+    #[inline]
     pub fn to_orig_char_idx(&self, index: usize) -> usize {
         let b_idx = self.to_orig_byte_idx(index);
         let res = self.m2o_2[b_idx];
@@ -337,12 +344,14 @@ impl InputBuffer {
     }
 
     /// Mod Char Idx -> Mod Byte Idx
+    #[inline]
     pub fn to_curr_byte_idx(&self, index: usize) -> usize {
         debug_assert_eq!(self.state, BufferState::RO);
         self.mod_c2b[index]
     }
 
     /// Input: Mod Char Idx
+    #[inline]
     pub fn curr_slice_c(&self, data: Range<usize>) -> &str {
         debug_assert_eq!(self.state, BufferState::RO);
         let start = self.mod_c2b[data.start];
@@ -351,6 +360,7 @@ impl InputBuffer {
     }
 
     /// Input: Mod Char Idx
+    #[inline]
     pub fn orig_slice_c(&self, data: Range<usize>) -> &str {
         debug_assert_eq!(self.state, BufferState::RO);
         let start = self.to_orig_byte_idx(data.start);
@@ -358,6 +368,7 @@ impl InputBuffer {
         &self.original[start..end]
     }
 
+    #[inline]
     pub fn ch_idx(&self, idx: usize) -> usize {
         debug_assert_eq!(self.state, BufferState::RO);
         self.mod_b2c[idx]

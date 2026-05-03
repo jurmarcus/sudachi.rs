@@ -127,14 +127,17 @@ impl<T: DictionaryAccess> MorphemeList<T> {
         self.nodes.mut_data().clear();
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.nodes.data.len()
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.nodes.data.is_empty()
     }
 
+    #[inline]
     pub fn get(&self, idx: usize) -> Morpheme<T> {
         return Morpheme::for_list(self, idx);
     }
@@ -144,6 +147,7 @@ impl<T: DictionaryAccess> MorphemeList<T> {
         Ref::map(inp, |i| i.original())
     }
 
+    #[inline]
     pub fn iter(&self) -> MorphemeIter<T> {
         MorphemeIter {
             index: 0,
@@ -163,10 +167,12 @@ impl<T: DictionaryAccess> MorphemeList<T> {
         last_node.total_cost() - first_node.total_cost()
     }
 
+    #[inline]
     pub(crate) fn node(&self, idx: usize) -> &ResultNode {
         self.nodes.data.index(idx)
     }
 
+    #[inline]
     pub fn dict(&self) -> &T {
         &self.dict
     }

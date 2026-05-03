@@ -30,6 +30,7 @@ pub struct Morpheme<'a, T> {
 
 impl<T: DictionaryAccess> Morpheme<'_, T> {
     /// Returns the part of speech
+    #[inline]
     pub fn part_of_speech(&self) -> &[String] {
         self.list
             .dict()
@@ -58,31 +59,37 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     }
 
     /// Returns the begin index in bytes of the morpheme in the original text
+    #[inline]
     pub fn begin(&self) -> usize {
         self.list.input().to_orig_byte_idx(self.node().begin())
     }
 
     /// Returns the end index in bytes of the morpheme in the original text
+    #[inline]
     pub fn end(&self) -> usize {
         self.list.input().to_orig_byte_idx(self.node().end())
     }
 
     /// Returns the codepoint offset of the morpheme begin in the original text
+    #[inline]
     pub fn begin_c(&self) -> usize {
         self.list.input().to_orig_char_idx(self.node().begin())
     }
 
     /// Returns the codepoint offset of the morpheme begin in the original text
+    #[inline]
     pub fn end_c(&self) -> usize {
         self.list.input().to_orig_char_idx(self.node().end())
     }
 
     /// Returns a substring of the original text which corresponds to the morpheme
+    #[inline]
     pub fn surface(&self) -> Ref<str> {
         let inp = self.list.input();
         Ref::map(inp, |i| i.orig_slice(self.node().bytes_range()))
     }
 
+    #[inline]
     pub fn part_of_speech_id(&self) -> u16 {
         self.node().word_info().pos_id()
     }
@@ -90,6 +97,7 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     /// Returns the dictionary form of morpheme
     ///
     /// "Dictionary form" means a word's lemma and "終止形" in Japanese.
+    #[inline]
     pub fn dictionary_form(&self) -> &str {
         self.get_word_info().dictionary_form()
     }
@@ -97,6 +105,7 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     /// Returns the normalized form of morpheme
     ///
     /// This method returns the form normalizing inconsistent spellings and inflected forms
+    #[inline]
     pub fn normalized_form(&self) -> &str {
         self.get_word_info().normalized_form()
     }
@@ -104,16 +113,19 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     /// Returns the reading form of morpheme.
     ///
     /// Returns Japanese syllabaries 'フリガナ' in katakana.
+    #[inline]
     pub fn reading_form(&self) -> &str {
         self.get_word_info().reading_form()
     }
 
     /// Returns if this morpheme is out of vocabulary
+    #[inline]
     pub fn is_oov(&self) -> bool {
         self.word_id().is_oov()
     }
 
     /// Returns the word id of morpheme
+    #[inline]
     pub fn word_id(&self) -> WordId {
         self.node().word_id()
     }
@@ -121,6 +133,7 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
     /// Returns the dictionary id where the morpheme belongs
     ///
     /// Returns -1 if the morpheme is oov
+    #[inline]
     pub fn dictionary_id(&self) -> i32 {
         let wid = self.word_id();
         if wid.is_oov() {
@@ -130,15 +143,18 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
         }
     }
 
+    #[inline]
     pub fn synonym_group_ids(&self) -> &[u32] {
         self.get_word_info().synonym_group_ids()
     }
 
+    #[inline]
     pub fn get_word_info(&self) -> &WordInfo {
         self.node().word_info()
     }
 
     /// Returns the index of this morpheme
+    #[inline]
     pub fn index(&self) -> usize {
         self.index
     }
