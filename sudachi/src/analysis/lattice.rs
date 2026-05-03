@@ -28,14 +28,30 @@ use std::fmt::{Display, Formatter};
 use std::io::Write;
 
 /// Lattice Node for Viterbi Search.
-/// Extremely small for better cache locality.
-/// Current implementation has 25% efficiency loss because of padding :(
-/// Maybe we should use array-of-structs layout instead, but I want to try to measure the
-/// efficiency of that without the effects of the current rewrite.
+///
+/// Packed layout: 6 bytes per node instead of 8 (eliminates the
+/// i32-alignment padding for the trailing u16). Yields ~25% better
+/// cache utilization for the lattice's hottest data structure.
+///
+/// SAFETY: With `repr(packed)`, taking a reference to a packed field
+/// (`&self.total_cost`, `&self.right_id`) would be UB on architectures
+/// requiring aligned access. All callers below access fields by VALUE,
+/// either via the trait accessors (which return by value) or via place
+/// expressions on Copy fields (which Rust compiles to unaligned loads).
+/// Do not introduce `&self.field` patterns in this file.
+#[repr(packed)]
+#[derive(Copy, Clone)]
 struct VNode {
     total_cost: i32,
     right_id: u16,
 }
+
+// Compile-time guard: catch accidental size regression.
+const _: () = {
+    if std::mem::size_of::<VNode>() != 6 {
+        panic!("VNode size unexpected — repr(packed) regression");
+    }
+};
 
 impl RightId for VNode {
     #[inline]
