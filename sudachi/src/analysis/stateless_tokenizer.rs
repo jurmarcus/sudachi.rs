@@ -233,17 +233,29 @@ where
             let paths = tok.do_tokenize_modes(modes)?;
             let subset = tok.subset();
 
-            // Build N MorphemeLists. The tokenizer's input buffer stays in
-            // the pool for reuse on the next call, so each list owns a clone.
-            let input_buf = tok.input();
-            let mut out = Vec::with_capacity(paths.len());
-            for path in paths {
-                out.push(MorphemeList::from_components(
-                    self.dict.clone(),
-                    input_buf.clone(),
-                    path,
-                    subset,
-                ));
+            // Build N MorphemeLists, sharing the input buffer Rc across them
+            // to avoid N InputBuffer clones (each clone copies ~9 internal
+            // Vec/String fields). The tokenizer's input buffer itself stays in
+            // the pool for reuse; only the FIRST list owns its own
+            // InputBuffer clone (because from_components takes by value),
+            // and subsequent lists share its Rc<RefCell<InputPart>>.
+            let mut paths_iter = paths.into_iter();
+            let first_path = match paths_iter.next() {
+                Some(p) => p,
+                None => return Ok(Vec::new()),
+            };
+            let first = MorphemeList::from_components(
+                self.dict.clone(),
+                tok.input().clone(),
+                first_path,
+                subset,
+            );
+            let mut out = Vec::with_capacity(modes.len());
+            out.push(first);
+            for path in paths_iter {
+                let shared =
+                    MorphemeList::from_components_shared(self.dict.clone(), &out[0], path);
+                out.push(shared);
             }
             Ok(out)
         })
