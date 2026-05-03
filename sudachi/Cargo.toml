@@ -35,7 +35,7 @@ unicode-normalization = "0.1" # MIT/Apache 2.0
 yada = "0.5" # MIT/Apache 2.0
 
 # Dynamic plugin loader is only meaningful on native targets.
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
 libloading = "0.8" # ISC (MIT-compatible)
 
 [dev-dependencies]
