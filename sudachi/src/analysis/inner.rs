@@ -44,7 +44,12 @@ impl NodeIdx {
     }
 }
 
-#[derive(Clone, Debug)]
+// Node is small (12 bytes: five u16/i16 fields + WordId, which is Copy) and
+// flows through the lattice build hot path. Making it Copy lets the compiler
+// pick moves vs implicit copies optimally and removes the need for explicit
+// .clone() calls (load-bearing in the OOV provider buffer, see
+// stateful_tokenizer::LatticeBuilder).
+#[derive(Copy, Clone, Debug)]
 pub struct Node {
     begin: u16,
     end: u16,

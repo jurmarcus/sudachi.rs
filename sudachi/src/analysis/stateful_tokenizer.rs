@@ -287,7 +287,7 @@ impl<'a> LatticeBuilder<'a> {
                     e.word_id,
                 );
                 created = created.add_word((end_c - ch_off) as i64);
-                self.node_buffer.push(node.clone());
+                self.node_buffer.push(node);
                 self.lattice.insert(node, self.matrix);
             }
 
@@ -329,7 +329,7 @@ impl<'a> LatticeBuilder<'a> {
         let start_size = self.node_buffer.len();
         let num_provided = plugin.provide_oov(self.input, char_offset, other, self.node_buffer)?;
         for idx in start_size..(start_size + num_provided) {
-            let node = self.node_buffer[idx].clone();
+            let node = self.node_buffer[idx];
             other = other.add_word(node.char_range().len() as i64);
             self.lattice.insert(node, self.matrix);
         }
