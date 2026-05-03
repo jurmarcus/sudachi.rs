@@ -178,13 +178,22 @@ let b_result = &results[0];
 let c_result = &results[1];
 ```
 
-Each returned `MorphemeList` owns a clone of the input buffer, so all
-results are independently usable past the call.
+All returned `MorphemeList`s share a single `Rc<RefCell<InputPart>>` —
+one input clone is paid (for the first list); subsequent lists clone the
+Rc, not the buffer. All N lists are independently usable past the call.
 
 **Bench**: 1.73× faster than two sequential `tokenize` calls on
 `multi_mode/multi_b_c` vs `multi_mode/two_calls_b_then_c`. The win
 scales roughly with the number of modes (the shared prefix is amortized
 across them).
+
+**Implementation note**: As of `71b58647ee61` (May 2026), the per-list
+`InputBuffer::clone()` is replaced with `MorphemeList::from_components_shared`
+which clones only the input `Rc` for lists 2..N. Earlier versions cloned
+the full buffer (~5–20 KB, ~9 internal Vec/String fields) per list. Net
+effect on the bench was small (~3% on `multi_mode/multi_b_c`) but the
+allocator-traffic reduction is meaningful for memory-pressure-sensitive
+consumers.
 
 ---
 

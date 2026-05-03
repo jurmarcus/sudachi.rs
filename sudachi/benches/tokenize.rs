@@ -1,11 +1,27 @@
-// Baseline (2026-05-04, M1 Pro/macOS, dict=system_full 20260428):
-//   stateless/short_x5     ~24.0 µs   (208 K elem/s)
-//   stateful/short_x5_hot  ~16.1 µs   (310 K elem/s)
-//   stateless/medium_x3    ~46.0 µs   ( 65 K elem/s)
-//   stateless/long_doc     ~70.8 µs   (8.1 MB/s)
+// Baseline progression (M1 Pro/macOS, dict=system_full 20260428):
 //
-// stateless is 1.5x slower than stateful on the same input — the gap is
-// pure per-call StatefulTokenizer construction overhead.
+// Initial (2026-05-04, post-Phase-4):
+//   stateless/short_x5             ~24.0 µs   (208 K elem/s)
+//   stateful/short_x5_hot          ~16.1 µs   (310 K elem/s)
+//   stateless/medium_x3            ~46.0 µs   ( 65 K elem/s)
+//   stateless/long_doc             ~70.8 µs   (8.1 MB/s)
+//   multi_mode/multi_b_c           ~12.5 µs   (introduced Task 9)
+//   multi_mode/two_calls_b_then_c  ~21.6 µs
+//   morpheme_escape/into_owned     ~5.07 µs   (vs naive: 12.7 µs)
+//
+// Post tier-plan Phase 0+1+2 (2026-05-04):
+//   stateless/short_x5             ~19.9 µs   (-17% from initial)
+//   stateful/short_x5_hot          ~15.8 µs   (-2% from initial)
+//   stateless/medium_x3            ~39.2 µs   (-15% from initial)
+//   stateless/long_doc             ~59.1 µs   (-17% from initial)
+//   multi_mode/multi_b_c           ~12.0 µs   (-4% from initial; -2.7% post Phase 2)
+//   multi_mode/two_calls_b_then_c  ~21.3 µs   (unchanged path)
+//
+// Notes on no-result attempts:
+// - Phase 1.1 repr(packed) on VNode: 0% bench delta on M1 (memory savings
+//   real, speed cancelled by unaligned-load cost). Lattice::insert remains
+//   ~30% of self-time on stateless/long_doc per samply — the next
+//   meaningful lever is the flat-CSR restructure (deferred to its own plan).
 
 mod common;
 
