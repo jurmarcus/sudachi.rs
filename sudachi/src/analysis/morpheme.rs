@@ -91,6 +91,14 @@ impl<'a, T: DictionaryAccess> Morpheme<'a, T> {
         Ref::map(inp, |i| i.orig_slice(self.node().bytes_range()))
     }
 
+    /// Returns the numeric part-of-speech handle.
+    ///
+    /// Prefer this over [`Self::part_of_speech`] when filtering tokens by
+    /// POS — integer comparison is much cheaper than per-component string
+    /// matching. Pre-compute the IDs you care about once at startup using
+    /// [`crate::dic::grammar::Grammar::get_part_of_speech_id`], then
+    /// compare integers per token. See `docs/optimization-guide.md` for a
+    /// worked example.
     #[inline]
     pub fn part_of_speech_id(&self) -> u16 {
         self.node().word_info().pos_id()
