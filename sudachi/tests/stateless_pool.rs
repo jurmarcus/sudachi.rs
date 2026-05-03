@@ -207,6 +207,23 @@ fn tokenize_multi_mode_empty_input_returns_empty_lists() {
 }
 
 #[test]
+fn from_components_shared_reads_same_input() {
+    use sudachi::analysis::mlist::MorphemeList;
+
+    let tok = make_tokenizer();
+    // Tokenize once to get a base list whose input is populated.
+    let base = tok.tokenize("東京", Mode::C, false).unwrap();
+    let dict = std::sync::Arc::clone(base.dict());
+
+    // Construct a shared-input list with empty path.
+    let shared: MorphemeList<_> =
+        MorphemeList::from_components_shared(dict, &base, Vec::new());
+    assert!(shared.is_empty());
+    // Both lists must surface identical original text via their (shared) input.
+    assert_eq!(*base.surface(), *shared.surface());
+}
+
+#[test]
 fn pool_distinguishes_two_dictionaries_in_same_thread() {
     // Two separate JapaneseDictionary instances → two separate pool entries
     // (different lexicon pointers), both reachable from the same thread.

@@ -86,6 +86,24 @@ impl<T: DictionaryAccess> MorphemeList<T> {
         }
     }
 
+    /// Creates a `MorphemeList` that shares its input buffer with `other`.
+    ///
+    /// All resulting morpheme accessors (`Morpheme::surface`, `begin`, `end`,
+    /// etc.) read from the same `InputBuffer` Rc as `other`. Useful when
+    /// emitting multiple lists from a single tokenize call (see
+    /// [`crate::analysis::stateless_tokenizer::StatelessTokenizer::tokenize_multi_mode`])
+    /// — avoids cloning the input buffer per-list.
+    ///
+    /// The caller supplies the per-list path data (`nodes`); the input
+    /// data and subset are inherited from `other`.
+    pub fn from_components_shared(dict: T, other: &Self, path: Vec<ResultNode>) -> Self {
+        Self {
+            dict,
+            input: Rc::clone(&other.input),
+            nodes: Nodes { data: path },
+        }
+    }
+
     pub fn collect_results<U: DictionaryAccess>(
         &mut self,
         analyzer: &mut StatefulTokenizer<U>,
