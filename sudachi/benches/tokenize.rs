@@ -178,6 +178,52 @@ fn bench_morpheme_escape(c: &mut Criterion) {
     group.finish();
 }
 
+/// Threading scaling: tokenize the same input set across 1/2/4/8/16 threads
+/// using the per-thread `StatelessTokenizer` pool. Validates that the pool
+/// scales linearly under parallel load (the actual production pattern for
+/// rayon-driven consumers like jisho-core).
+///
+/// Per-thread workload: tokenize each MEDIUM_PASSAGES entry 100 times.
+/// Throughput is reported as total elements; perfect linear scaling means
+/// throughput grows N× with N threads.
+fn bench_threading_scaling(c: &mut Criterion) {
+    use std::thread;
+
+    let dict = load_dict();
+    let tokenizer = Arc::new(StatelessTokenizer::new(Arc::clone(&dict)));
+    let mut group = c.benchmark_group("threading");
+    let work_per_thread: usize = 100 * MEDIUM_PASSAGES.len();
+
+    for &n_threads in &[1usize, 2, 4, 8] {
+        group.throughput(Throughput::Elements((n_threads * work_per_thread) as u64));
+        group.bench_with_input(
+            criterion::BenchmarkId::new("threads", n_threads),
+            &n_threads,
+            |b, &n| {
+                b.iter(|| {
+                    let handles: Vec<_> = (0..n)
+                        .map(|_| {
+                            let t = Arc::clone(&tokenizer);
+                            thread::spawn(move || {
+                                for _ in 0..100 {
+                                    for s in MEDIUM_PASSAGES {
+                                        let r = t.tokenize(black_box(*s), Mode::C, false).unwrap();
+                                        black_box(r);
+                                    }
+                                }
+                            })
+                        })
+                        .collect();
+                    for h in handles {
+                        h.join().unwrap();
+                    }
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_stateless_short,
@@ -187,5 +233,6 @@ criterion_group!(
     bench_batch_short,
     bench_multi_mode_b_c,
     bench_morpheme_escape,
+    bench_threading_scaling,
 );
 criterion_main!(benches);

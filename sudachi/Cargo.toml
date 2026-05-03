@@ -41,6 +41,7 @@ libloading = "0.8" # ISC (MIT-compatible)
 [dev-dependencies]
 claim = "0.5" # MIT/Apache 2.0
 criterion = { version = "0.5", default-features = false, features = ["html_reports"] } # MIT/Apache 2.0
+dhat = "0.3" # MIT/Apache 2.0
 tempfile = "3" # MIT/Apache 2.0
 
 # Plugins for tests
