@@ -26,6 +26,7 @@ use std::fmt::{Debug, Write as FmtWrite};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tempfile::NamedTempFile;
 
 static SYSTEM_LEX: &[u8] = include_bytes!("lex.csv");
@@ -117,8 +118,8 @@ fn system_only_1() {
     dic.compile(&mut cfgb.make_system()).unwrap();
 
     let cfg = cfgb.config();
-    let jd = JapaneseDictionary::from_cfg(&cfg).unwrap();
-    let tok = StatelessTokenizer::new(&jd);
+    let jd = Arc::new(JapaneseDictionary::from_cfg(&cfg).unwrap());
+    let tok = StatelessTokenizer::new(jd);
     let result = tok.tokenize("東京にいく", Mode::C, false).unwrap();
     assert_eq!(result.len(), 3);
 }
@@ -137,8 +138,8 @@ fn system_plus_user_1() {
     dic2.read_lexicon(USER1_LEX).unwrap();
     dic2.resolve().unwrap();
     dic2.compile(&mut cfgb.add_user()).unwrap();
-    let jd2 = JapaneseDictionary::from_cfg(&cfgb.config()).unwrap();
-    let tok = StatelessTokenizer::new(&jd2);
+    let jd2 = Arc::new(JapaneseDictionary::from_cfg(&cfgb.config()).unwrap());
+    let tok = StatelessTokenizer::new(jd2);
     let result = tok.tokenize("すだちにいく", Mode::C, false).unwrap();
     assert_eq!(result.len(), 3);
     assert_eq!(result.get(0).word_id().dic(), 1);
@@ -162,8 +163,8 @@ fn system_plus_user_2() {
     dic2.read_lexicon(USER2_LEX).unwrap();
     dic2.resolve().unwrap();
     dic2.compile(&mut cfgb.add_user()).unwrap();
-    let jd2 = JapaneseDictionary::from_cfg(&cfgb.config()).unwrap();
-    let tok = StatelessTokenizer::new(&jd2);
+    let jd2 = Arc::new(JapaneseDictionary::from_cfg(&cfgb.config()).unwrap());
+    let tok = StatelessTokenizer::new(jd2);
     let result = tok.tokenize("かぼすにいく", Mode::C, false).unwrap();
     assert_eq!(result.len(), 3);
     assert_eq!(result.get(0).word_id().dic(), 2);

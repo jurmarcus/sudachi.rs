@@ -16,6 +16,9 @@
 
 use crate::analysis::node::ResultNode;
 use crate::analysis::stateful_tokenizer::StatefulTokenizer;
+use std::any::{Any, TypeId};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops::Deref;
 
 use crate::dic::grammar::Grammar;
@@ -29,6 +32,23 @@ use crate::plugin::path_rewrite::PathRewritePlugin;
 
 use super::mlist::MorphemeList;
 use super::{Mode, Tokenize};
+
+// Per-thread pool of StatefulTokenizers, keyed by (lexicon pointer, T's
+// TypeId).
+//
+// - Lexicon pointer is stable across Arc clones, so all StatelessTokenizers
+//   wrapping the same dictionary share a single pooled tokenizer per thread.
+// - TypeId disambiguates wrapper types (e.g. Arc<JapaneseDictionary> vs
+//   &'static JapaneseDictionary) sharing the same lexicon pointer, avoiding
+//   downcast collisions.
+// - Values are boxed as `dyn Any` because thread_local cannot be generic.
+// - Tokenizers stay borrowed for the duration of one tokenize call. The
+//   closure must not call back into a tokenize on the same dict — RefCell
+//   borrow_mut would panic.
+thread_local! {
+    static POOL: RefCell<HashMap<(usize, TypeId), Box<dyn Any>>> =
+        RefCell::new(HashMap::new());
+}
 
 /// Provides access to dictionary data
 pub trait DictionaryAccess {
@@ -91,20 +111,56 @@ where
 
 impl<T> Tokenize for StatelessTokenizer<T>
 where
-    T: DictionaryAccess + Clone,
+    T: DictionaryAccess + Clone + 'static,
 {
     type Dictionary = T;
 
+    /// Tokenize `input` using a thread-local cached `StatefulTokenizer`.
+    ///
+    /// The first call on a given thread for a given dictionary constructs a
+    /// `StatefulTokenizer` and stores it in a thread-local pool keyed by
+    /// the underlying lexicon pointer. Subsequent calls reuse it, avoiding
+    /// per-call construction of the lattice, OOV buffer, and top-path Vec.
+    ///
+    /// # Invariants
+    /// - The closure passed to `POOL.with` must not call back into
+    ///   `tokenize` for the same dictionary; the inner `RefCell::borrow_mut`
+    ///   would panic.
+    /// - `StatefulTokenizer<T>` must be `'static` so it can live in the
+    ///   pool. This applies to common wrappers (`Arc<JapaneseDictionary>`,
+    ///   owned `JapaneseDictionary`, `&'static JapaneseDictionary`) but
+    ///   excludes non-static borrows.
     fn tokenize<'a>(
         &'a self,
         input: &'a str,
         mode: Mode,
         enable_debug: bool,
     ) -> SudachiResult<MorphemeList<Self::Dictionary>> {
-        let mut tok = StatefulTokenizer::create(self.dict.clone(), enable_debug, mode);
-        tok.reset().push_str(input);
-        tok.do_tokenize()?;
-        tok.into_morpheme_list()
+        let key = (
+            self.dict.lexicon() as *const _ as usize,
+            TypeId::of::<StatefulTokenizer<T>>(),
+        );
+        POOL.with(|pool_cell| {
+            let mut pool = pool_cell.borrow_mut();
+            let entry = pool.entry(key).or_insert_with(|| {
+                Box::new(StatefulTokenizer::create(
+                    self.dict.clone(),
+                    enable_debug,
+                    mode,
+                ))
+            });
+            // Safe: the key includes TypeId::of::<StatefulTokenizer<T>>(),
+            // so the value at this key must be StatefulTokenizer<T>.
+            let tok: &mut StatefulTokenizer<T> = entry
+                .downcast_mut::<StatefulTokenizer<T>>()
+                .expect("pool entry type mismatch (TypeId-keyed; should be impossible)");
+            tok.set_mode(mode);
+            tok.reset().push_str(input);
+            tok.do_tokenize()?;
+            let mut list = MorphemeList::empty(self.dict.clone());
+            list.collect_results(tok)?;
+            Ok(list)
+        })
     }
 }
 
